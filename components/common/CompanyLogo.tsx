@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius } from '@/constants/theme';
 
@@ -10,8 +10,10 @@ const SIZES: Record<LogoSize, { box: number; font: number; radius: number }> = {
   lg: { box: 60, font: 20, radius: radius.lg },
 };
 
+const isRemoteLogo = (logo: string) => /^https?:\/\//.test(logo);
+
 interface CompanyLogoProps {
-  /** Monogram text, e.g. "NV". Replace with a real image source once we have logos. */
+  /** Company logo URL, or a fallback monogram text when a real logo is unavailable. */
   logo: string;
   name: string;
   color?: string;
@@ -22,6 +24,7 @@ interface CompanyLogoProps {
 export function CompanyLogo({ logo, name, color, size = 'md', onDark = false }: CompanyLogoProps) {
   const dimensions = SIZES[size];
   const tint = color ?? colors.text;
+  const isImageLogo = isRemoteLogo(logo);
 
   return (
     <View
@@ -34,13 +37,28 @@ export function CompanyLogo({ logo, name, color, size = 'md', onDark = false }: 
           width: dimensions.box,
           height: dimensions.box,
           borderRadius: dimensions.radius,
-          backgroundColor: tint,
+          backgroundColor: isImageLogo ? colors.surface : tint,
           borderColor: onDark ? colors.reelBorder : colors.border,
         },
       ]}>
-      <Text style={[styles.text, { fontSize: dimensions.font }]} numberOfLines={1}>
-        {logo}
-      </Text>
+      {isImageLogo ? (
+        <Image
+          source={{ uri: logo }}
+          resizeMode="contain"
+          style={[
+            styles.image,
+            {
+              width: dimensions.box - 10,
+              height: dimensions.box - 10,
+              borderRadius: dimensions.radius - 4,
+            },
+          ]}
+        />
+      ) : (
+        <Text style={[styles.text, { fontSize: dimensions.font }]} numberOfLines={1}>
+          {logo}
+        </Text>
+      )}
     </View>
   );
 }
@@ -50,6 +68,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  image: {
+    alignSelf: 'center',
+    backgroundColor: 'transparent',
   },
   text: {
     color: colors.textInverse,
