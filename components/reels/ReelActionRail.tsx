@@ -1,28 +1,22 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
+import { fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface ReelActionRailProps {
   isLiked: boolean;
-  isSaved: boolean;
   onLike: () => void;
-  onSave: () => void;
   onMore: () => void;
-  onApply: () => void;
+  onAutoApply: () => void;
   jobTitle: string;
 }
 
 /** Vertical social-style rail on the right edge of a reel. */
-export function ReelActionRail({
-  isLiked,
-  isSaved,
-  onLike,
-  onSave,
-  onMore,
-  onApply,
-  jobTitle,
-}: ReelActionRailProps) {
+export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle }: ReelActionRailProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.rail}>
       <RailAction
@@ -34,13 +28,6 @@ export function ReelActionRail({
         accessibilityLabel={isLiked ? `Unlike ${jobTitle}` : `Like ${jobTitle}`}
       />
       <RailAction
-        icon={isSaved ? 'bookmark' : 'bookmark-outline'}
-        label="Save"
-        active={isSaved}
-        onPress={onSave}
-        accessibilityLabel={isSaved ? `Unsave ${jobTitle}` : `Save ${jobTitle}`}
-      />
-      <RailAction
         icon="ellipsis-horizontal"
         label="More"
         onPress={onMore}
@@ -48,13 +35,13 @@ export function ReelActionRail({
       />
 
       <Pressable
-        onPress={onApply}
+        onPress={onAutoApply}
         accessibilityRole="button"
-        accessibilityLabel={`Apply to ${jobTitle}`}
-        accessibilityHint="Opens the application sheet. Nothing is submitted."
+        accessibilityLabel={`Auto apply to ${jobTitle}`}
+        accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
         style={({ pressed }) => [styles.applyButton, pressed ? styles.pressed : null]}>
-        <Ionicons name="paper-plane" size={20} color={colors.text} />
-        <Text style={styles.applyLabel}>Apply</Text>
+        <Ionicons name="flash" size={22} color={colors.autoApply} />
+        <Text style={styles.applyLabel}>Auto Apply</Text>
       </Pressable>
     </View>
   );
@@ -69,14 +56,10 @@ interface RailActionProps {
   activeColor?: string;
 }
 
-function RailAction({
-  icon,
-  label,
-  onPress,
-  accessibilityLabel,
-  active = false,
-  activeColor = colors.reelText,
-}: RailActionProps) {
+function RailAction({ icon, label, onPress, accessibilityLabel, active = false, activeColor }: RailActionProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       onPress={onPress}
@@ -86,14 +69,14 @@ function RailAction({
       hitSlop={6}
       style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
       <View style={[styles.actionCircle, active ? styles.actionCircleActive : null]}>
-        <Ionicons name={icon} size={22} color={active ? activeColor : colors.reelText} />
+        <Ionicons name={icon} size={22} color={active ? activeColor ?? colors.text : colors.text} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   rail: {
     alignItems: 'center',
     gap: spacing.lg,
@@ -109,34 +92,45 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.reelSurface,
+    // Floats on top of the company-tinted reel, so it needs the lifted control surface
+    // rather than a flat page surface.
+    backgroundColor: colors.controlSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.reelBorder,
+    borderColor: colors.border,
+    ...colors.shadowSoft,
   },
   actionCircleActive: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: colors.likeSurface,
+    borderColor: colors.likeBorder,
   },
   actionLabel: {
     fontSize: fontSize.caption,
     fontWeight: '600',
-    color: colors.reelTextSecondary,
+    color: colors.textSecondary,
   },
   applyButton: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    width: 60,
-    height: 60,
+    width: 64,
+    height: 64,
     borderRadius: radius.pill,
-    backgroundColor: colors.reelText,
+    // Deliberately its own fill rather than `accent` — inverting to white in dark would
+    // cost this the "one AI-assisted action" identity the violet glow gives it.
+    backgroundColor: colors.autoApplySurface,
+    shadowColor: colors.autoApplyGlow,
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   applyLabel: {
-    fontSize: fontSize.caption,
+    fontSize: 9,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.autoApplyLabel,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.7,
   },
-});
+}));

@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { colors, fontSize, spacing } from '@/constants/theme';
+import { fontSize, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 
 interface SectionHeaderProps {
   title: string;
@@ -9,6 +10,8 @@ interface SectionHeaderProps {
 }
 
 export function SectionHeader({ title, actionLabel, onActionPress }: SectionHeaderProps) {
+  const styles = useStyles();
+
   return (
     <View style={styles.row}>
       <Text style={styles.title} accessibilityRole="header">
@@ -28,7 +31,7 @@ export function SectionHeader({ title, actionLabel, onActionPress }: SectionHead
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -49,4 +52,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
-});
+}));

@@ -1,10 +1,14 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { Pressable, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { colors, fontSize, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { ReelFeed } from '@/hooks/useJobFeeds';
 
-const TAB_WIDTH = 96;
+const TAB_WIDTH = 100;
+const TRACK_PADDING = 4;
+const SPRING = { damping: 16, stiffness: 220 };
 
 const TABS: { key: ReelFeed; label: string }[] = [
   { key: 'following', label: 'Following' },
@@ -16,55 +20,60 @@ interface FeedToggleProps {
   onChange: (feed: ReelFeed) => void;
 }
 
-/** Centered Following / For You switch with an animated underline. */
+/** Following / For You switch: a segmented-control pill that springs to whichever is selected. */
 export function FeedToggle({ value, onChange }: FeedToggleProps) {
+  const styles = useStyles();
   const activeIndex = TABS.findIndex((tab) => tab.key === value);
-  const indicatorX = useRef(new Animated.Value(activeIndex * TAB_WIDTH)).current;
+  const pillX = useSharedValue(activeIndex * TAB_WIDTH);
 
   useEffect(() => {
-    Animated.spring(indicatorX, {
-      toValue: activeIndex * TAB_WIDTH,
-      useNativeDriver: true,
-      speed: 18,
-      bounciness: 4,
-    }).start();
-  }, [activeIndex, indicatorX]);
+    pillX.value = withSpring(activeIndex * TAB_WIDTH, SPRING);
+  }, [activeIndex, pillX]);
+
+  const pillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: pillX.value }],
+  }));
 
   return (
-    <View style={styles.container} accessibilityRole="tablist">
-      <View style={styles.tabs}>
-        {TABS.map((tab) => {
-          const selected = tab.key === value;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => onChange(tab.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${tab.label} feed`}
-              style={styles.tab}>
-              <Text style={[styles.label, selected ? styles.labelActive : styles.labelInactive]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+    <View style={styles.track} accessibilityRole="tablist">
+      <Animated.View style={[styles.pill, { width: TAB_WIDTH - TRACK_PADDING * 2 }, pillStyle]} />
 
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.indicator, { transform: [{ translateX: indicatorX }] }]}
-        />
-      </View>
+      {TABS.map((tab) => {
+        const selected = tab.key === value;
+        return (
+          <Pressable
+            key={tab.key}
+            onPress={() => onChange(tab.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${tab.label} feed`}
+            style={styles.tab}>
+            <Text style={[styles.label, selected ? styles.labelActive : styles.labelInactive]}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-  },
-  tabs: {
+const useStyles = makeStyles((colors) => ({
+  track: {
     flexDirection: 'row',
+    backgroundColor: colors.backgroundMuted,
+    borderRadius: radius.pill,
+    padding: TRACK_PADDING,
+  },
+  pill: {
+    position: 'absolute',
+    top: TRACK_PADDING,
+    left: TRACK_PADDING,
+    bottom: TRACK_PADDING,
+    borderRadius: radius.pill,
+    // Not `surface`: in dark that matches the track exactly and the selection vanishes.
+    backgroundColor: colors.controlSurface,
+    ...colors.shadowSoft,
   },
   tab: {
     width: TAB_WIDTH,
@@ -72,18 +81,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   label: {
-    fontSize: fontSize.body,
+    fontSize: fontSize.small,
     fontWeight: '600',
   },
-  labelActive: { color: colors.reelText },
-  labelInactive: { color: colors.reelTextTertiary },
-  indicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: TAB_WIDTH / 2 - 14,
-    width: 28,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.reelText,
-  },
-});
+  labelActive: { color: colors.text, fontWeight: '700' },
+  labelInactive: { color: colors.textTertiary },
+}));

@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 
-import { colors, fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
+import { fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
@@ -23,6 +24,8 @@ export function PrimaryButton({
   accessibilityHint,
   style,
 }: PrimaryButtonProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const isDisabled = disabled || loading;
 
   return (
@@ -35,7 +38,7 @@ export function PrimaryButton({
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.base,
-        VARIANT_STYLES[variant],
+        styles[variant],
         pressed && !isDisabled ? styles.pressed : null,
         isDisabled ? styles.disabled : null,
         style,
@@ -43,13 +46,19 @@ export function PrimaryButton({
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors.accentText : colors.text} />
       ) : (
-        <Text style={[styles.label, VARIANT_LABEL_STYLES[variant]]}>{label}</Text>
+        <Text style={[styles.label, styles[LABEL_KEY[variant]]]}>{label}</Text>
       )}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const LABEL_KEY = {
+  primary: 'primaryLabel',
+  secondary: 'secondaryLabel',
+  ghost: 'ghostLabel',
+} as const;
+
+const useStyles = makeStyles((colors) => ({
   base: {
     minHeight: minTapTarget,
     paddingHorizontal: spacing.xl,
@@ -68,9 +77,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontWeight: '600',
   },
-});
-
-const VARIANT_STYLES = StyleSheet.create({
   primary: {
     backgroundColor: colors.accent,
   },
@@ -82,10 +88,7 @@ const VARIANT_STYLES = StyleSheet.create({
   ghost: {
     backgroundColor: 'transparent',
   },
-});
-
-const VARIANT_LABEL_STYLES = StyleSheet.create({
-  primary: { color: colors.accentText },
-  secondary: { color: colors.text },
-  ghost: { color: colors.textSecondary },
-});
+  primaryLabel: { color: colors.accentText },
+  secondaryLabel: { color: colors.text },
+  ghostLabel: { color: colors.textSecondary },
+}));

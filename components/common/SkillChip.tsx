@@ -1,40 +1,34 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 
 interface SkillChipProps {
   label: string;
-  /** Chips on the Reels screen sit on a dark background. */
-  onDark?: boolean;
 }
 
-export function SkillChip({ label, onDark = false }: SkillChipProps) {
+export function SkillChip({ label }: SkillChipProps) {
+  const styles = useStyles();
+
   return (
-    <View style={[styles.chip, onDark ? styles.chipDark : styles.chipLight]}>
-      <Text style={[styles.label, onDark ? styles.labelDark : styles.labelLight]}>{label}</Text>
+    <View style={styles.chip}>
+      <Text style={styles.label}>{label}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  chipLight: {
     backgroundColor: colors.backgroundMuted,
     borderColor: colors.border,
-  },
-  chipDark: {
-    backgroundColor: colors.reelSurface,
-    borderColor: colors.reelBorder,
   },
   label: {
     fontSize: fontSize.caption + 1,
     fontWeight: '600',
+    color: colors.textSecondary,
   },
-  labelLight: { color: colors.textSecondary },
-  labelDark: { color: colors.reelTextSecondary },
-});
+}));

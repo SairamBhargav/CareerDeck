@@ -1,29 +1,39 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
+import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
 import { SectionHeader } from '@/components/common/SectionHeader';
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { makeStyles } from '@/context/ThemeContext';
 
 /**
  * Reached from the avatar button on Home — not a tab. There's no dedicated Profile
  * slot in the bottom bar; this screen is pushed on top of it instead.
+ *
+ * Identity and career stats live here; preferences and account live on Settings,
+ * reached via the gear icon — see app/settings.tsx.
  */
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, followedCompanyIds, savedJobIds, likedJobIds } = useCareerDeck();
+  const styles = useStyles();
+  const { user, resumes, followedCompanyIds, savedJobIds, likedJobIds } = useCareerDeck();
 
-  const rows = [
-    { icon: 'document-text-outline', label: 'Resume', value: user.resumeName },
-    { icon: 'options-outline', label: 'Preferences', value: `${user.preferredRoles.length} roles` },
-    { icon: 'briefcase-outline', label: 'Applications', value: String(user.appliedCount) },
-    { icon: 'business-outline', label: 'Following companies', value: String(followedCompanyIds.length) },
-    { icon: 'bookmark-outline', label: 'Saved jobs', value: String(savedJobIds.length) },
-    { icon: 'heart-outline', label: 'Liked jobs', value: String(likedJobIds.length) },
-  ] as const;
+  const careerRows: RowGroupItem[] = [
+    { key: 'resumes', icon: 'document-text-outline', label: 'Resumes', value: `${resumes.length} saved` },
+    { key: 'preferences', icon: 'options-outline', label: 'Preferences', value: `${user.preferredRoles.length} roles` },
+    { key: 'applications', icon: 'briefcase-outline', label: 'Applications', value: String(user.appliedCount) },
+    {
+      key: 'following',
+      icon: 'business-outline',
+      label: 'Following companies',
+      value: String(followedCompanyIds.length),
+    },
+    { key: 'saved', icon: 'bookmark-outline', label: 'Saved jobs', value: String(savedJobIds.length) },
+    { key: 'liked', icon: 'heart-outline', label: 'Liked jobs', value: String(likedJobIds.length) },
+  ];
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -41,7 +51,7 @@ export default function ProfileScreen() {
           <IconButton
             name="settings-outline"
             accessibilityLabel="Settings"
-            onPress={() => {}}
+            onPress={() => router.push('/settings')}
             surface
           />
         </View>
@@ -61,19 +71,9 @@ export default function ProfileScreen() {
           <Text style={styles.detail}>{user.location}</Text>
         </View>
 
-        <View style={styles.section}>
+        <View>
           <SectionHeader title="Your career" />
-          <View style={styles.rows}>
-            {rows.map((row, index) => (
-              <View key={row.label} style={[styles.row, index > 0 ? styles.rowDivided : null]}>
-                <Ionicons name={row.icon} size={18} color={colors.textSecondary} />
-                <Text style={styles.rowLabel}>{row.label}</Text>
-                <Text style={styles.rowValue} numberOfLines={1}>
-                  {row.value}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <RowGroup items={careerRows} />
         </View>
 
         <Text style={styles.footnote}>
@@ -84,7 +84,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -135,41 +135,10 @@ const styles = StyleSheet.create({
     fontSize: fontSize.small,
     color: colors.textSecondary,
   },
-  section: {
-    gap: 0,
-  },
-  rows: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.lg,
-  },
-  rowDivided: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  rowLabel: {
-    flex: 1,
-    fontSize: fontSize.body,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  rowValue: {
-    fontSize: fontSize.small,
-    color: colors.textTertiary,
-    maxWidth: '45%',
-  },
   footnote: {
     fontSize: fontSize.small,
     color: colors.textTertiary,
     textAlign: 'center',
     lineHeight: 19,
   },
-});
+}));

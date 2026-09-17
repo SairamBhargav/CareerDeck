@@ -9,8 +9,5 @@ export interface User {
   location: string;
   preferredRoles: string[];
   preferredLocations: string[];
-  resumeName: string;
-  /** ISO date string of the last resume update. */
-  resumeUpdatedAt: string;
   appliedCount: number;
 }

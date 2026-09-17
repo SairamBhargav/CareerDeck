@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius } from '@/constants/theme';
+import { radius } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 type LogoSize = 'sm' | 'md' | 'lg';
 
@@ -12,19 +14,31 @@ const SIZES: Record<LogoSize, { box: number; font: number; radius: number }> = {
 
 const isRemoteLogo = (logo: string) => /^https?:\/\//.test(logo);
 
+/** "NVIDIA" -> "NV", "Citadel" -> "CI" — same shape as the mock data's own monograms. */
+function monogramOf(name: string): string {
+  const letters = name.replace(/[^a-zA-Z]/g, '');
+  return (letters.slice(0, 2) || name.slice(0, 2)).toUpperCase();
+}
+
 interface CompanyLogoProps {
   /** Company logo URL, or a fallback monogram text when a real logo is unavailable. */
   logo: string;
   name: string;
   color?: string;
   size?: LogoSize;
-  onDark?: boolean;
 }
 
-export function CompanyLogo({ logo, name, color, size = 'md', onDark = false }: CompanyLogoProps) {
+export function CompanyLogo({ logo, name, color, size = 'md' }: CompanyLogoProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  // A URL that 404s or times out still "isImageLogo" by shape — this is what actually
+  // drops it back to the monogram plate once the load fails.
+  const [imageFailed, setImageFailed] = useState(false);
+
   const dimensions = SIZES[size];
   const tint = color ?? colors.text;
-  const isImageLogo = isRemoteLogo(logo);
+  const showImage = isRemoteLogo(logo) && !imageFailed;
+  const monogram = isRemoteLogo(logo) ? monogramOf(name) : logo;
 
   return (
     <View
@@ -37,14 +51,16 @@ export function CompanyLogo({ logo, name, color, size = 'md', onDark = false }: 
           width: dimensions.box,
           height: dimensions.box,
           borderRadius: dimensions.radius,
-          backgroundColor: isImageLogo ? colors.surface : tint,
-          borderColor: onDark ? colors.reelBorder : colors.border,
+          // Real logos are nearly always dark-on-transparent, so they keep a light plate
+          // in both schemes; a monogram sits directly on the company's brand colour.
+          backgroundColor: showImage ? '#FFFFFF' : tint,
         },
       ]}>
-      {isImageLogo ? (
+      {showImage ? (
         <Image
           source={{ uri: logo }}
           resizeMode="contain"
+          onError={() => setImageFailed(true)}
           style={[
             styles.image,
             {
@@ -56,18 +72,19 @@ export function CompanyLogo({ logo, name, color, size = 'md', onDark = false }: 
         />
       ) : (
         <Text style={[styles.text, { fontSize: dimensions.font }]} numberOfLines={1}>
-          {logo}
+          {monogram}
         </Text>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     overflow: 'hidden',
   },
   image: {
@@ -75,8 +92,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   text: {
-    color: colors.textInverse,
+    // Always white: this sits on the company's own brand colour, not a themed surface.
+    color: colors.textOnBrand,
     fontWeight: '700',
     letterSpacing: 0.4,
   },
-});
+}));

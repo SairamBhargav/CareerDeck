@@ -1,56 +1,50 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, fontSize, spacing } from '@/constants/theme';
+import { fontSize, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { Job } from '@/types';
 import { formatLocationLine, formatSalary } from '@/utils/format';
 
 interface JobMetadataProps {
   job: Job;
-  onDark?: boolean;
   /** Reels emphasises salary; the Home list keeps everything the same weight. */
   emphasizeSalary?: boolean;
 }
 
-export function JobMetadata({ job, onDark = false, emphasizeSalary = false }: JobMetadataProps) {
+export function JobMetadata({ job, emphasizeSalary = false }: JobMetadataProps) {
+  const styles = useStyles();
   const salary = formatSalary(job);
   const locationLine = formatLocationLine(job);
 
   return (
     <View style={styles.container}>
       {salary ? (
-        <Text
-          style={[
-            emphasizeSalary ? styles.salaryStrong : styles.line,
-            onDark ? styles.textDark : styles.textLight,
-          ]}>
-          {salary}
-        </Text>
+        <Text style={emphasizeSalary ? styles.salaryStrong : styles.line}>{salary}</Text>
       ) : null}
-      <Text style={[styles.line, onDark ? styles.textMutedDark : styles.textMutedLight]}>
-        {locationLine}
-      </Text>
-      <Text style={[styles.line, onDark ? styles.textMutedDark : styles.textMutedLight]}>
-        {job.employmentType}
-      </Text>
+      <Text style={styles.lineMuted}>{locationLine}</Text>
+      <Text style={styles.lineMuted}>{job.employmentType}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     gap: spacing.xs / 2,
   },
   line: {
     fontSize: fontSize.body,
     fontWeight: '500',
+    color: colors.text,
+  },
+  lineMuted: {
+    fontSize: fontSize.body,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
   salaryStrong: {
     fontSize: fontSize.title,
     fontWeight: '700',
     letterSpacing: -0.2,
+    color: colors.text,
   },
-  textLight: { color: colors.text },
-  textDark: { color: colors.reelText },
-  textMutedLight: { color: colors.textSecondary },
-  textMutedDark: { color: colors.reelTextSecondary },
-});
+}));

@@ -2,30 +2,37 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { IconButton } from '@/components/common/IconButton';
-import { colors, fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Job } from '@/types';
 import { formatLocationLine, formatPostedAt, formatSalary } from '@/utils/format';
 
-interface JobPreviewCardProps {
+interface JobFeedCardProps {
   job: Job;
   logoColor?: string;
-  onPress?: () => void;
+  logoUrl?: string;
+  onPress: () => void;
   onToggleSave: () => void;
 }
 
-/** Compact row used by the vertical "Your Feed" list on Home. Not the full-screen reel. */
-export function JobPreviewCard({ job, logoColor, onPress, onToggleSave }: JobPreviewCardProps) {
+/**
+ * Compact row card for Home's vertical "Your Feed" — the one place besides Reels a
+ * posting shows up, and the only one that's a plain scannable list rather than a
+ * full-bleed card.
+ */
+export function JobFeedCard({ job, logoColor, logoUrl, onPress, onToggleSave }: JobFeedCardProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const salary = formatSalary(job);
 
   return (
     <Pressable
       onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityRole="button"
       accessibilityLabel={`${job.title} at ${job.companyName}`}
-      style={({ pressed }) => [styles.card, pressed && onPress ? styles.pressed : null]}>
+      style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.header}>
-        <CompanyLogo logo={job.companyLogo} name={job.companyName} color={logoColor} size="sm" />
+        <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="sm" />
 
         <View style={styles.headerText}>
           <Text style={styles.company} numberOfLines={1}>
@@ -38,7 +45,7 @@ export function JobPreviewCard({ job, logoColor, onPress, onToggleSave }: JobPre
 
         <IconButton
           name={job.isSaved ? 'bookmark' : 'bookmark-outline'}
-          color={job.isSaved ? colors.save : colors.textTertiary}
+          color={job.isSaved ? colors.text : colors.textTertiary}
           onPress={onToggleSave}
           accessibilityLabel={job.isSaved ? `Unsave ${job.title}` : `Save ${job.title}`}
         />
@@ -48,10 +55,6 @@ export function JobPreviewCard({ job, logoColor, onPress, onToggleSave }: JobPre
         {formatLocationLine(job)}
       </Text>
       {salary ? <Text style={styles.salary}>{salary}</Text> : null}
-
-      <Text style={styles.description} numberOfLines={2}>
-        {job.description}
-      </Text>
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>{formatPostedAt(job.postedAt)}</Text>
@@ -66,7 +69,7 @@ export function JobPreviewCard({ job, logoColor, onPress, onToggleSave }: JobPre
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -76,7 +79,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   pressed: {
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: colors.backgroundMuted,
   },
   header: {
     flexDirection: 'row',
@@ -109,12 +112,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
-  description: {
-    fontSize: fontSize.small,
-    lineHeight: 19,
-    color: colors.textTertiary,
-    marginTop: spacing.xs,
-  },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -130,4 +127,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: colors.textTertiary,
   },
-});
+}));
