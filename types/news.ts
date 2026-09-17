@@ -13,6 +13,8 @@ export interface NewsItem {
   tag: string;
   headline: string;
   subtext: string;
+  /** Full article body shown on the news detail screen, one paragraph per entry. */
+  body: string[];
   /** ISO date string. */
   publishedAt: string;
 }

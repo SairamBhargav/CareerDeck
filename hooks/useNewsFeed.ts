@@ -27,3 +27,7 @@ export function useNewsFeed(): NewsItem[] {
     return [...relevant, ...other];
   }, [followedCompanyIds]);
 }
+
+export function useNewsById(newsId: string | undefined): NewsItem | undefined {
+  return useMemo(() => mockNews.find((item) => item.id === newsId), [newsId]);
+}

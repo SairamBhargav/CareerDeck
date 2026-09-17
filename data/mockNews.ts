@@ -1,9 +1,10 @@
 import type { NewsItem } from '@/types';
 
 /**
- * Bite-sized updates for the Home "Your Feed" carousel — a mix of news from companies
+ * Bite-sized updates for the Home "Your News" carousel — a mix of news from companies
  * the user follows and broader industry signal for their niche (software / AI hiring).
  * `category: 'company'` items carry a `companyId` so useNewsFeed can prioritize follows.
+ * `body` backs the full article screen opened when a card is tapped.
  */
 export const mockNews: NewsItem[] = [
   {
@@ -16,6 +17,11 @@ export const mockNews: NewsItem[] = [
     tag: 'NVIDIA · Hiring',
     headline: 'NVIDIA opens 200+ new AI infrastructure roles this quarter',
     subtext: 'A fresh wave of postings spans GPU scheduling, distributed training, and developer tooling teams.',
+    body: [
+      'NVIDIA is expanding its AI infrastructure organization with more than 200 new openings, spanning GPU cluster scheduling, distributed training frameworks, and internal developer tooling. The push follows continued demand for large-scale training capacity from both internal research teams and enterprise customers.',
+      'Roles are concentrated in Santa Clara and Austin, with a smaller number fully remote. Hiring managers say the team is prioritizing candidates with systems programming experience over pure ML backgrounds, since most of the work sits below the model layer.',
+      'Internship conversion has also improved: NVIDIA says roughly three in four infrastructure interns from this past summer received return offers, up from previous cycles.',
+    ],
     publishedAt: '2026-09-14',
   },
   {
@@ -28,6 +34,11 @@ export const mockNews: NewsItem[] = [
     tag: 'Stripe · Expansion',
     headline: 'Stripe expands its New Grad program to Seattle and Austin',
     subtext: 'Two new hubs join San Francisco and New York for the 2027 engineering cohort.',
+    body: [
+      'Stripe is growing its New Grad Engineering program beyond San Francisco and New York, adding Seattle and Austin as hubs for the 2027 cohort. The company says the expansion is meant to widen its hiring pool without diluting the program’s structure, which pairs every new grad with a dedicated mentor for their first two quarters.',
+      'New grads in the expanded hubs will work on the same rotation system as existing offices, spending their first six months on a core payments team before choosing a permanent placement.',
+      'Applications for the 2027 cohort open later this fall, with the first round of interviews expected to begin in early winter.',
+    ],
     publishedAt: '2026-09-13',
   },
   {
@@ -37,6 +48,11 @@ export const mockNews: NewsItem[] = [
     tag: 'Industry Pulse',
     headline: 'AI internship postings are up 34% this fall',
     subtext: 'Machine learning and infrastructure roles are driving most of the growth across big tech.',
+    body: [
+      'Internship postings mentioning machine learning, model training, or AI infrastructure are up 34% compared to the same period last year, according to aggregated postings across major job boards. The growth is concentrated at large tech companies, though mid-size startups are also adding AI-adjacent internship tracks for the first time.',
+      'Unlike previous cycles, a growing share of these postings emphasize systems and infrastructure skills over pure modeling experience — recruiters say teams increasingly need engineers who can make existing models run efficiently at scale, not just build new ones.',
+      'Analysts expect the trend to continue into next year’s full-time hiring cycle as more companies formalize dedicated AI infrastructure teams.',
+    ],
     publishedAt: '2026-09-15',
   },
   {
@@ -49,6 +65,10 @@ export const mockNews: NewsItem[] = [
     tag: 'NVIDIA · Earnings',
     headline: 'NVIDIA beats expectations, signals continued hiring push',
     subtext: 'Leadership pointed to data center demand as the driver behind an accelerated engineering headcount plan.',
+    body: [
+      'NVIDIA’s latest quarterly results came in ahead of analyst expectations, driven largely by continued demand for data center GPUs. On the earnings call, leadership said engineering headcount growth would accelerate through the rest of the year to keep pace with order backlogs.',
+      'The company did not break out hiring numbers by team, but said the majority of new roles would sit in software rather than hardware, reflecting a broader shift toward platform and tooling investment.',
+    ],
     publishedAt: '2026-09-10',
   },
   {
@@ -58,6 +78,11 @@ export const mockNews: NewsItem[] = [
     tag: 'Industry Pulse',
     headline: 'Remote software internships now make up 1 in 5 listings',
     subtext: 'Remote and hybrid share of entry-level engineering postings continues to climb year over year.',
+    body: [
+      'Roughly one in five software engineering internship postings this fall are fully remote, continuing a steady climb from about one in eight two years ago. Hybrid arrangements have grown even faster, now representing close to a third of all listings.',
+      'Recruiters attribute the shift to two things: companies widening their applicant pool beyond traditional tech hub cities, and interns themselves increasingly ranking flexibility alongside compensation when choosing between offers.',
+      'Fully onsite internships remain most common at hardware, robotics, and finance-adjacent firms, where in-person collaboration is considered harder to replace.',
+    ],
     publishedAt: '2026-09-12',
   },
   {
@@ -70,6 +95,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Stripe · Product',
     headline: 'Stripe ships a new fraud detection API built on real-time ML',
     subtext: 'The backend team behind the launch is actively growing — several open roles reference this project.',
+    body: [
+      'Stripe has launched a new fraud detection API that scores transactions in real time using a model retrained continuously on platform-wide signal. The team says latency per request stayed under 50 milliseconds even at full production volume, a target that shaped most of the backend architecture decisions.',
+      'Several currently open backend and infrastructure roles reference this project directly, suggesting the team is still scaling ahead of a broader rollout to more merchants next quarter.',
+    ],
     publishedAt: '2026-09-09',
   },
   {
@@ -79,6 +108,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Industry Pulse',
     headline: 'Entry-level software hiring rebounds after two slow years',
     subtext: 'New grad offer volume is trending up across finance, cloud, and consumer tech this cycle.',
+    body: [
+      'After two consecutive years of tightened new-grad hiring, early signals for this cycle point to a rebound. Offer volume tracked across finance, cloud infrastructure, and consumer tech companies is trending upward compared to the same point last year.',
+      'Compensation growth has been more modest than offer volume, with most companies holding base salaries flat while restoring headcount. Recruiters say competition for top candidates remains intense despite the larger number of open roles.',
+    ],
     publishedAt: '2026-09-08',
   },
   {
@@ -91,6 +124,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Google · Research',
     headline: 'Google DeepMind opens a new applied AI residency track',
     subtext: 'The program pairs new grads with research teams for a rotational first year.',
+    body: [
+      'Google DeepMind is launching a new residency track aimed at new graduates, pairing each resident with a research team for a rotational first year before a permanent placement decision. The program sits between a traditional new-grad engineering role and a research internship, with residents expected to contribute to shipped features rather than purely exploratory work.',
+      'Applications are open to candidates with a bachelor’s or master’s degree; a PhD is not required, which DeepMind says is a deliberate departure from most of its existing research hiring.',
+    ],
     publishedAt: '2026-09-11',
   },
   {
@@ -100,6 +137,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Industry Pulse',
     headline: 'Take-home projects are replacing whiteboard interviews',
     subtext: 'More engineering teams are moving early rounds to scoped, async coding assignments.',
+    body: [
+      'A growing number of engineering teams are replacing live whiteboard coding rounds with scoped, async take-home projects earlier in the interview process. Hiring managers say the format gives a clearer signal on how a candidate actually writes and structures code, without the added pressure of being watched in real time.',
+      'The tradeoff is time: take-home assignments typically add several days to a candidate’s process compared to a single scheduled interview, and some teams have capped project scope to under two hours to keep the funnel moving.',
+    ],
     publishedAt: '2026-09-07',
   },
   {
@@ -112,6 +153,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Datadog · Growth',
     headline: 'Datadog opens a new engineering hub focused on observability tooling',
     subtext: 'The team is hiring across frontend, backend, and developer experience roles.',
+    body: [
+      'Datadog is standing up a new engineering hub dedicated to observability tooling, with open roles spanning frontend dashboards, backend data pipelines, and developer experience. The team is being built out ahead of a planned expansion of Datadog’s real-time metrics product.',
+      'Unlike most of Datadog’s existing engineering teams, this hub will operate with a smaller, more autonomous structure, reporting directly to product leadership rather than through the standard platform organization.',
+    ],
     publishedAt: '2026-09-06',
   },
   {
@@ -121,6 +166,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Industry Pulse',
     headline: 'Distributed systems and ML skills top recruiter searches',
     subtext: 'Postings mentioning both skills together get noticeably more recruiter views this quarter.',
+    body: [
+      'Job postings that mention both distributed systems and machine learning experience are getting significantly more recruiter views this quarter than postings listing either skill alone, according to internal search data from several major job platforms.',
+      'Recruiters say the combination is in short supply: most candidates lean heavily toward one side or the other, and teams building large-scale training infrastructure increasingly need engineers comfortable on both.',
+    ],
     publishedAt: '2026-09-05',
   },
   {
@@ -133,6 +182,10 @@ export const mockNews: NewsItem[] = [
     tag: 'Citadel · Culture',
     headline: 'Citadel extends return offers to 90% of this summer’s interns',
     subtext: 'The quant research and engineering intern classes both saw record conversion rates.',
+    body: [
+      'Citadel extended return offers to roughly 90% of its summer intern class this year, a record for the firm across both its quantitative research and engineering tracks. The firm attributed the high conversion rate to a more selective initial intern hiring process rather than any change in performance bar during the summer.',
+      'Interns who received offers have until early next year to accept, with most expected to start as full-time analysts or engineers next summer following graduation.',
+    ],
     publishedAt: '2026-09-04',
   },
 ];

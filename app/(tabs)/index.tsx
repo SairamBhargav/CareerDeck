@@ -32,8 +32,7 @@ export default function HomeScreen() {
     { label: 'Applied', value: user.appliedCount },
   ];
 
-  // News detail / company pages don't exist yet — tapping a card is a no-op for now.
-  const handlePressNews = (_item: NewsItem) => {};
+  const handlePressNews = (item: NewsItem) => router.push(`/news/${item.id}`);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -69,7 +68,7 @@ export default function HomeScreen() {
 
         <View style={styles.feedSection}>
           <View style={styles.feedHeading}>
-            <SectionHeader title="Your Feed" />
+            <SectionHeader title="Your News" />
           </View>
           <NewsCarousel
             items={newsFeed}
