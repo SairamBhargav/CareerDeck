@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -15,7 +16,7 @@ import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { SkillChip } from '@/components/common/SkillChip';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
 import { ReelActionRail } from '@/components/reels/ReelActionRail';
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { colors, fontSize, radius, screenPadding, shadow, spacing } from '@/constants/theme';
 import type { Job } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
@@ -47,6 +48,15 @@ export function JobReelCard({
   onAutoApply,
 }: JobReelCardProps) {
   const skills = job.skills.slice(0, MAX_SKILL_CHIPS);
+  // How tall the caption's box actually is, matching contentBox's flex:1 sizing exactly.
+  const availableContentHeight = height - paddingTop - paddingBottom;
+
+  // The un-clipped content's own natural height, measured via onLayout on the inner
+  // wrapper below. Compared against the available (clipped) box to decide whether this
+  // job's copy actually needs "Read more" or comfortably fits on its own.
+  const [naturalHeight, setNaturalHeight] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const needsReadMore = !expanded && naturalHeight !== null && naturalHeight > availableContentHeight;
 
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
@@ -80,6 +90,36 @@ export function JobReelCard({
     transform: [{ scale: heartScale.value }],
   }));
 
+  const handleContentLayout = (event: LayoutChangeEvent) => {
+    setNaturalHeight(event.nativeEvent.layout.height);
+  };
+
+  const captionBody = (
+    <>
+      <View style={styles.companyRow}>
+        <CompanyLogo logo={job.companyLogo} name={job.companyName} color={logoColor} size="md" />
+        <View style={styles.companyText}>
+          <Text style={styles.companyName} numberOfLines={1}>
+            {job.companyName}
+          </Text>
+          <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.title}>{job.title}</Text>
+
+      <JobMetadata job={job} emphasizeSalary />
+
+      <Text style={styles.description}>{job.description}</Text>
+
+      <View style={styles.skills}>
+        {skills.map((skill) => (
+          <SkillChip key={skill} label={skill} />
+        ))}
+      </View>
+    </>
+  );
+
   return (
     <View style={[styles.page, { height, paddingTop, paddingBottom }]}>
       <GestureDetector gesture={doubleTap}>
@@ -90,29 +130,35 @@ export function JobReelCard({
             style={[styles.glow, logoColor ? { backgroundColor: logoColor } : null]}
           />
 
-          <View style={[styles.content, { paddingRight: RAIL_RESERVED_WIDTH }]}>
-            <View style={styles.companyRow}>
-              <CompanyLogo logo={job.companyLogo} name={job.companyName} color={logoColor} size="md" />
-              <View style={styles.companyText}>
-                <Text style={styles.companyName} numberOfLines={1}>
-                  {job.companyName}
-                </Text>
-                <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
+          <View style={[styles.contentBox, { paddingRight: RAIL_RESERVED_WIDTH }]}>
+            {expanded ? (
+              <ScrollView
+                style={styles.contentScroll}
+                contentContainerStyle={styles.contentInner}
+                showsVerticalScrollIndicator
+                accessibilityLabel="Full job description">
+                {captionBody}
+              </ScrollView>
+            ) : (
+              // Unconstrained on purpose: contentBox's fixed height + overflow:hidden is
+              // what visually clips this, but leaving this inner view free to size to its
+              // natural content means onLayout reports the true, un-clipped height.
+              <View style={styles.contentInner} onLayout={handleContentLayout}>
+                {captionBody}
               </View>
-            </View>
-
-            <Text style={styles.title}>{job.title}</Text>
-
-            <JobMetadata job={job} emphasizeSalary />
-
-            <Text style={styles.description}>{job.description}</Text>
-
-            <View style={styles.skills}>
-              {skills.map((skill) => (
-                <SkillChip key={skill} label={skill} />
-              ))}
-            </View>
+            )}
           </View>
+
+          {needsReadMore ? (
+            <Pressable
+              onPress={() => setExpanded(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Read the full job description"
+              style={({ pressed }) => [styles.readMore, pressed ? styles.readMorePressed : null]}>
+              <Text style={styles.readMoreLabel}>Read more</Text>
+              <Ionicons name="chevron-down" size={14} color={colors.text} />
+            </Pressable>
+          ) : null}
 
           <Animated.View pointerEvents="none" style={[styles.heartBurst, heartBurstStyle]}>
             <Ionicons name="heart" size={104} color={colors.like} />
@@ -153,12 +199,17 @@ const styles = StyleSheet.create({
     opacity: 0.14,
     backgroundColor: colors.text,
   },
-  content: {
+  // Top-anchored (never centered) so every reel's caption starts at the same spot
+  // regardless of description length, and hard-clipped at the bottom so it can grow to
+  // fill all the way down to the action rail without ever running past it.
+  contentBox: {
     flex: 1,
-    // Top-anchored (not centered) so every reel's content starts at the same spot
-    // regardless of description length, and clipped so a long description can grow to
-    // fill all the way down to the action rail without ever running past it.
     overflow: 'hidden',
+  },
+  contentScroll: {
+    flex: 1,
+  },
+  contentInner: {
     gap: spacing.md,
   },
   companyRow: {
@@ -197,6 +248,32 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.xs,
+  },
+  // Pinned to the bottom of the tapZone, which already sits at the same Y as the action
+  // rail's bottom (both are measured from the same paddingBottom) — so this lines up
+  // with the bottom of the Auto Apply button without any extra math.
+  readMore: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    ...shadow.soft,
+  },
+  readMorePressed: {
+    opacity: 0.7,
+  },
+  readMoreLabel: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.text,
   },
   heartBurst: {
     position: 'absolute',

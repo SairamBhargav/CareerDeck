@@ -26,9 +26,22 @@ import {
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 
-import type { BottomTabBarProps } from 'expo-router/js-tabs';
-
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+// expo-router's own MaterialTopTabBarProps types as `any & {...}`, which makes every
+// field implicitly `any`. This mirrors the actual runtime shape TopTabs passes to a
+// custom `tabBar` render (confirmed against its source) so this component stays typed.
+export interface FloatingTabBarProps {
+  state: {
+    index: number;
+    routes: { key: string; name: string }[];
+  };
+  descriptors: Record<string, { options: { title?: string } }>;
+  navigation: {
+    emit: (event: { type: string; target: string; canPreventDefault: true }) => { defaultPrevented: boolean };
+    navigate: (routeName: string) => void;
+  };
+}
 
 const INDICATOR_INSET = 6;
 const INDICATOR_SPRING = { damping: 18, stiffness: 220 };
@@ -55,7 +68,7 @@ function iconsForRoute(routeName: string): { active: IconName; inactive: IconNam
  * immersive background, so the pill switches to a dark blur + light icon treatment while
  * that tab is active.
  */
-export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
   const { hiddenOffset } = useTabBarVisibility();
   const hideDistance = useTabBarHeight();
