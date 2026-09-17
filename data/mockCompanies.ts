@@ -4,7 +4,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'nvidia',
     name: 'NVIDIA',
-    logo: 'NV',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=nvidia.com',
     logoColor: '#76B900',
     industry: 'Semiconductors & AI',
     followerCount: 184200,
@@ -13,7 +13,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'google',
     name: 'Google',
-    logo: 'G',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=google.com',
     logoColor: '#4285F4',
     industry: 'Internet & Cloud',
     followerCount: 921400,
@@ -22,7 +22,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'amazon',
     name: 'Amazon',
-    logo: 'A',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=amazon.com',
     logoColor: '#FF9900',
     industry: 'E-commerce & Cloud',
     followerCount: 764800,
@@ -31,7 +31,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'citadel',
     name: 'Citadel',
-    logo: 'C',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=citadel.com',
     logoColor: '#0B3D2E',
     industry: 'Quantitative Finance',
     followerCount: 58300,
@@ -40,7 +40,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'stripe',
     name: 'Stripe',
-    logo: 'S',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=stripe.com',
     logoColor: '#635BFF',
     industry: 'Payments Infrastructure',
     followerCount: 112700,
@@ -49,7 +49,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'datadog',
     name: 'Datadog',
-    logo: 'DD',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=datadoghq.com',
     logoColor: '#632CA6',
     industry: 'Observability',
     followerCount: 47900,
@@ -58,7 +58,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'apple',
     name: 'Apple',
-    logo: 'AP',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=apple.com',
     logoColor: '#1D1D1F',
     industry: 'Consumer Hardware',
     followerCount: 1043000,
@@ -67,7 +67,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'palantir',
     name: 'Palantir',
-    logo: 'P',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=palantir.com',
     logoColor: '#101113',
     industry: 'Data Platforms',
     followerCount: 96500,
@@ -76,7 +76,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'spacex',
     name: 'SpaceX',
-    logo: 'SX',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=spacex.com',
     logoColor: '#005288',
     industry: 'Aerospace',
     followerCount: 402100,
@@ -85,7 +85,7 @@ export const mockCompanies: Company[] = [
   {
     id: 'microsoft',
     name: 'Microsoft',
-    logo: 'MS',
+    logo: 'https://www.google.com/s2/favicons?sz=128&domain_url=microsoft.com',
     logoColor: '#0078D4',
     industry: 'Software & Cloud',
     followerCount: 887300,

@@ -1,9 +1,9 @@
 export interface Company {
   id: string;
   name: string;
-  /** Short monogram rendered by <CompanyLogo/>. Swap for a real image URL later. */
+  /** Real company logo URL or a short monogram fallback. */
   logo: string;
-  /** Brand tint used behind the monogram. */
+  /** Brand tint used as the fallback background behind the logo. */
   logoColor: string;
   industry: string;
   followerCount: number;
