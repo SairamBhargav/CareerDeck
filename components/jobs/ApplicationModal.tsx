@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { Job } from '@/types';
 
 interface ApplicationModalProps {
@@ -20,6 +21,7 @@ interface ApplicationModalProps {
  */
 export function ApplicationModal({ job, resumeName, visible, onClose }: ApplicationModalProps) {
   const insets = useSafeAreaInsets();
+  const styles = useStyles();
   const [reviewRequested, setReviewRequested] = useState(false);
 
   // Reset the confirmation message whenever a different job opens the sheet.
@@ -67,6 +69,8 @@ export function ApplicationModal({ job, resumeName, visible, onClose }: Applicat
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -77,7 +81,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -136,4 +140,4 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.sm,
   },
-});
+}));

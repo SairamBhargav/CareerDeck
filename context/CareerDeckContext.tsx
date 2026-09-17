@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { mockCompanies } from '@/data/mockCompanies';
 import { mockJobs } from '@/data/mockJobs';
@@ -15,6 +15,13 @@ import type { Company, Job, Resume, User } from '@/types';
  */
 
 interface CareerDeckState {
+  /**
+   * True for a short window right after mount, before "data" is considered to have
+   * arrived. There's no real fetch behind any of this yet — it's a stand-in so Home's
+   * skeleton states are wired up and visible now, ready to key off a real request once
+   * one exists.
+   */
+  isInitialLoading: boolean;
   user: User;
   jobs: Job[];
   companies: Company[];
@@ -26,8 +33,6 @@ interface CareerDeckState {
   likedJobIds: string[];
   savedJobIds: string[];
   isFollowing: (companyId: string) => boolean;
-  isLiked: (jobId: string) => boolean;
-  isSaved: (jobId: string) => boolean;
   toggleFollow: (companyId: string) => void;
   toggleLike: (jobId: string) => void;
   toggleSave: (jobId: string) => void;
@@ -50,11 +55,20 @@ function seedFollowedCompanies(): Set<string> {
   return new Set(mockCompanies.filter((company) => company.isFollowing).map((company) => company.id));
 }
 
+/** How long Home's skeletons stay up before the (currently instant) mock data "arrives". */
+const INITIAL_LOAD_MS = 650;
+
 export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [followedIds, setFollowedIds] = useState<Set<string>>(seedFollowedCompanies);
   const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set<string>());
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set<string>());
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoading(false), INITIAL_LOAD_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   const toggleFollow = useCallback((companyId: string) => {
     setFollowedIds((current) => toggleInSet(current, companyId));
@@ -85,6 +99,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     }));
 
     return {
+      isInitialLoading,
       user: mockUser,
       jobs,
       companies,
@@ -95,14 +110,22 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       likedJobIds: [...likedIds],
       savedJobIds: [...savedIds],
       isFollowing: (companyId: string) => followedIds.has(companyId),
-      isLiked: (jobId: string) => likedIds.has(jobId),
-      isSaved: (jobId: string) => savedIds.has(jobId),
       toggleFollow,
       toggleLike,
       toggleSave,
       setDefaultResume,
     };
-  }, [followedIds, likedIds, savedIds, defaultResumeId, toggleFollow, toggleLike, toggleSave, setDefaultResume]);
+  }, [
+    isInitialLoading,
+    followedIds,
+    likedIds,
+    savedIds,
+    defaultResumeId,
+    toggleFollow,
+    toggleLike,
+    toggleSave,
+    setDefaultResume,
+  ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;
 }

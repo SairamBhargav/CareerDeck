@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { colors, fontSize, radius } from '@/constants/theme';
+import { fontSize, radius } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 
 interface HomeHeaderProps {
   firstName: string;
@@ -9,6 +10,8 @@ interface HomeHeaderProps {
 }
 
 export function HomeHeader({ firstName, initials, onProfilePress }: HomeHeaderProps) {
+  const styles = useStyles();
+
   return (
     <View style={styles.row}>
       <Text style={styles.greeting}>Hey {firstName}</Text>
@@ -24,14 +27,14 @@ export function HomeHeader({ firstName, initials, onProfilePress }: HomeHeaderPr
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   greeting: {
-    fontSize: 34,
+    fontSize: fontSize.hero,
     fontWeight: '700',
     color: colors.text,
     letterSpacing: -0.8,
@@ -53,4 +56,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

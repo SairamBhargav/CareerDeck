@@ -16,7 +16,8 @@ import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { SkillChip } from '@/components/common/SkillChip';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
 import { ReelActionRail } from '@/components/reels/ReelActionRail';
-import { colors, fontSize, radius, screenPadding, shadow, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Job } from '@/types';
 import { hexToRgba } from '@/utils/color';
 import { formatPostedAt } from '@/utils/format';
@@ -55,6 +56,9 @@ export function JobReelCard({
   onMore,
   onAutoApply,
 }: JobReelCardProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   const skills = job.skills.slice(0, MAX_SKILL_CHIPS);
   // How tall the caption's box actually is: the rail's own lift, plus extra room so the
   // text visibly stops short of the rail line instead of running right up to it.
@@ -105,14 +109,22 @@ export function JobReelCard({
   return (
     <View style={[styles.page, { height, paddingTop, paddingBottom }]}>
       {/* A soft full-bleed wash of the company's brand color, plus a stronger accent
-          glow behind the logo — gives each reel its own identity without a loud gradient. */}
+          glow behind the logo — gives each reel its own identity without a loud gradient.
+          Both alphas come from the palette: over a near-black page the light-mode values
+          would be invisible, so dark leans on the brand colour far harder. */}
       <View
         pointerEvents="none"
-        style={[styles.wash, logoColor ? { backgroundColor: hexToRgba(logoColor, 0.07) } : null]}
+        style={[
+          styles.wash,
+          logoColor ? { backgroundColor: hexToRgba(logoColor, colors.reelWashAlpha) } : null,
+        ]}
       />
       <View
         pointerEvents="none"
-        style={[styles.glow, logoColor ? { backgroundColor: hexToRgba(logoColor, 0.22) } : null]}
+        style={[
+          styles.glow,
+          logoColor ? { backgroundColor: hexToRgba(logoColor, colors.reelGlowAlpha) } : null,
+        ]}
       />
 
       <GestureDetector gesture={doubleTap}>
@@ -184,7 +196,7 @@ export function JobReelCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   page: {
     width: '100%',
     paddingHorizontal: screenPadding,
@@ -209,9 +221,9 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: radius.pill,
-    // Pre-blended fallback (colors.text at 14% alpha) for the rare case a job's company
-    // has no brand color; the inline style above overrides this with the real tint.
-    backgroundColor: 'rgba(17, 17, 20, 0.14)',
+    // Pre-blended fallback for the rare case a job's company has no brand color; the
+    // inline style above overrides this with the real tint.
+    backgroundColor: colors.reelGlowFallback,
   },
   // Top-anchored (never centered) so every reel's caption starts at the same spot
   // regardless of description length, and hard-clipped at the bottom so it can grow to
@@ -272,10 +284,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.controlSurface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    ...shadow.soft,
+    ...colors.shadowSoft,
   },
   readMorePressed: {
     opacity: 0.7,
@@ -298,4 +310,4 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: screenPadding,
   },
-});
+}));

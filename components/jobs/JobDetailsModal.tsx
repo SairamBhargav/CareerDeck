@@ -1,4 +1,4 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
@@ -6,7 +6,8 @@ import { IconButton } from '@/components/common/IconButton';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { SkillChip } from '@/components/common/SkillChip';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { Job } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
@@ -27,6 +28,7 @@ interface JobDetailsModalProps {
  */
 export function JobDetailsModal({ job, logoColor, logoUrl, visible, onClose, onApply }: JobDetailsModalProps) {
   const insets = useSafeAreaInsets();
+  const styles = useStyles();
 
   if (!job) return null;
 
@@ -68,7 +70,7 @@ export function JobDetailsModal({ job, logoColor, logoUrl, visible, onClose, onA
           <Text style={styles.sectionTitle}>What they look for</Text>
           {job.requirements.map((requirement) => (
             <View key={requirement} style={styles.bulletRow}>
-              <Text style={styles.bullet}>{'•'}</Text>
+              <Text style={styles.bullet}>{'\u2022'}</Text>
               <Text style={styles.body}>{requirement}</Text>
             </View>
           ))}
@@ -87,7 +89,7 @@ export function JobDetailsModal({ job, logoColor, logoUrl, visible, onClose, onA
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -177,4 +179,4 @@ const styles = StyleSheet.create({
   applyButton: {
     marginTop: spacing.xl,
   },
-});
+}));

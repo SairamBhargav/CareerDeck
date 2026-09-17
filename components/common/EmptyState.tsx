@@ -1,30 +1,31 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface EmptyStateProps {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
   message: string;
-  onDark?: boolean;
 }
 
-export function EmptyState({ icon, title, message, onDark = false }: EmptyStateProps) {
-  const tint = onDark ? colors.reelTextSecondary : colors.textTertiary;
+export function EmptyState({ icon, title, message }: EmptyStateProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
 
   return (
     <View style={styles.container}>
-      <View style={[styles.iconWrap, onDark ? styles.iconWrapDark : styles.iconWrapLight]}>
-        <Ionicons name={icon} size={26} color={tint} />
+      <View style={styles.iconWrap}>
+        <Ionicons name={icon} size={26} color={colors.textTertiary} />
       </View>
-      <Text style={[styles.title, onDark ? styles.titleDark : styles.titleLight]}>{title}</Text>
-      <Text style={[styles.message, { color: tint }]}>{message}</Text>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.message}>{message}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -39,19 +40,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xs,
+    backgroundColor: colors.backgroundMuted,
   },
-  iconWrapLight: { backgroundColor: colors.backgroundMuted },
-  iconWrapDark: { backgroundColor: colors.reelSurface },
   title: {
     fontSize: fontSize.title,
     fontWeight: '700',
     textAlign: 'center',
+    color: colors.text,
   },
-  titleLight: { color: colors.text },
-  titleDark: { color: colors.reelText },
   message: {
     fontSize: fontSize.body,
     lineHeight: 21,
     textAlign: 'center',
+    color: colors.textTertiary,
   },
-});
+}));

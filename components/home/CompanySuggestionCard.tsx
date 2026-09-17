@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
-import { colors, fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
 import { formatFollowerCount } from '@/utils/format';
 
@@ -13,6 +14,7 @@ interface CompanySuggestionCardProps {
 }
 
 export function CompanySuggestionCard({ company, onToggleFollow }: CompanySuggestionCardProps) {
+  const styles = useStyles();
   const { isFollowing } = company;
 
   return (
@@ -48,7 +50,7 @@ export function CompanySuggestionCard({ company, onToggleFollow }: CompanySugges
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     width: SUGGESTION_CARD_WIDTH,
     alignItems: 'center',
@@ -98,4 +100,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));

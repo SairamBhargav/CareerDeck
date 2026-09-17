@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
-import { FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { FlatList, useWindowDimensions, View } from 'react-native';
 
+import { Skeleton } from '@/components/common/Skeleton';
 import { NEWS_CARD_HEIGHT, NewsCard } from '@/components/home/NewsCard';
 import { screenPadding, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { NewsItem } from '@/types';
 
 /**
@@ -16,6 +18,7 @@ const LOOP_COUNT = 30;
 /** Sliver of the next card left peeking at the edge, like the reference Apple Music carousel. */
 const PEEK = 28;
 const GAP = spacing.md;
+const SKELETON_COUNT = 2;
 
 interface LoopedNewsItem extends NewsItem {
   _loopKey: string;
@@ -24,10 +27,12 @@ interface LoopedNewsItem extends NewsItem {
 interface NewsCarouselProps {
   items: NewsItem[];
   companyColors: Map<string, string>;
+  loading: boolean;
   onPressItem: (item: NewsItem) => void;
 }
 
-export function NewsCarousel({ items, companyColors, onPressItem }: NewsCarouselProps) {
+export function NewsCarousel({ items, companyColors, loading, onPressItem }: NewsCarouselProps) {
+  const styles = useStyles();
   const { width: windowWidth } = useWindowDimensions();
   const cardWidth = windowWidth - screenPadding * 2 - PEEK;
   const itemLength = cardWidth + GAP;
@@ -38,6 +43,16 @@ export function NewsCarousel({ items, companyColors, onPressItem }: NewsCarousel
       items.map((item) => ({ ...item, _loopKey: `${item.id}-${loopIndex}` })),
     ).flat();
   }, [items]);
+
+  if (loading) {
+    return (
+      <View style={styles.skeletonRow}>
+        {Array.from({ length: SKELETON_COUNT }, (_, index) => (
+          <Skeleton key={index} width={cardWidth} height={NEWS_CARD_HEIGHT} borderRadius={26} />
+        ))}
+      </View>
+    );
+  }
 
   if (loopedItems.length === 0) return null;
 
@@ -76,10 +91,15 @@ export function NewsCarousel({ items, companyColors, onPressItem }: NewsCarousel
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   content: {
     paddingHorizontal: screenPadding,
   },
-});
+  skeletonRow: {
+    flexDirection: 'row',
+    paddingHorizontal: screenPadding,
+    gap: GAP,
+  },
+}));
 
 export { NEWS_CARD_HEIGHT };

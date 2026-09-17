@@ -14,17 +14,16 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  colors,
   fontSize,
   minTapTarget,
   radius,
   screenPadding,
-  shadow,
   spacing,
   tabBarFloatGap,
   tabBarHeight,
 } from '@/constants/theme';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -71,6 +70,8 @@ function iconsForRoute(routeName: string): { active: IconName; inactive: IconNam
  */
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { hiddenOffset } = useTabBarVisibility();
   const hideDistance = useTabBarHeight();
 
@@ -136,7 +137,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
                 pointerEvents="none"
                 style={[
                   styles.indicator,
-                  { width: tabWidth - INDICATOR_INSET * 2, backgroundColor: colors.reelSurface },
+                  { width: tabWidth - INDICATOR_INSET * 2, backgroundColor: colors.chromeSurface },
                   indicatorAnimatedStyle,
                 ]}
               />
@@ -155,7 +156,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
                 }
               };
 
-              const iconColor = focused ? colors.reelText : colors.reelTextTertiary;
+              const iconColor = focused ? colors.chromeText : colors.chromeTextMuted;
 
               return (
                 <TabBarButton
@@ -185,6 +186,7 @@ interface TabBarButtonProps {
 
 /** A single tab: bounces with a spring whenever it becomes the active tab. */
 function TabBarButton({ focused, icon, label, iconColor, onPress }: TabBarButtonProps) {
+  const styles = useStyles();
   const scale = useSharedValue(1);
 
   useEffect(() => {
@@ -212,7 +214,7 @@ function TabBarButton({ focused, icon, label, iconColor, onPress }: TabBarButton
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrapper: {
     position: 'absolute',
     left: 0,
@@ -223,13 +225,17 @@ const styles = StyleSheet.create({
     marginHorizontal: screenPadding,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
-    ...shadow.lifted,
+    ...colors.shadowLifted,
   },
   pill: {
     height: tabBarHeight,
     borderRadius: radius.pill,
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
+    // Transparent in light, where the dark capsule separates itself against a white page.
+    // In dark it needs a rim, or the blur dissolves into the background behind it.
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.chromeBorder,
   },
   row: {
     flex: 1,
@@ -259,4 +265,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     fontWeight: '600',
   },
-});
+}));

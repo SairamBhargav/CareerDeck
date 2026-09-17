@@ -2,7 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
-import { colors, fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { NewsItem } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
@@ -17,6 +18,8 @@ interface NewsCardProps {
 }
 
 export function NewsCard({ item, width, companyColor, onPress }: NewsCardProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const isCompanyNews = item.category === 'company';
 
   return (
@@ -25,6 +28,8 @@ export function NewsCard({ item, width, companyColor, onPress }: NewsCardProps) 
       accessibilityRole="button"
       accessibilityLabel={`${item.tag}: ${item.headline}`}
       style={({ pressed }) => [styles.card, { width }, pressed ? styles.pressed : null]}>
+      {/* The accent block stands in for artwork, so it keeps its full brand colour in
+          both schemes rather than being dimmed down with the rest of the surface. */}
       <View style={[styles.visual, { backgroundColor: item.accentColor }]}>
         {isCompanyNews && item.companyLogo && item.companyName ? (
           <CompanyLogo logo={item.companyLogo} name={item.companyName} color={companyColor} size="lg" />
@@ -51,7 +56,7 @@ export function NewsCard({ item, width, companyColor, onPress }: NewsCardProps) 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     height: NEWS_CARD_HEIGHT,
     borderRadius: radius.xl,
@@ -106,4 +111,4 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: 2,
   },
-});
+}));

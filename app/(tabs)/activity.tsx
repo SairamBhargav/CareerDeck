@@ -1,37 +1,68 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CompanyListRow } from '@/components/activity/CompanyListRow';
 import { EmptyState } from '@/components/common/EmptyState';
+import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { StatRow, type Stat } from '@/components/home/StatRow';
-import { colors, fontSize, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { makeStyles } from '@/context/ThemeContext';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
+import type { Job } from '@/types';
+
+type Filter = 'following' | 'saved' | 'liked';
 
 /**
- * Following / Applied / Queued live here rather than on Home, since they're a record of
- * what the user has done rather than something to discover. Likes, saves, and application
- * status get their own dedicated views in a later milestone.
+ * Following / Saved / Liked as real, filterable lists — the record of what the user has
+ * actually done, rather than a stat that just admits nothing's built yet. Applied has no
+ * per-job list behind it (only a running count on the user), so it stays a plain figure.
  */
 export default function ActivityScreen() {
-  const { user, companies, followedCompanyIds, savedJobIds } = useCareerDeck();
-  const [showFollowingList, setShowFollowingList] = useState(false);
+  const router = useRouter();
+  const styles = useStyles();
+  const { companies, jobs, followedCompanyIds, savedJobIds, likedJobIds, user, toggleFollow, toggleSave } =
+    useCareerDeck();
+  const [filter, setFilter] = useState<Filter>('following');
   const tabBarHeight = useTabBarHeight();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
-  const followedCompanies = companies.filter((company) => followedCompanyIds.includes(company.id));
+  const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
+
+  const followedCompanies = useMemo(
+    () => companies.filter((company) => followedCompanyIds.includes(company.id)),
+    [companies, followedCompanyIds],
+  );
+  const savedJobs = useMemo(() => jobs.filter((job) => job.isSaved), [jobs]);
+  const likedJobs = useMemo(() => jobs.filter((job) => job.isLiked), [jobs]);
 
   const stats: Stat[] = [
     {
       label: 'Following',
       value: followedCompanyIds.length,
-      onPress: () => setShowFollowingList((current) => !current),
+      active: filter === 'following',
+      onPress: () => setFilter('following'),
     },
     { label: 'Applied', value: user.appliedCount },
-    { label: 'Queued', value: savedJobIds.length },
+    {
+      label: 'Saved',
+      value: savedJobIds.length,
+      active: filter === 'saved',
+      onPress: () => setFilter('saved'),
+    },
+    {
+      label: 'Liked',
+      value: likedJobIds.length,
+      active: filter === 'liked',
+      onPress: () => setFilter('liked'),
+    },
   ];
+
+  const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -46,40 +77,80 @@ export default function ActivityScreen() {
 
         <StatRow stats={stats} />
 
-        {showFollowingList ? (
-          <View style={styles.followingListCard}>
-            {followedCompanies.length > 0 ? (
+        <View style={styles.list}>
+          {filter === 'following' ? (
+            followedCompanies.length > 0 ? (
               followedCompanies.map((company) => (
-                <Text key={company.id} style={styles.followingCompany}>
-                  • {company.name}
-                </Text>
+                <CompanyListRow
+                  key={company.id}
+                  company={company}
+                  onToggleFollow={() => toggleFollow(company.id)}
+                />
               ))
             ) : (
-              <Text style={styles.emptyState}>You’re not following any companies yet.</Text>
-            )}
-          </View>
-        ) : null}
+              <EmptyState
+                icon="business-outline"
+                title="Not following anyone yet"
+                message="Follow companies on Home and they'll show up here."
+              />
+            )
+          ) : null}
 
-        <View style={styles.body}>
-          <EmptyState
-            icon="notifications-outline"
-            title="More coming soon"
-            message="Saved jobs, likes, and application status will get their own view here."
-          />
+          {filter === 'saved' ? (
+            savedJobs.length > 0 ? (
+              savedJobs.map((job) => (
+                <JobFeedCard
+                  key={job.id}
+                  job={job}
+                  logoColor={companyById.get(job.companyId)?.logoColor}
+                  logoUrl={companyById.get(job.companyId)?.logo}
+                  onPress={() => handlePressJob(job)}
+                  onToggleSave={() => toggleSave(job.id)}
+                />
+              ))
+            ) : (
+              <EmptyState
+                icon="bookmark-outline"
+                title="No saved jobs yet"
+                message="Save a posting from Home or Reels to keep it here."
+              />
+            )
+          ) : null}
+
+          {filter === 'liked' ? (
+            likedJobs.length > 0 ? (
+              likedJobs.map((job) => (
+                <JobFeedCard
+                  key={job.id}
+                  job={job}
+                  logoColor={companyById.get(job.companyId)?.logoColor}
+                  logoUrl={companyById.get(job.companyId)?.logo}
+                  onPress={() => handlePressJob(job)}
+                  onToggleSave={() => toggleSave(job.id)}
+                />
+              ))
+            ) : (
+              <EmptyState
+                icon="heart-outline"
+                title="No liked jobs yet"
+                message="Double-tap or like a reel in Reels to keep it here."
+              />
+            )
+          ) : null}
         </View>
       </Animated.ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
   content: {
     paddingHorizontal: screenPadding,
-    gap: spacing.md,
+    gap: spacing.lg,
   },
   heading: {
     fontSize: fontSize.heading,
@@ -88,25 +159,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     paddingTop: spacing.sm,
   },
-  followingListCard: {
-    backgroundColor: colors.backgroundMuted,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: 4,
+  list: {
+    gap: spacing.md,
   },
-  followingCompany: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  emptyState: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  body: {
-    paddingTop: spacing.xl,
-  },
-});
+}));

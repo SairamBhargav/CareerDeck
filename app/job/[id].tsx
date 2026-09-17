@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -8,11 +8,13 @@ import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { SkillChip } from '@/components/common/SkillChip';
 import { ApplicationModal } from '@/components/jobs/ApplicationModal';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
-import { colors, fontSize, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { makeStyles } from '@/context/ThemeContext';
 import { useJobById } from '@/hooks/useJobFeeds';
 
 export default function JobDetailScreen() {
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { companies, defaultResume, toggleSave, toggleLike } = useCareerDeck();
   const job = useJobById(id);
@@ -91,7 +93,7 @@ export default function JobDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -153,4 +155,4 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.xxl,
   },
-});
+}));

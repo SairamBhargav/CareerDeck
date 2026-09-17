@@ -1,16 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useNewsById } from '@/hooks/useNewsFeed';
 import { formatPostedAt } from '@/utils/format';
 
 export default function NewsDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { companies, isFollowing, toggleFollow } = useCareerDeck();
   const news = useNewsById(id);
@@ -68,7 +71,7 @@ export default function NewsDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -126,4 +129,4 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: spacing.xl,
   },
-});
+}));

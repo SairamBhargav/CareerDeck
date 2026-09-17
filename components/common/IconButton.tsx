@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import { Pressable, type ViewStyle } from 'react-native';
 
-import { colors, minTapTarget, radius } from '@/constants/theme';
+import { minTapTarget, radius } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface IconButtonProps {
   name: React.ComponentProps<typeof Ionicons>['name'];
@@ -9,6 +10,7 @@ interface IconButtonProps {
   /** Required: icon-only controls have no visible text to announce. */
   accessibilityLabel: string;
   size?: number;
+  /** Defaults to the theme's primary text colour. */
   color?: string;
   /** Renders a subtle circular background, used on the app shell screens. */
   surface?: boolean;
@@ -20,10 +22,13 @@ export function IconButton({
   onPress,
   accessibilityLabel,
   size = 20,
-  color = colors.text,
+  color,
   surface = false,
   style,
 }: IconButtonProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       onPress={onPress}
@@ -36,12 +41,12 @@ export function IconButton({
         pressed ? styles.pressed : null,
         style,
       ]}>
-      <Ionicons name={name} size={size} color={color} />
+      <Ionicons name={name} size={size} color={color ?? colors.text} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   base: {
     minWidth: minTapTarget,
     minHeight: minTapTarget,
@@ -55,4 +60,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
-});
+}));

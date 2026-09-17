@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontSize, minTapTarget, radius, shadow, spacing } from '@/constants/theme';
+import { fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface ReelActionRailProps {
   isLiked: boolean;
@@ -13,6 +14,9 @@ interface ReelActionRailProps {
 
 /** Vertical social-style rail on the right edge of a reel. */
 export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle }: ReelActionRailProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.rail}>
       <RailAction
@@ -52,7 +56,10 @@ interface RailActionProps {
   activeColor?: string;
 }
 
-function RailAction({ icon, label, onPress, accessibilityLabel, active = false, activeColor = colors.text }: RailActionProps) {
+function RailAction({ icon, label, onPress, accessibilityLabel, active = false, activeColor }: RailActionProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       onPress={onPress}
@@ -62,14 +69,14 @@ function RailAction({ icon, label, onPress, accessibilityLabel, active = false, 
       hitSlop={6}
       style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
       <View style={[styles.actionCircle, active ? styles.actionCircleActive : null]}>
-        <Ionicons name={icon} size={22} color={active ? activeColor : colors.text} />
+        <Ionicons name={icon} size={22} color={active ? activeColor ?? colors.text : colors.text} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   rail: {
     alignItems: 'center',
     gap: spacing.lg,
@@ -85,14 +92,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+    // Floats on top of the company-tinted reel, so it needs the lifted control surface
+    // rather than a flat page surface.
+    backgroundColor: colors.controlSurface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    ...shadow.soft,
+    ...colors.shadowSoft,
   },
   actionCircleActive: {
-    backgroundColor: '#FFECEF',
-    borderColor: '#FFD3DA',
+    backgroundColor: colors.likeSurface,
+    borderColor: colors.likeBorder,
   },
   actionLabel: {
     fontSize: fontSize.caption,
@@ -106,9 +115,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    // Black circle, violet icon, violet glow — the glow is what makes this button read
-    // as the app's one "AI-assisted" action rather than just another neutral control.
+    // Deliberately its own fill rather than `accent` — inverting to white in dark would
+    // cost this the "one AI-assisted action" identity the violet glow gives it.
+    backgroundColor: colors.autoApplySurface,
     shadowColor: colors.autoApplyGlow,
     shadowOpacity: 0.9,
     shadowRadius: 16,
@@ -118,10 +127,10 @@ const styles = StyleSheet.create({
   applyLabel: {
     fontSize: 9,
     fontWeight: '700',
-    color: colors.accentText,
+    color: colors.autoApplyLabel,
     textAlign: 'center',
   },
   pressed: {
     opacity: 0.7,
   },
-});
+}));

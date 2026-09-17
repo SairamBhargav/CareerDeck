@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
-import { colors, fontSize, radius, shadow, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Resume } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
@@ -21,6 +22,9 @@ interface ResumeBubbleProps {
  * you tap here to change.
  */
 export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       onPress={onPress}
@@ -51,7 +55,7 @@ export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     width: RESUME_BUBBLE_WIDTH,
     borderRadius: radius.xl,
@@ -59,7 +63,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     overflow: 'hidden',
-    ...shadow.soft,
+    ...colors.shadowSoft,
   },
   cardSelected: {
     borderColor: colors.text,
@@ -102,4 +106,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: colors.textTertiary,
   },
-});
+}));

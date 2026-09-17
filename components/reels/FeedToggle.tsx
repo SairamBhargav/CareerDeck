@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { colors, fontSize, radius, shadow, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
+import { makeStyles } from '@/context/ThemeContext';
 import type { ReelFeed } from '@/hooks/useJobFeeds';
 
 const TAB_WIDTH = 100;
@@ -21,6 +22,7 @@ interface FeedToggleProps {
 
 /** Following / For You switch: a segmented-control pill that springs to whichever is selected. */
 export function FeedToggle({ value, onChange }: FeedToggleProps) {
+  const styles = useStyles();
   const activeIndex = TABS.findIndex((tab) => tab.key === value);
   const pillX = useSharedValue(activeIndex * TAB_WIDTH);
 
@@ -56,7 +58,7 @@ export function FeedToggle({ value, onChange }: FeedToggleProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   track: {
     flexDirection: 'row',
     backgroundColor: colors.backgroundMuted,
@@ -69,8 +71,9 @@ const styles = StyleSheet.create({
     left: TRACK_PADDING,
     bottom: TRACK_PADDING,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    ...shadow.soft,
+    // Not `surface`: in dark that matches the track exactly and the selection vanishes.
+    backgroundColor: colors.controlSurface,
+    ...colors.shadowSoft,
   },
   tab: {
     width: TAB_WIDTH,
@@ -83,4 +86,4 @@ const styles = StyleSheet.create({
   },
   labelActive: { color: colors.text, fontWeight: '700' },
   labelInactive: { color: colors.textTertiary },
-});
+}));

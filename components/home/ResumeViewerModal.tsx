@@ -6,7 +6,8 @@ import { WebView } from 'react-native-webview';
 
 import { IconButton } from '@/components/common/IconButton';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
-import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Resume } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
@@ -25,6 +26,8 @@ interface ResumeViewerModalProps {
  */
 export function ResumeViewerModal({ resume, isDefault, visible, onClose, onSetDefault }: ResumeViewerModalProps) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useStyles();
 
   // Local bundled assets resolve their .uri synchronously — no download step needed,
   // unlike a remote asset fetched over the network.
@@ -67,7 +70,14 @@ export function ResumeViewerModal({ resume, isDefault, visible, onClose, onSetDe
 
         <View style={[styles.pdfWrap, { paddingBottom: insets.bottom }]}>
           {pdfUri ? (
-            <WebView source={{ uri: pdfUri }} style={styles.pdf} originWhitelist={['*']} />
+            <WebView
+              source={{ uri: pdfUri }}
+              style={styles.pdf}
+              originWhitelist={['*']}
+              // The document itself is a white page in both schemes; this only stops a
+              // white flash against a dark sheet while it loads.
+              backgroundColor={colors.backgroundMuted}
+            />
           ) : null}
         </View>
       </View>
@@ -75,7 +85,7 @@ export function ResumeViewerModal({ resume, isDefault, visible, onClose, onSetDe
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -142,4 +152,4 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.backgroundMuted,
   },
-});
+}));
