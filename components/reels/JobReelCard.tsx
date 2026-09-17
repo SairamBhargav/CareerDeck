@@ -26,6 +26,8 @@ const MAX_SKILL_CHIPS = 6;
 const RAIL_RESERVED_WIDTH = 92;
 /** Lifts the action rail (and Read more, which stays level with it) off the very bottom edge. */
 const RAIL_LIFT = spacing.sm;
+/** Extra breathing room between the end of the caption and the rail line, on top of RAIL_LIFT. */
+const CONTENT_BOTTOM_GAP = spacing.xl;
 
 interface JobReelCardProps {
   job: Job;
@@ -54,9 +56,9 @@ export function JobReelCard({
   onAutoApply,
 }: JobReelCardProps) {
   const skills = job.skills.slice(0, MAX_SKILL_CHIPS);
-  // How tall the caption's box actually is, matching contentBox's flex:1 sizing exactly,
-  // minus the same lift given to the rail so the two stay in sync.
-  const availableContentHeight = height - paddingTop - paddingBottom - RAIL_LIFT;
+  // How tall the caption's box actually is: the rail's own lift, plus extra room so the
+  // text visibly stops short of the rail line instead of running right up to it.
+  const availableContentHeight = height - paddingTop - paddingBottom - RAIL_LIFT - CONTENT_BOTTOM_GAP;
 
   // The un-clipped content's own natural height, measured via onLayout on the inner
   // wrapper below. Compared against the available (clipped) box to decide whether this
@@ -115,7 +117,11 @@ export function JobReelCard({
 
       <GestureDetector gesture={doubleTap}>
         <View style={styles.tapZone}>
-          <View style={[styles.contentBox, { paddingRight: RAIL_RESERVED_WIDTH, paddingBottom: RAIL_LIFT }]}>
+          <View
+            style={[
+              styles.contentBox,
+              { paddingRight: RAIL_RESERVED_WIDTH, paddingBottom: RAIL_LIFT + CONTENT_BOTTOM_GAP },
+            ]}>
             {/* Unconstrained on purpose: contentBox's fixed height + overflow:hidden is
                 what visually clips this, but leaving this view free to size to its natural
                 content means onLayout reports the true, un-clipped height. */}
@@ -149,9 +155,13 @@ export function JobReelCard({
               onPress={onMore}
               accessibilityRole="button"
               accessibilityLabel="Read the full job description"
-              style={({ pressed }) => [styles.readMore, { bottom: RAIL_LIFT }, pressed ? styles.readMorePressed : null]}>
+              style={({ pressed }) => [
+                styles.readMore,
+                { bottom: RAIL_LIFT + CONTENT_BOTTOM_GAP },
+                pressed ? styles.readMorePressed : null,
+              ]}>
               <Text style={styles.readMoreLabel}>Read more</Text>
-              <Ionicons name="chevron-down" size={14} color={colors.text} />
+              <Ionicons name="chevron-down" size={11} color={colors.text} />
             </Pressable>
           ) : null}
 
@@ -255,12 +265,12 @@ const styles = StyleSheet.create({
   // bottom of the Auto Apply button without any extra math.
   readMore: {
     position: 'absolute',
-    left: 0,
+    left: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
@@ -271,7 +281,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   readMoreLabel: {
-    fontSize: fontSize.small,
+    fontSize: fontSize.caption,
     fontWeight: '700',
     color: colors.text,
   },

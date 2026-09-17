@@ -65,17 +65,14 @@ function iconsForRoute(routeName: string): { active: IconName; inactive: IconNam
  * above the bottom edge instead of sitting flush against it. It hides on scroll-down
  * and reappears on scroll-up or near the top (driven by the shared `hiddenOffset` value
  * that scrolling screens set via useHideTabBarOnScroll), and a bubble highlight slides
- * beneath the active tab whenever the user switches tabs. Reels renders on a dark
- * immersive background, so the pill switches to a dark blur + light icon treatment while
- * that tab is active.
+ * beneath the active tab whenever the user switches tabs. Always uses the darker blur
+ * treatment (originally built for Reels' now-retired dark background) since that's the
+ * look the app settled on for every tab, not just Reels.
  */
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
   const { hiddenOffset } = useTabBarVisibility();
   const hideDistance = useTabBarHeight();
-
-  const activeRouteName = state.routes[state.index]?.name;
-  const isDarkContext = activeRouteName === 'reels';
 
   const [rowWidth, setRowWidth] = useState(0);
   const tabWidth = rowWidth / state.routes.length;
@@ -130,7 +127,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
       <View style={[styles.shadowWrap, { marginBottom: insets.bottom + tabBarFloatGap }]}>
         <BlurView
           intensity={78}
-          tint={isDarkContext ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
+          tint="systemChromeMaterialDark"
           blurMethod="dimezisBlurViewSdk31Plus"
           style={styles.pill}>
           <View style={styles.row} onLayout={handleRowLayout}>
@@ -139,10 +136,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
                 pointerEvents="none"
                 style={[
                   styles.indicator,
-                  {
-                    width: tabWidth - INDICATOR_INSET * 2,
-                    backgroundColor: isDarkContext ? colors.reelSurface : colors.backgroundMuted,
-                  },
+                  { width: tabWidth - INDICATOR_INSET * 2, backgroundColor: colors.reelSurface },
                   indicatorAnimatedStyle,
                 ]}
               />
@@ -161,13 +155,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
                 }
               };
 
-              const iconColor = focused
-                ? isDarkContext
-                  ? colors.reelText
-                  : colors.text
-                : isDarkContext
-                  ? colors.reelTextTertiary
-                  : colors.textTertiary;
+              const iconColor = focused ? colors.reelText : colors.reelTextTertiary;
 
               return (
                 <TabBarButton
