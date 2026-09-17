@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -80,10 +81,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
   const tabWidth = rowWidth / state.routes.length;
   const indicatorX = useSharedValue(0);
   const hasMeasuredIndicator = useRef(false);
+  const isFirstActiveTab = useRef(true);
 
-  // Switching tabs always brings the bar back, matching the reference app's behavior.
+  // Switching tabs always brings the bar back, matching the reference app's behavior,
+  // and gives a light selection tick — this fires for a swipe between Home/Reels/Activity
+  // just as much as a tap, since both land here as a state.index change. Skip the tick on
+  // mount, since that's not a switch the user actually made.
   useEffect(() => {
     hiddenOffset.value = withTiming(0, { duration: 200 });
+    if (isFirstActiveTab.current) {
+      isFirstActiveTab.current = false;
+    } else {
+      Haptics.selectionAsync();
+    }
   }, [state.index, hiddenOffset]);
 
   // Slides the highlight bubble to the newly active tab. Jumps (no spring) the first time
