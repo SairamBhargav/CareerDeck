@@ -16,15 +16,16 @@ interface ResumeBubbleProps {
 
 /**
  * A resume rendered as a small "peek into the page" card — a Google Docs–style thumbnail
- * with a mock header bar and paragraph lines standing in for real content, since resume
- * upload/parsing doesn't exist yet. Tapping sets it as the default used on the apply sheet.
+ * with a mock header bar and paragraph lines hinting at the real content underneath.
+ * Tapping opens the full document in ResumeViewerModal; the checkmark badge is a pure
+ * status indicator for "this is the default," not something you tap here to change.
  */
 export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${resume.name}, ${isDefault ? 'default resume' : 'tap to set as default'}`}
+      accessibilityLabel={`Open ${resume.name}${isDefault ? ', default resume' : ''}`}
       style={({ pressed }) => [
         styles.card,
         isDefault ? styles.cardSelected : null,

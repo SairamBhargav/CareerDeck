@@ -8,11 +8,11 @@ import type { Resume } from '@/types';
 interface ResumeCarouselProps {
   resumes: Resume[];
   defaultResumeId: string;
-  onSelect: (resumeId: string) => void;
+  onView: (resumeId: string) => void;
   onSeeAll: () => void;
 }
 
-export function ResumeCarousel({ resumes, defaultResumeId, onSelect, onSeeAll }: ResumeCarouselProps) {
+export function ResumeCarousel({ resumes, defaultResumeId, onView, onSeeAll }: ResumeCarouselProps) {
   return (
     <View>
       <View style={styles.header}>
@@ -29,7 +29,7 @@ export function ResumeCarousel({ resumes, defaultResumeId, onSelect, onSeeAll }:
           <ResumeBubble
             resume={item}
             isDefault={item.id === defaultResumeId}
-            onPress={() => onSelect(item.id)}
+            onPress={() => onView(item.id)}
           />
         )}
       />

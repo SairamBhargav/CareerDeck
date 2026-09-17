@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/common/SectionHeader';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { NewsCarousel } from '@/components/home/NewsCarousel';
 import { ResumeCarousel } from '@/components/home/ResumeCarousel';
+import { ResumeViewerModal } from '@/components/home/ResumeViewerModal';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
 import { colors, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
@@ -24,6 +25,9 @@ export default function HomeScreen() {
   const newsFeed = useNewsFeed();
   const tabBarHeight = useTabBarHeight();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
+
+  const [viewingResumeId, setViewingResumeId] = useState<string | null>(null);
+  const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
 
   const logoColorByCompany = useMemo(
     () => new Map(companies.map((company) => [company.id, company.logoColor])),
@@ -51,7 +55,7 @@ export default function HomeScreen() {
         <ResumeCarousel
           resumes={resumes}
           defaultResumeId={defaultResumeId}
-          onSelect={setDefaultResume}
+          onView={setViewingResumeId}
           onSeeAll={() => router.push('/profile')}
         />
 
@@ -72,6 +76,17 @@ export default function HomeScreen() {
           />
         </View>
       </Animated.ScrollView>
+
+      <ResumeViewerModal
+        resume={viewingResume}
+        userName={user.displayName}
+        isDefault={viewingResume?.id === defaultResumeId}
+        visible={viewingResume !== null}
+        onClose={() => setViewingResumeId(null)}
+        onSetDefault={() => {
+          if (viewingResume) setDefaultResume(viewingResume.id);
+        }}
+      />
     </SafeAreaView>
   );
 }
