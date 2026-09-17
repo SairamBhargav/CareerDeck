@@ -31,10 +31,7 @@ export default function ReelsScreen() {
 
   const jobs = feed === 'forYou' ? forYouJobs : followingJobs;
 
-  const logoColorByCompany = useMemo(
-    () => new Map(companies.map((company) => [company.id, company.logoColor])),
-    [companies],
-  );
+  const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setPageHeight(event.nativeEvent.layout.height);
@@ -56,7 +53,7 @@ export default function ReelsScreen() {
 
   // Each reel fills the tab content area; the toggle floats above it and the floating
   // tab bar floats below it, so both ends reserve space for their overlay.
-  const cardPaddingTop = insets.top + TOGGLE_HEIGHT + spacing.md;
+  const cardPaddingTop = insets.top + TOGGLE_HEIGHT + spacing.xs;
   const cardPaddingBottom = tabBarHeight + spacing.lg;
 
   return (
@@ -89,7 +86,8 @@ export default function ReelsScreen() {
                 height={pageHeight}
                 paddingTop={cardPaddingTop}
                 paddingBottom={cardPaddingBottom}
-                logoColor={logoColorByCompany.get(item.companyId)}
+                logoColor={companyById.get(item.companyId)?.logoColor}
+                logoUrl={companyById.get(item.companyId)?.logo}
                 onLike={() => toggleLike(item.id)}
                 onMore={() => setDetailsJob(item)}
                 onAutoApply={() => handleAutoApply(item)}
@@ -113,7 +111,8 @@ export default function ReelsScreen() {
 
       <JobDetailsModal
         job={detailsJob}
-        logoColor={detailsJob ? logoColorByCompany.get(detailsJob.companyId) : undefined}
+        logoColor={detailsJob ? companyById.get(detailsJob.companyId)?.logoColor : undefined}
+        logoUrl={detailsJob ? companyById.get(detailsJob.companyId)?.logo : undefined}
         visible={detailsJob !== null}
         onClose={() => setDetailsJob(null)}
         onApply={() => {

@@ -30,13 +30,18 @@ export default function JobDetailScreen() {
     );
   }
 
-  const logoColor = companies.find((company) => company.id === job.companyId)?.logoColor;
+  const company = companies.find((c) => c.id === job.companyId);
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.companyRow}>
-          <CompanyLogo logo={job.companyLogo} name={job.companyName} color={logoColor} size="lg" />
+          <CompanyLogo
+            logo={company?.logo ?? job.companyLogo}
+            name={job.companyName}
+            color={company?.logoColor}
+            size="lg"
+          />
           <Text style={styles.company}>{job.companyName}</Text>
         </View>
 

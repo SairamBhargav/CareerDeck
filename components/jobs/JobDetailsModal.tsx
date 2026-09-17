@@ -13,6 +13,8 @@ import { formatPostedAt } from '@/utils/format';
 interface JobDetailsModalProps {
   job: Job | null;
   logoColor?: string;
+  /** Company's real logo image, when available — falls back to job.companyLogo's monogram. */
+  logoUrl?: string;
   visible: boolean;
   onClose: () => void;
   onApply: () => void;
@@ -23,7 +25,7 @@ interface JobDetailsModalProps {
  * truncates or omits (full description, every requirement, every skill), plus a way to
  * jump straight into applying without going back to the reel first.
  */
-export function JobDetailsModal({ job, logoColor, visible, onClose, onApply }: JobDetailsModalProps) {
+export function JobDetailsModal({ job, logoColor, logoUrl, visible, onClose, onApply }: JobDetailsModalProps) {
   const insets = useSafeAreaInsets();
 
   if (!job) return null;
@@ -48,7 +50,7 @@ export function JobDetailsModal({ job, logoColor, visible, onClose, onApply }: J
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.companyRow}>
-            <CompanyLogo logo={job.companyLogo} name={job.companyName} color={logoColor} size="lg" />
+            <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="lg" />
             <View style={styles.companyText}>
               <Text style={styles.company} numberOfLines={1}>
                 {job.companyName}

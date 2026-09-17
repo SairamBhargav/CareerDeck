@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -18,11 +18,14 @@ import { JobMetadata } from '@/components/jobs/JobMetadata';
 import { ReelActionRail } from '@/components/reels/ReelActionRail';
 import { colors, fontSize, radius, screenPadding, shadow, spacing } from '@/constants/theme';
 import type { Job } from '@/types';
+import { hexToRgba } from '@/utils/color';
 import { formatPostedAt } from '@/utils/format';
 
 const MAX_SKILL_CHIPS = 6;
 /** Width reserved on the right so caption text never runs under the action rail. */
 const RAIL_RESERVED_WIDTH = 92;
+/** Lifts the action rail (and Read more, which stays level with it) off the very bottom edge. */
+const RAIL_LIFT = spacing.sm;
 
 interface JobReelCardProps {
   job: Job;
@@ -32,6 +35,8 @@ interface JobReelCardProps {
   paddingTop: number;
   paddingBottom: number;
   logoColor?: string;
+  /** Company's real logo image, when available — falls back to job.companyLogo's monogram. */
+  logoUrl?: string;
   onLike: () => void;
   onMore: () => void;
   onAutoApply: () => void;
@@ -43,20 +48,21 @@ export function JobReelCard({
   paddingTop,
   paddingBottom,
   logoColor,
+  logoUrl,
   onLike,
   onMore,
   onAutoApply,
 }: JobReelCardProps) {
   const skills = job.skills.slice(0, MAX_SKILL_CHIPS);
-  // How tall the caption's box actually is, matching contentBox's flex:1 sizing exactly.
-  const availableContentHeight = height - paddingTop - paddingBottom;
+  // How tall the caption's box actually is, matching contentBox's flex:1 sizing exactly,
+  // minus the same lift given to the rail so the two stay in sync.
+  const availableContentHeight = height - paddingTop - paddingBottom - RAIL_LIFT;
 
   // The un-clipped content's own natural height, measured via onLayout on the inner
   // wrapper below. Compared against the available (clipped) box to decide whether this
   // job's copy actually needs "Read more" or comfortably fits on its own.
   const [naturalHeight, setNaturalHeight] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const needsReadMore = !expanded && naturalHeight !== null && naturalHeight > availableContentHeight;
+  const needsReadMore = naturalHeight !== null && naturalHeight > availableContentHeight;
 
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
@@ -94,67 +100,56 @@ export function JobReelCard({
     setNaturalHeight(event.nativeEvent.layout.height);
   };
 
-  const captionBody = (
-    <>
-      <View style={styles.companyRow}>
-        <CompanyLogo logo={job.companyLogo} name={job.companyName} color={logoColor} size="md" />
-        <View style={styles.companyText}>
-          <Text style={styles.companyName} numberOfLines={1}>
-            {job.companyName}
-          </Text>
-          <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.title}>{job.title}</Text>
-
-      <JobMetadata job={job} emphasizeSalary />
-
-      <Text style={styles.description}>{job.description}</Text>
-
-      <View style={styles.skills}>
-        {skills.map((skill) => (
-          <SkillChip key={skill} label={skill} />
-        ))}
-      </View>
-    </>
-  );
-
   return (
     <View style={[styles.page, { height, paddingTop, paddingBottom }]}>
+      {/* A soft full-bleed wash of the company's brand color, plus a stronger accent
+          glow behind the logo — gives each reel its own identity without a loud gradient. */}
+      <View
+        pointerEvents="none"
+        style={[styles.wash, logoColor ? { backgroundColor: hexToRgba(logoColor, 0.07) } : null]}
+      />
+      <View
+        pointerEvents="none"
+        style={[styles.glow, logoColor ? { backgroundColor: hexToRgba(logoColor, 0.22) } : null]}
+      />
+
       <GestureDetector gesture={doubleTap}>
         <View style={styles.tapZone}>
-          {/* Soft brand-tinted glow keeps each job distinct without a loud gradient. */}
-          <View
-            pointerEvents="none"
-            style={[styles.glow, logoColor ? { backgroundColor: logoColor } : null]}
-          />
-
-          <View style={[styles.contentBox, { paddingRight: RAIL_RESERVED_WIDTH }]}>
-            {expanded ? (
-              <ScrollView
-                style={styles.contentScroll}
-                contentContainerStyle={styles.contentInner}
-                showsVerticalScrollIndicator
-                accessibilityLabel="Full job description">
-                {captionBody}
-              </ScrollView>
-            ) : (
-              // Unconstrained on purpose: contentBox's fixed height + overflow:hidden is
-              // what visually clips this, but leaving this inner view free to size to its
-              // natural content means onLayout reports the true, un-clipped height.
-              <View style={styles.contentInner} onLayout={handleContentLayout}>
-                {captionBody}
+          <View style={[styles.contentBox, { paddingRight: RAIL_RESERVED_WIDTH, paddingBottom: RAIL_LIFT }]}>
+            {/* Unconstrained on purpose: contentBox's fixed height + overflow:hidden is
+                what visually clips this, but leaving this view free to size to its natural
+                content means onLayout reports the true, un-clipped height. */}
+            <View style={styles.contentInner} onLayout={handleContentLayout}>
+              <View style={styles.companyRow}>
+                <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
+                <View style={styles.companyText}>
+                  <Text style={styles.companyName} numberOfLines={1}>
+                    {job.companyName}
+                  </Text>
+                  <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
+                </View>
               </View>
-            )}
+
+              <Text style={styles.title}>{job.title}</Text>
+
+              <JobMetadata job={job} emphasizeSalary />
+
+              <Text style={styles.description}>{job.description}</Text>
+
+              <View style={styles.skills}>
+                {skills.map((skill) => (
+                  <SkillChip key={skill} label={skill} />
+                ))}
+              </View>
+            </View>
           </View>
 
           {needsReadMore ? (
             <Pressable
-              onPress={() => setExpanded(true)}
+              onPress={onMore}
               accessibilityRole="button"
               accessibilityLabel="Read the full job description"
-              style={({ pressed }) => [styles.readMore, pressed ? styles.readMorePressed : null]}>
+              style={({ pressed }) => [styles.readMore, { bottom: RAIL_LIFT }, pressed ? styles.readMorePressed : null]}>
               <Text style={styles.readMoreLabel}>Read more</Text>
               <Ionicons name="chevron-down" size={14} color={colors.text} />
             </Pressable>
@@ -166,7 +161,7 @@ export function JobReelCard({
         </View>
       </GestureDetector>
 
-      <View style={[styles.rail, { bottom: paddingBottom }]}>
+      <View style={[styles.rail, { bottom: paddingBottom + RAIL_LIFT }]}>
         <ReelActionRail
           isLiked={job.isLiked}
           onLike={handleLike}
@@ -189,6 +184,14 @@ const styles = StyleSheet.create({
   tapZone: {
     flex: 1,
   },
+  wash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.backgroundMuted,
+  },
   glow: {
     position: 'absolute',
     top: -160,
@@ -196,8 +199,9 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: radius.pill,
-    opacity: 0.14,
-    backgroundColor: colors.text,
+    // Pre-blended fallback (colors.text at 14% alpha) for the rare case a job's company
+    // has no brand color; the inline style above overrides this with the real tint.
+    backgroundColor: 'rgba(17, 17, 20, 0.14)',
   },
   // Top-anchored (never centered) so every reel's caption starts at the same spot
   // regardless of description length, and hard-clipped at the bottom so it can grow to
@@ -205,9 +209,6 @@ const styles = StyleSheet.create({
   contentBox: {
     flex: 1,
     overflow: 'hidden',
-  },
-  contentScroll: {
-    flex: 1,
   },
   contentInner: {
     gap: spacing.md,
@@ -249,13 +250,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.xs,
   },
-  // Pinned to the bottom of the tapZone, which already sits at the same Y as the action
-  // rail's bottom (both are measured from the same paddingBottom) — so this lines up
-  // with the bottom of the Auto Apply button without any extra math.
+  // Pinned to the bottom of the tapZone (lifted the same amount as the rail), which
+  // already sits at the same Y as the action rail's bottom — so this lines up with the
+  // bottom of the Auto Apply button without any extra math.
   readMore: {
     position: 'absolute',
     left: 0,
-    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
