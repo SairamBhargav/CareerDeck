@@ -3,6 +3,8 @@ import type { Job } from '@/types';
 /**
  * Fictional but realistic postings used everywhere in the app.
  * `isSaved` / `isLiked` here are only seed values - live state lives in CareerDeckContext.
+ * Descriptions run long on purpose: the Reels card lets a description grow to fill all
+ * the way down to the action rail, so short copy leaves a noticeable gap under it.
  */
 export const mockJobs: Job[] = [
   {
@@ -18,13 +20,13 @@ export const mockJobs: Job[] = [
     salaryMax: 60,
     salaryPeriod: 'hour',
     description:
-      'Join the deep learning infrastructure team building the training stack behind our largest GPU clusters. You will write Python and C++ tooling that schedules distributed jobs across thousands of accelerators, and profile kernels to find real throughput wins. Interns own a scoped project end to end and present results to the org at the end of the summer.',
+      'Join the deep learning infrastructure team building the training stack behind our largest GPU clusters. You will write Python and C++ tooling that schedules distributed jobs across thousands of accelerators, and profile kernels to find real throughput wins. Interns own a scoped project end to end and present results to the org at the end of the summer. Past interns have shipped scheduler optimizations that shaved hours off multi-day training runs, and several of those changes are still running in production today. You will pair closely with a senior engineer for your first two weeks, then work mostly independently with weekly design reviews. Expect to read a lot of unfamiliar C++ before you write much of your own, and to get comfortable profiling code you did not author.',
     requirements: [
       'Currently pursuing a BS or MS in Computer Science or a related field',
       'Comfortable writing Python and at least one systems language',
       'Exposure to parallel or distributed computing coursework',
     ],
-    skills: ['Python', 'C++', 'CUDA', 'Distributed Systems', 'Machine Learning'],
+    skills: ['Python', 'C++', 'CUDA', 'Distributed Systems', 'Machine Learning', 'Linux'],
     postedAt: '2026-09-11',
     applicationUrl: 'https://careers.example.com/nvidia/swe-intern',
     isSaved: false,
@@ -43,13 +45,13 @@ export const mockJobs: Job[] = [
     salaryMax: 186000,
     salaryPeriod: 'year',
     description:
-      'New graduate engineers join a product area after a short matching process and ship user-facing code within their first quarter. Expect a large shared codebase with heavy code review, design docs, and experiment-driven launches. Mentorship is structured: every new grad gets a dedicated onboarding buddy plus a tech lead.',
+      'New graduate engineers join a product area after a short matching process and ship user-facing code within their first quarter. Expect a large shared codebase with heavy code review, design docs, and experiment-driven launches. Mentorship is structured: every new grad gets a dedicated onboarding buddy plus a tech lead, and a formal six-month check-in with clear expectations at each milestone. Most new grads rotate through on-call as a shadow before taking primary rotations themselves. The matching process happens during your first two weeks on campus, where you meet with five or six teams before ranking your preferences, so the specific product area you land on genuinely depends on what excites you most.',
     requirements: [
       'BS or MS in Computer Science, graduating within the last 12 months',
       'Strong data structures and algorithms fundamentals',
       'Experience with one of Java, C++, Go, or Python',
     ],
-    skills: ['Java', 'Go', 'Distributed Systems', 'Data Structures'],
+    skills: ['Java', 'Go', 'Distributed Systems', 'Data Structures', 'Code Review', 'Testing'],
     postedAt: '2026-09-09',
     applicationUrl: 'https://careers.example.com/google/swe-newgrad',
     isSaved: false,
@@ -68,13 +70,13 @@ export const mockJobs: Job[] = [
     salaryMax: 145,
     salaryPeriod: 'hour',
     description:
-      'Work alongside quantitative researchers to test alpha signals across equities and futures. You will clean large market datasets, build statistical models in Python, and defend your assumptions in weekly research reviews. The internship is fast and feedback-heavy, and strong performers receive return offers.',
+      'Work alongside quantitative researchers to test alpha signals across equities and futures. You will clean large market datasets, build statistical models in Python, and defend your assumptions in weekly research reviews. The internship is fast and feedback-heavy, and strong performers receive return offers. Every intern is assigned a specific research question in week one and owns it through to a final presentation in front of the desk. Expect your assumptions to be challenged hard and often; the culture rewards people who can defend their reasoning with data rather than intuition. Prior interns describe the pace as closer to a sprint than a semester-long project, with meaningful checkpoints roughly every two weeks.',
     requirements: [
       'Coursework in statistics, probability, or applied mathematics',
       'Fluent in Python with pandas and NumPy',
       'Able to communicate quantitative results clearly',
     ],
-    skills: ['Python', 'Statistics', 'pandas', 'Time Series'],
+    skills: ['Python', 'Statistics', 'pandas', 'Time Series', 'NumPy', 'SQL'],
     postedAt: '2026-09-08',
     applicationUrl: 'https://careers.example.com/citadel/quant-intern',
     isSaved: false,
@@ -93,13 +95,13 @@ export const mockJobs: Job[] = [
     salaryMax: 62,
     salaryPeriod: 'hour',
     description:
-      'Help build the APIs that move money for millions of businesses. Your project will touch idempotency, retries, and the correctness guarantees that payments depend on, with real production traffic behind a feature flag. Remote interns pair daily with their host engineer and ship to production in week two.',
+      'Help build the APIs that move money for millions of businesses. Your project will touch idempotency, retries, and the correctness guarantees that payments depend on, with real production traffic behind a feature flag. Remote interns pair daily with their host engineer and ship to production in week two. You will spend your first few days reading incident postmortems before writing a single line of code, because understanding how payment systems fail is treated as seriously as understanding how they work. By the midpoint of the internship most people are reviewing pull requests from full-time engineers on their team, not just having their own reviewed.',
     requirements: [
       'Experience building and testing HTTP APIs',
       'Understanding of relational databases and transactions',
       'Care for edge cases and failure modes',
     ],
-    skills: ['Ruby', 'TypeScript', 'PostgreSQL', 'API Design'],
+    skills: ['Ruby', 'TypeScript', 'PostgreSQL', 'API Design', 'Testing', 'Git'],
     postedAt: '2026-09-12',
     applicationUrl: 'https://careers.example.com/stripe/backend-intern',
     isSaved: false,
@@ -118,13 +120,13 @@ export const mockJobs: Job[] = [
     salaryMax: 58,
     salaryPeriod: 'hour',
     description:
-      'The AWS networking control plane team is looking for interns to improve how routing configuration propagates across regions. You will write Java services, add operational dashboards, and take part in on-call reviews as an observer. Projects are chosen so they can realistically land within twelve weeks.',
+      'The AWS networking control plane team is looking for interns to improve how routing configuration propagates across regions. You will write Java services, add operational dashboards, and take part in on-call reviews as an observer. Projects are chosen so they can realistically land within twelve weeks. You will get hands-on exposure to how a system operating at global scale handles partial failures, since the control plane has to keep working even when individual regions are unreachable. Interns present a working demo to the broader networking org in the final week, and the strongest projects get folded directly into the roadmap rather than shelved.',
     requirements: [
       'Solid object-oriented programming skills',
       'Familiarity with networking fundamentals such as TCP/IP and DNS',
       'Interest in large-scale operations',
     ],
-    skills: ['Java', 'AWS', 'Networking', 'Systems Design'],
+    skills: ['Java', 'AWS', 'Networking', 'Systems Design', 'Linux', 'Monitoring'],
     postedAt: '2026-09-05',
     applicationUrl: 'https://careers.example.com/amazon/sde-intern',
     isSaved: false,
@@ -143,13 +145,13 @@ export const mockJobs: Job[] = [
     salaryMax: 55,
     salaryPeriod: 'hour',
     description:
-      'Build the dashboards engineers stare at during incidents. You will work in a large React and TypeScript codebase, rendering high-cardinality time series without dropping frames. Performance work here is measurable: every project ends with before-and-after profiling numbers.',
+      'Build the dashboards engineers stare at during incidents. You will work in a large React and TypeScript codebase, rendering high-cardinality time series without dropping frames. Performance work here is measurable: every project ends with before-and-after profiling numbers. You will spend real time in dev tools studying frame budgets and render waterfalls, not just shipping features and moving on. Interns typically start on a small, well-scoped visualization bug before taking on a full feature, and the team runs a weekly "slow demo" where anyone can show work in progress and get quick feedback from senior engineers.',
     requirements: [
       'Comfortable with React and modern JavaScript tooling',
       'Some experience with data visualization or canvas rendering',
       'An eye for interaction detail',
     ],
-    skills: ['React', 'TypeScript', 'Data Visualization', 'Web Performance'],
+    skills: ['React', 'TypeScript', 'Data Visualization', 'Web Performance', 'Canvas', 'CSS'],
     postedAt: '2026-09-10',
     applicationUrl: 'https://careers.example.com/datadog/frontend-intern',
     isSaved: false,
@@ -168,13 +170,13 @@ export const mockJobs: Job[] = [
     salaryMax: 64,
     salaryPeriod: 'hour',
     description:
-      'Contribute to a shipping iOS feature in Swift and SwiftUI alongside the team that maintains it. The work is detail-driven: animation timing, accessibility behavior, and memory footprint all get reviewed. Interns are expected to write tests and to take design feedback seriously.',
+      'Contribute to a shipping iOS feature in Swift and SwiftUI alongside the team that maintains it. The work is detail-driven: animation timing, accessibility behavior, and memory footprint all get reviewed. Interns are expected to write tests and to take design feedback seriously. Design reviews here go deeper than most teams: expect conversations about exact spring damping values and how a transition feels with VoiceOver running, not just whether a feature technically works. You will use the same internal tools and build system as full-time engineers from day one, and your code has a real chance of shipping to hundreds of millions of devices if it clears review.',
     requirements: [
       'Experience building an iOS app in Swift',
       'Understanding of UIKit or SwiftUI layout',
       'Attention to accessibility and polish',
     ],
-    skills: ['Swift', 'SwiftUI', 'iOS', 'Accessibility'],
+    skills: ['Swift', 'SwiftUI', 'iOS', 'Accessibility', 'UIKit', 'Xcode'],
     postedAt: '2026-09-03',
     applicationUrl: 'https://careers.example.com/apple/ios-intern',
     isSaved: false,
@@ -193,13 +195,13 @@ export const mockJobs: Job[] = [
     salaryMax: 175000,
     salaryPeriod: 'year',
     description:
-      'Forward deployed engineers sit with the customer, learn their operational problem, and build the software that solves it. Expect a mix of data modeling, Python and TypeScript development, and a lot of listening. Travel is roughly one week per month.',
+      'Forward deployed engineers sit with the customer, learn their operational problem, and build the software that solves it. Expect a mix of data modeling, Python and TypeScript development, and a lot of listening. Travel is roughly one week per month. You will often be the only engineer in the room with the customer\'s own domain experts, which means translating a messy real-world process into a working data model is as much a part of the job as writing code. New FDEs shadow a senior engineer on two deployments before leading their own, and the standard for a "win" is a tool the customer actually keeps using after your team leaves the site.',
     requirements: [
       'Strong general-purpose programming ability',
       'Willingness to work directly with non-technical users',
       'Comfort with ambiguity and shifting requirements',
     ],
-    skills: ['Python', 'TypeScript', 'Data Modeling', 'Customer Engineering'],
+    skills: ['Python', 'TypeScript', 'Data Modeling', 'Customer Engineering', 'SQL', 'APIs'],
     postedAt: '2026-09-02',
     applicationUrl: 'https://careers.example.com/palantir/fdse',
     isSaved: false,
@@ -218,13 +220,13 @@ export const mockJobs: Job[] = [
     salaryMax: 52,
     salaryPeriod: 'hour',
     description:
-      'Write embedded C++ for flight computers that cannot be patched after launch. Projects range from sensor drivers to ground-side telemetry decoding, and every change goes through hardware-in-the-loop testing. The feedback loop is real hardware, and the bar for correctness is high.',
+      'Write embedded C++ for flight computers that cannot be patched after launch. Projects range from sensor drivers to ground-side telemetry decoding, and every change goes through hardware-in-the-loop testing. The feedback loop is real hardware, and the bar for correctness is high. You will spend time on the test stand watching your own code run against real flight hardware, which is a very different feeling from unit tests passing in a terminal. Interns are expected to write their own test procedures and sign off on results, not just hand code to someone else for verification. Weekly engineering reviews are blunt and technical, with questions about failure modes you may not have considered.',
     requirements: [
       'Embedded C or C++ experience from coursework or projects',
       'Familiarity with real-time constraints',
       'Must be eligible to work on export-controlled programs',
     ],
-    skills: ['C++', 'Embedded Systems', 'RTOS', 'Telemetry'],
+    skills: ['C++', 'Embedded Systems', 'RTOS', 'Telemetry', 'Hardware Testing', 'Git'],
     postedAt: '2026-08-30',
     applicationUrl: 'https://careers.example.com/spacex/avionics-intern',
     isSaved: false,
@@ -243,13 +245,13 @@ export const mockJobs: Job[] = [
     salaryMax: 56,
     salaryPeriod: 'hour',
     description:
-      'Work on the provisioning pipeline that stands up Azure resources in seconds instead of minutes. The project involves C# services, a fair amount of caching, and careful rollout behind deployment rings. You will learn how a platform team ships without breaking existing customers.',
+      'Work on the provisioning pipeline that stands up Azure resources in seconds instead of minutes. The project involves C# services, a fair amount of caching, and careful rollout behind deployment rings. You will learn how a platform team ships without breaking existing customers. Every change you make rolls out to an internal ring first, then a small slice of production, with automated health checks gating each step — you will watch your own changes move through that pipeline and learn to read the dashboards that decide whether a rollout continues or gets rolled back automatically. Interns also get a dedicated "ship it" week near the end of the summer to polish and merge their project.',
     requirements: [
       'Coursework in data structures and operating systems',
       'Experience with C#, Java, or a similar language',
       'Interest in cloud infrastructure',
     ],
-    skills: ['C#', '.NET', 'Azure', 'Cloud Infrastructure'],
+    skills: ['C#', '.NET', 'Azure', 'Cloud Infrastructure', 'Caching', 'CI/CD'],
     postedAt: '2026-09-07',
     applicationUrl: 'https://careers.example.com/microsoft/swe-intern',
     isSaved: false,
@@ -268,13 +270,13 @@ export const mockJobs: Job[] = [
     salaryMax: 192000,
     salaryPeriod: 'year',
     description:
-      'Train and evaluate models for autonomous driving perception, then work with the systems team to make them fast enough to run in the car. The role is half research iteration and half engineering discipline, and you will own the evaluation metrics for your model family.',
+      'Train and evaluate models for autonomous driving perception, then work with the systems team to make them fast enough to run in the car. The role is half research iteration and half engineering discipline, and you will own the evaluation metrics for your model family. A meaningful part of the job is deciding what "good enough" means for a given metric under real latency and power constraints, not just chasing the highest accuracy number in isolation. You will regularly sit with the embedded systems team to understand exactly what a few extra milliseconds costs downstream, and new grads typically own one full model family end to end within their first six months.',
     requirements: [
       'MS or equivalent experience in ML, computer vision, or robotics',
       'Practical PyTorch experience on real datasets',
       'Able to reason about latency and model size trade-offs',
     ],
-    skills: ['PyTorch', 'Computer Vision', 'Python', 'Model Optimization'],
+    skills: ['PyTorch', 'Computer Vision', 'Python', 'Model Optimization', 'CUDA', 'Robotics'],
     postedAt: '2026-09-06',
     applicationUrl: 'https://careers.example.com/nvidia/ml-newgrad',
     isSaved: false,
@@ -293,13 +295,13 @@ export const mockJobs: Job[] = [
     salaryMax: 185000,
     salaryPeriod: 'year',
     description:
-      'Own features across the dashboard that businesses use to run their revenue: reporting views, onboarding flows, and the APIs behind them. New grads are given real scope early and are expected to write the design doc for their own projects by month three.',
+      'Own features across the dashboard that businesses use to run their revenue: reporting views, onboarding flows, and the APIs behind them. New grads are given real scope early and are expected to write the design doc for their own projects by month three. You will work across the full stack in a given week: a database migration on Monday, a React component on Wednesday, and a conversation with a support engineer about a confusing edge case on Friday. The team leans heavily on internal tooling to ship confidently, and new grads are paired with a mentor who reviews their design docs before anyone else sees them.',
     requirements: [
       'Graduating within the last year with a CS degree or equivalent experience',
       'Experience shipping a full stack project end to end',
       'Clear written communication',
     ],
-    skills: ['TypeScript', 'React', 'Ruby', 'SQL'],
+    skills: ['TypeScript', 'React', 'Ruby', 'SQL', 'API Design', 'Testing'],
     postedAt: '2026-09-13',
     applicationUrl: 'https://careers.example.com/stripe/fullstack-newgrad',
     isSaved: false,

@@ -36,7 +36,7 @@ export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle 
         accessibilityLabel={`Auto apply to ${jobTitle}`}
         accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
         style={({ pressed }) => [styles.applyButton, pressed ? styles.pressed : null]}>
-        <Ionicons name="flash" size={20} color={colors.accentText} />
+        <Ionicons name="flash" size={22} color={colors.autoApply} />
         <Text style={styles.applyLabel}>Auto Apply</Text>
       </Pressable>
     </View>
@@ -106,9 +106,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radius.pill,
-    backgroundColor: colors.autoApply,
-    // A violet-tinted glow (rather than a plain neutral shadow) is what makes this
-    // button read as the app's one "AI-assisted" action.
+    backgroundColor: colors.accent,
+    // Black circle, violet icon, violet glow — the glow is what makes this button read
+    // as the app's one "AI-assisted" action rather than just another neutral control.
     shadowColor: colors.autoApplyGlow,
     shadowOpacity: 0.9,
     shadowRadius: 16,

@@ -19,7 +19,7 @@ import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/th
 import type { Job } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
-const MAX_SKILL_CHIPS = 4;
+const MAX_SKILL_CHIPS = 6;
 /** Width reserved on the right so caption text never runs under the action rail. */
 const RAIL_RESERVED_WIDTH = 92;
 

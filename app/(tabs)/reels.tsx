@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -44,6 +45,15 @@ export default function ReelsScreen() {
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, []);
 
+  // Shared by the rail's Auto Apply button and the details modal's, so the "strong
+  // buzz" only needs to be defined once: a heavy impact immediately, followed by a
+  // notification pulse a beat later so it reads as a buzz rather than a single thud.
+  const handleAutoApply = useCallback((job: Job) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 90);
+    setApplyJob(job);
+  }, []);
+
   // Each reel fills the tab content area; the toggle floats above it and the floating
   // tab bar floats below it, so both ends reserve space for their overlay.
   const cardPaddingTop = insets.top + TOGGLE_HEIGHT + spacing.md;
@@ -82,7 +92,7 @@ export default function ReelsScreen() {
                 logoColor={logoColorByCompany.get(item.companyId)}
                 onLike={() => toggleLike(item.id)}
                 onMore={() => setDetailsJob(item)}
-                onAutoApply={() => setApplyJob(item)}
+                onAutoApply={() => handleAutoApply(item)}
               />
             )}
           />
@@ -109,7 +119,7 @@ export default function ReelsScreen() {
         onApply={() => {
           const job = detailsJob;
           setDetailsJob(null);
-          setApplyJob(job);
+          if (job) handleAutoApply(job);
         }}
       />
 
