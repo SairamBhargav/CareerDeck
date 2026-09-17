@@ -3,25 +3,25 @@ import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
+    Extrapolation,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  colors,
-  fontSize,
-  minTapTarget,
-  radius,
-  screenPadding,
-  shadow,
-  spacing,
-  tabBarFloatGap,
-  tabBarHeight,
+    colors,
+    fontSize,
+    minTapTarget,
+    radius,
+    screenPadding,
+    shadow,
+    spacing,
+    tabBarFloatGap,
+    tabBarHeight,
 } from '@/constants/theme';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
@@ -107,7 +107,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       <View style={[styles.shadowWrap, { marginBottom: insets.bottom + tabBarFloatGap }]}>
         <BlurView
           intensity={78}
-          tint={isDarkContext ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
+          tint={isDarkContext ? 'dark' : 'light'}
           blurMethod="dimezisBlurViewSdk31Plus"
           style={styles.pill}>
           <View style={styles.row} onLayout={handleRowLayout}>
