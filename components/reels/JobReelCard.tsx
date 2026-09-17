@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -19,7 +19,6 @@ import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/th
 import type { Job } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
-const DESCRIPTION_COLLAPSED_LINES = 4;
 const MAX_SKILL_CHIPS = 4;
 /** Width reserved on the right so caption text never runs under the action rail. */
 const RAIL_RESERVED_WIDTH = 92;
@@ -47,11 +46,17 @@ export function JobReelCard({
   onMore,
   onAutoApply,
 }: JobReelCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const skills = job.skills.slice(0, MAX_SKILL_CHIPS);
 
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
+
+  // Single tap on the rail heart and double-tap-anywhere both funnel through this, so
+  // haptics and the toggle itself only need to be wired up in one place.
+  const handleLike = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onLike();
+  };
 
   const playHeartBurst = () => {
     heartScale.value = 0.4;
@@ -65,7 +70,7 @@ export function JobReelCard({
     .maxDuration(250)
     .onEnd((_event, success) => {
       if (success) {
-        runOnJS(onLike)();
+        runOnJS(handleLike)();
         runOnJS(playHeartBurst)();
       }
     });
@@ -100,20 +105,7 @@ export function JobReelCard({
 
             <JobMetadata job={job} emphasizeSalary />
 
-            <Text
-              style={styles.description}
-              numberOfLines={expanded ? undefined : DESCRIPTION_COLLAPSED_LINES}>
-              {job.description}
-            </Text>
-
-            <Pressable
-              onPress={() => setExpanded((current) => !current)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={expanded ? 'Show less of the job description' : 'Read more of the job description'}
-              style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
-              <Text style={styles.readMore}>{expanded ? 'Show less' : 'Read more'}</Text>
-            </Pressable>
+            <Text style={styles.description}>{job.description}</Text>
 
             <View style={styles.skills}>
               {skills.map((skill) => (
@@ -131,7 +123,7 @@ export function JobReelCard({
       <View style={[styles.rail, { bottom: paddingBottom }]}>
         <ReelActionRail
           isLiked={job.isLiked}
-          onLike={onLike}
+          onLike={handleLike}
           onMore={onMore}
           onAutoApply={onAutoApply}
           jobTitle={job.title}
@@ -163,7 +155,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    // Top-anchored (not centered) so every reel's content starts at the same spot
+    // regardless of description length, and clipped so a long description can grow to
+    // fill all the way down to the action rail without ever running past it.
+    overflow: 'hidden',
     gap: spacing.md,
   },
   companyRow: {
@@ -196,14 +191,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     lineHeight: 22,
     color: colors.textSecondary,
-  },
-  readMore: {
-    fontSize: fontSize.small,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  pressed: {
-    opacity: 0.6,
   },
   skills: {
     flexDirection: 'row',

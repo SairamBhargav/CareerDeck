@@ -27,6 +27,10 @@ export const colors = {
   like: '#FF3B5C',
   save: '#111114',
 
+  /** Auto Apply's distinct "AI-assisted" accent — violet instead of the neutral accent. */
+  autoApply: '#7B5CFA',
+  autoApplyGlow: 'rgba(123, 92, 250, 0.45)',
+
   /** Reels surface (immersive, dark) */
   reelBackground: '#0E0F13',
   reelSurface: 'rgba(255,255,255,0.06)',

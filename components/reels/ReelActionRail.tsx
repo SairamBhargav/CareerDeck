@@ -106,8 +106,14 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    ...shadow.lifted,
+    backgroundColor: colors.autoApply,
+    // A violet-tinted glow (rather than a plain neutral shadow) is what makes this
+    // button read as the app's one "AI-assisted" action.
+    shadowColor: colors.autoApplyGlow,
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   applyLabel: {
     fontSize: 9,
