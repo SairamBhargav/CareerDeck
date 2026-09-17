@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
@@ -10,8 +11,10 @@ import { StatRow, type Stat } from '@/components/home/StatRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
 import { colors, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useJobFeeds } from '@/hooks/useJobFeeds';
 import { useNewsFeed } from '@/hooks/useNewsFeed';
+import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { NewsItem } from '@/types';
 
 const resumeOptions = [
@@ -27,6 +30,8 @@ export default function HomeScreen() {
   const newsFeed = useNewsFeed();
   const [showFollowingList, setShowFollowingList] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState<string>(resumeOptions[0]?.id ?? 'engineering');
+  const tabBarHeight = useTabBarHeight();
+  const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
   const logoColorByCompany = useMemo(
     () => new Map(companies.map((company) => [company.id, company.logoColor])),
@@ -50,7 +55,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + tabBarHeight }]}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}>
         <View style={styles.headerPadded}>
           <HomeHeader
             firstName={user.firstName}
@@ -122,7 +131,7 @@ export default function HomeScreen() {
             onPressItem={handlePressNews}
           />
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }
@@ -137,7 +146,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    paddingBottom: spacing.xxl,
     gap: spacing.xl,
   },
   headerPadded: {

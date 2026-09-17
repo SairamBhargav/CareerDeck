@@ -11,6 +11,7 @@ import { JobReelCard } from '@/components/reels/JobReelCard';
 import { colors, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useJobFeeds, type ReelFeed } from '@/hooks/useJobFeeds';
+import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
 
 const TOGGLE_HEIGHT = 44;
@@ -23,6 +24,7 @@ export default function ReelsScreen() {
   const isFocused = useSegments().at(-1) === 'reels';
   const { user, companies, toggleLike, toggleSave } = useCareerDeck();
   const { forYouJobs, followingJobs } = useJobFeeds();
+  const tabBarHeight = useTabBarHeight();
 
   const [feed, setFeed] = useState<ReelFeed>('forYou');
   const [pageHeight, setPageHeight] = useState(0);
@@ -46,8 +48,10 @@ export default function ReelsScreen() {
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, []);
 
-  // Each reel fills the tab content area; the toggle floats above it.
+  // Each reel fills the tab content area; the toggle floats above it and the floating
+  // tab bar floats below it, so both ends reserve space for their overlay.
   const cardPaddingTop = insets.top + TOGGLE_HEIGHT + spacing.lg;
+  const cardPaddingBottom = tabBarHeight + spacing.lg;
 
   return (
     <View style={styles.screen} onLayout={handleLayout}>
@@ -80,7 +84,7 @@ export default function ReelsScreen() {
                 job={item}
                 height={pageHeight}
                 paddingTop={cardPaddingTop}
-                paddingBottom={spacing.xl}
+                paddingBottom={cardPaddingBottom}
                 logoColor={logoColorByCompany.get(item.companyId)}
                 onLike={() => toggleLike(item.id)}
                 onSave={() => toggleSave(item.id)}
