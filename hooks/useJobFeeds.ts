@@ -11,8 +11,6 @@ interface JobFeeds {
   forYouJobs: Job[];
   /** Jobs from companies the user currently follows. */
   followingJobs: Job[];
-  /** Shorter slice used by the Home "Your Feed" list. */
-  homeJobs: Job[];
   suggestedCompanies: Company[];
 }
 
@@ -35,7 +33,6 @@ export function useJobFeeds(): JobFeeds {
     return {
       forYouJobs,
       followingJobs: forYouJobs.filter((job) => followed.has(job.companyId)),
-      homeJobs: forYouJobs,
       suggestedCompanies,
     };
   }, [jobs, companies, followedCompanyIds]);

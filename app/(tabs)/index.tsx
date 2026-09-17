@@ -1,16 +1,18 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { HomeHeader } from '@/components/home/HomeHeader';
+import { NewsCarousel } from '@/components/home/NewsCarousel';
 import { StatRow, type Stat } from '@/components/home/StatRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
-import { JobPreviewCard } from '@/components/jobs/JobPreviewCard';
 import { colors, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useJobFeeds } from '@/hooks/useJobFeeds';
+import { useNewsFeed } from '@/hooks/useNewsFeed';
+import type { NewsItem } from '@/types';
 
 const resumeOptions = [
   { id: 'engineering', name: 'Software Engineering Resume', updatedAt: 'Updated Sep 12' },
@@ -20,8 +22,9 @@ const resumeOptions = [
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, companies, followedCompanyIds, savedJobIds, toggleFollow, toggleSave } = useCareerDeck();
-  const { homeJobs, suggestedCompanies } = useJobFeeds();
+  const { user, companies, followedCompanyIds, savedJobIds, toggleFollow } = useCareerDeck();
+  const { suggestedCompanies } = useJobFeeds();
+  const newsFeed = useNewsFeed();
   const [showFollowingList, setShowFollowingList] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState(resumeOptions[0].id);
 
@@ -42,92 +45,83 @@ export default function HomeScreen() {
     { label: 'Queued', value: savedJobIds.length },
   ];
 
+  const handlePressNews = (item: NewsItem) => router.push(`/news/${item.id}`);
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <FlatList
-        data={homeJobs}
-        keyExtractor={(job) => job.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={styles.headerPadded}>
-              <HomeHeader
-                firstName={user.firstName}
-                initials={initialsOf(user.firstName, user.lastName)}
-                onProfilePress={() => router.push('/profile')}
-              />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerPadded}>
+          <HomeHeader
+            firstName={user.firstName}
+            initials={initialsOf(user.firstName, user.lastName)}
+            onProfilePress={() => router.push('/profile')}
+          />
 
-              <StatRow stats={stats} />
+          <StatRow stats={stats} />
 
-              {showFollowingList ? (
-                <View style={styles.followingListCard}>
-                  {followedCompanies.length > 0 ? (
-                    followedCompanies.map((company) => (
-                      <Text key={company.id} style={styles.followingCompany}>
-                        • {company.name}
-                      </Text>
-                    ))
-                  ) : (
-                    <Text style={styles.emptyState}>You’re not following any companies yet.</Text>
-                  )}
-                </View>
-              ) : null}
-
-              <View style={styles.resumeSection}>
-                <Text style={styles.resumeLabel}>Resumes</Text>
-                {resumeOptions.map((resume) => {
-                  const isSelected = selectedResumeId === resume.id;
-
-                  return (
-                    <Pressable
-                      key={resume.id}
-                      onPress={() => setSelectedResumeId(resume.id)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Select ${resume.name} as default resume`}
-                      style={({ pressed }) => [
-                        styles.resumeCard,
-                        isSelected ? styles.resumeCardSelected : null,
-                        pressed ? styles.resumeCardPressed : null,
-                      ]}>
-                      <View style={styles.resumeIcon}>
-                        <Text style={styles.resumeIconText}>CV</Text>
-                      </View>
-
-                      <View style={styles.resumeText}>
-                        <Text style={styles.resumeName}>{resume.name}</Text>
-                        <Text style={styles.resumeUpdated}>{resume.updatedAt}</Text>
-                      </View>
-
-                      {isSelected ? <Text style={styles.badge}>Default</Text> : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
+          {showFollowingList ? (
+            <View style={styles.followingListCard}>
+              {followedCompanies.length > 0 ? (
+                followedCompanies.map((company) => (
+                  <Text key={company.id} style={styles.followingCompany}>
+                    • {company.name}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.emptyState}>You’re not following any companies yet.</Text>
+              )}
             </View>
+          ) : null}
 
-            <SuggestedCompanies
-              companies={suggestedCompanies}
-              onToggleFollow={toggleFollow}
-              onSeeAll={() => router.push('/profile')}
-            />
+          <View style={styles.resumeSection}>
+            <Text style={styles.resumeLabel}>Resumes</Text>
+            {resumeOptions.map((resume) => {
+              const isSelected = selectedResumeId === resume.id;
 
-            <View style={styles.feedHeading}>
-              <SectionHeader title="Your Feed" />
-            </View>
+              return (
+                <Pressable
+                  key={resume.id}
+                  onPress={() => setSelectedResumeId(resume.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${resume.name} as default resume`}
+                  style={({ pressed }) => [
+                    styles.resumeCard,
+                    isSelected ? styles.resumeCardSelected : null,
+                    pressed ? styles.resumeCardPressed : null,
+                  ]}>
+                  <View style={styles.resumeIcon}>
+                    <Text style={styles.resumeIconText}>CV</Text>
+                  </View>
+
+                  <View style={styles.resumeText}>
+                    <Text style={styles.resumeName}>{resume.name}</Text>
+                    <Text style={styles.resumeUpdated}>{resume.updatedAt}</Text>
+                  </View>
+
+                  {isSelected ? <Text style={styles.badge}>Default</Text> : null}
+                </Pressable>
+              );
+            })}
           </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <JobPreviewCard
-              job={item}
-              logoColor={logoColorByCompany.get(item.companyId)}
-              onPress={() => router.push(`/job/${item.id}`)}
-              onToggleSave={() => toggleSave(item.id)}
-            />
+        </View>
+
+        <SuggestedCompanies
+          companies={suggestedCompanies}
+          onToggleFollow={toggleFollow}
+          onSeeAll={() => router.push('/profile')}
+        />
+
+        <View style={styles.feedSection}>
+          <View style={styles.feedHeading}>
+            <SectionHeader title="Your News" />
           </View>
-        )}
-      />
+          <NewsCarousel
+            items={newsFeed}
+            companyColors={logoColorByCompany}
+            onPressItem={handlePressNews}
+          />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -141,16 +135,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  listContent: {
+  content: {
     paddingBottom: spacing.xxl,
-  },
-  header: {
     gap: spacing.xl,
-    paddingTop: spacing.sm,
   },
   headerPadded: {
     paddingHorizontal: screenPadding,
     gap: spacing.md,
+    paddingTop: spacing.sm,
   },
   followingListCard: {
     backgroundColor: colors.backgroundMuted,
@@ -232,11 +224,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
+  feedSection: {
+    gap: spacing.md,
+  },
   feedHeading: {
     paddingHorizontal: screenPadding,
-  },
-  cardWrapper: {
-    paddingHorizontal: screenPadding,
-    paddingBottom: spacing.md,
   },
 });

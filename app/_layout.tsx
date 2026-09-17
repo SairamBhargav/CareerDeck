@@ -18,6 +18,10 @@ export default function RootLayout() {
               name="job/[id]"
               options={{ presentation: 'modal', title: 'Job details' }}
             />
+            <Stack.Screen
+              name="news/[id]"
+              options={{ presentation: 'modal', title: 'News' }}
+            />
           </Stack>
         </CareerDeckProvider>
       </SafeAreaProvider>
