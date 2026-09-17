@@ -61,7 +61,7 @@ npm start
 
 ### Run on a physical phone (Expo Go)
 
-1. Install **Expo Go** from the App Store or Google Play.
+1. Install **Expo Go** fro the App Store or Google Play.
 2. Make sure your phone and computer are on the **same Wi-Fi network**.
 3. Run `npm start`.
 4. **iOS:** scan the QR code with the Camera app. **Android:** scan it from inside Expo Go.
