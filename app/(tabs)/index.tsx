@@ -26,7 +26,7 @@ export default function HomeScreen() {
   const { suggestedCompanies } = useJobFeeds();
   const newsFeed = useNewsFeed();
   const [showFollowingList, setShowFollowingList] = useState(false);
-  const [selectedResumeId, setSelectedResumeId] = useState(resumeOptions[0].id);
+  const [selectedResumeId, setSelectedResumeId] = useState<string>(resumeOptions[0]?.id ?? 'engineering');
 
   const logoColorByCompany = useMemo(
     () => new Map(companies.map((company) => [company.id, company.logoColor])),
@@ -45,7 +45,8 @@ export default function HomeScreen() {
     { label: 'Queued', value: savedJobIds.length },
   ];
 
-  const handlePressNews = (item: NewsItem) => router.push(`/news/${item.id}`);
+  const handlePressNews = (item: NewsItem) =>
+    router.push({ pathname: '/news/[id]', params: { id: item.id } });
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
