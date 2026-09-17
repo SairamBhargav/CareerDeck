@@ -14,10 +14,10 @@ import { useCareerDeck } from '@/context/CareerDeckContext';
  */
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, followedCompanyIds, savedJobIds, likedJobIds } = useCareerDeck();
+  const { user, resumes, followedCompanyIds, savedJobIds, likedJobIds } = useCareerDeck();
 
   const rows = [
-    { icon: 'document-text-outline', label: 'Resume', value: user.resumeName },
+    { icon: 'document-text-outline', label: 'Resumes', value: `${resumes.length} saved` },
     { icon: 'options-outline', label: 'Preferences', value: `${user.preferredRoles.length} roles` },
     { icon: 'briefcase-outline', label: 'Applications', value: String(user.appliedCount) },
     { icon: 'business-outline', label: 'Following companies', value: String(followedCompanyIds.length) },

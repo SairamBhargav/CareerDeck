@@ -4,11 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
-import type { Job, User } from '@/types';
+import type { Job } from '@/types';
 
 interface ApplicationModalProps {
   job: Job | null;
-  user: User;
+  /** Name of the resume currently set as default on Home. */
+  resumeName: string;
   visible: boolean;
   onClose: () => void;
 }
@@ -17,7 +18,7 @@ interface ApplicationModalProps {
  * Bottom sheet shown when a reel's Apply action is pressed.
  * Nothing is submitted - this is the entry point for the future AI-assisted review flow.
  */
-export function ApplicationModal({ job, user, visible, onClose }: ApplicationModalProps) {
+export function ApplicationModal({ job, resumeName, visible, onClose }: ApplicationModalProps) {
   const insets = useSafeAreaInsets();
   const [reviewRequested, setReviewRequested] = useState(false);
 
@@ -43,7 +44,7 @@ export function ApplicationModal({ job, user, visible, onClose }: ApplicationMod
           <DetailRow label="Company" value={job.companyName} />
           <DetailRow label="Role" value={`${job.title} · ${job.employmentType}`} />
           <DetailRow label="Location" value={`${job.location} · ${job.locationType}`} />
-          <DetailRow label="Resume" value={user.resumeName} />
+          <DetailRow label="Resume" value={resumeName} />
         </View>
 
         {reviewRequested ? (

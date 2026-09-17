@@ -22,7 +22,7 @@ export default function ReelsScreen() {
   // The Reels tab stays mounted when other tabs are shown, so the light status bar
   // is only applied while this route is the active segment.
   const isFocused = useSegments().at(-1) === 'reels';
-  const { user, companies, toggleLike, toggleSave } = useCareerDeck();
+  const { companies, defaultResume, toggleLike, toggleSave } = useCareerDeck();
   const { forYouJobs, followingJobs } = useJobFeeds();
   const tabBarHeight = useTabBarHeight();
 
@@ -111,7 +111,7 @@ export default function ReelsScreen() {
 
       <ApplicationModal
         job={applyJob}
-        user={user}
+        resumeName={defaultResume?.name ?? ''}
         visible={applyJob !== null}
         onClose={() => setApplyJob(null)}
       />

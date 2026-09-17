@@ -14,7 +14,7 @@ import { useJobById } from '@/hooks/useJobFeeds';
 
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, companies, toggleSave, toggleLike } = useCareerDeck();
+  const { companies, defaultResume, toggleSave, toggleLike } = useCareerDeck();
   const job = useJobById(id);
   const [applyVisible, setApplyVisible] = useState(false);
 
@@ -78,7 +78,7 @@ export default function JobDetailScreen() {
 
       <ApplicationModal
         job={job}
-        user={user}
+        resumeName={defaultResume?.name ?? ''}
         visible={applyVisible}
         onClose={() => setApplyVisible(false)}
       />
