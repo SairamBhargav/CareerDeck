@@ -14,6 +14,7 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <Stack screenOptions={{ contentStyle: { backgroundColor: colors.background } }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="profile" options={{ headerShown: false }} />
             <Stack.Screen
               name="job/[id]"
               options={{ presentation: 'modal', title: 'Job details' }}

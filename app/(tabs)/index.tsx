@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
@@ -11,8 +12,10 @@ import { StatRow, type Stat } from '@/components/home/StatRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
 import { colors, fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useJobFeeds } from '@/hooks/useJobFeeds';
 import { useNewsFeed } from '@/hooks/useNewsFeed';
+import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { NewsItem } from '@/types';
 
 export default function HomeScreen() {
@@ -20,6 +23,8 @@ export default function HomeScreen() {
   const { user, companies, followedCompanyIds, toggleFollow } = useCareerDeck();
   const { suggestedCompanies } = useJobFeeds();
   const newsFeed = useNewsFeed();
+  const tabBarHeight = useTabBarHeight();
+  const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
   const logoColorByCompany = useMemo(
     () => new Map(companies.map((company) => [company.id, company.logoColor])),
@@ -36,8 +41,10 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView
-        contentContainerStyle={styles.content}
+      <Animated.ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + tabBarHeight }]}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
         <View style={styles.headerPadded}>
           <HomeHeader
@@ -76,7 +83,7 @@ export default function HomeScreen() {
             onPressItem={handlePressNews}
           />
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }
@@ -91,7 +98,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    paddingBottom: spacing.xxl,
     gap: spacing.xl,
   },
   headerPadded: {

@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,7 +8,12 @@ import { SectionHeader } from '@/components/common/SectionHeader';
 import { colors, fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 
+/**
+ * Reached from the avatar button on Home — not a tab. There's no dedicated Profile
+ * slot in the bottom bar; this screen is pushed on top of it instead.
+ */
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user, followedCompanyIds, savedJobIds, likedJobIds } = useCareerDeck();
 
   const rows = [
@@ -23,6 +29,12 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
+          <IconButton
+            name="chevron-back"
+            accessibilityLabel="Go back"
+            onPress={() => router.back()}
+            surface
+          />
           <Text style={styles.heading} accessibilityRole="header">
             Profile
           </Text>

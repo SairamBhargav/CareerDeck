@@ -76,6 +76,13 @@ export const screenPadding = spacing.lg;
 /** Minimum touch target recommended by both iOS and Android guidelines. */
 export const minTapTarget = 44;
 
+/**
+ * Height of the floating bottom tab bar's own content, excluding the device's bottom
+ * safe-area inset. The tab bar is absolutely positioned (it floats over scrolling content
+ * rather than pushing it up), so screens add this themselves via useTabBarHeight().
+ */
+export const tabBarHeight = 54;
+
 export const shadow = {
   soft: {
     shadowColor: '#000',
@@ -101,4 +108,5 @@ export const theme = {
   fontWeight,
   screenPadding,
   shadow,
+  tabBarHeight,
 } as const;
