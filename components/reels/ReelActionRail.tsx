@@ -1,28 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
+import { colors, fontSize, minTapTarget, radius, shadow, spacing } from '@/constants/theme';
 
 interface ReelActionRailProps {
   isLiked: boolean;
-  isSaved: boolean;
   onLike: () => void;
-  onSave: () => void;
   onMore: () => void;
-  onApply: () => void;
+  onAutoApply: () => void;
   jobTitle: string;
 }
 
 /** Vertical social-style rail on the right edge of a reel. */
-export function ReelActionRail({
-  isLiked,
-  isSaved,
-  onLike,
-  onSave,
-  onMore,
-  onApply,
-  jobTitle,
-}: ReelActionRailProps) {
+export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle }: ReelActionRailProps) {
   return (
     <View style={styles.rail}>
       <RailAction
@@ -34,13 +24,6 @@ export function ReelActionRail({
         accessibilityLabel={isLiked ? `Unlike ${jobTitle}` : `Like ${jobTitle}`}
       />
       <RailAction
-        icon={isSaved ? 'bookmark' : 'bookmark-outline'}
-        label="Save"
-        active={isSaved}
-        onPress={onSave}
-        accessibilityLabel={isSaved ? `Unsave ${jobTitle}` : `Save ${jobTitle}`}
-      />
-      <RailAction
         icon="ellipsis-horizontal"
         label="More"
         onPress={onMore}
@@ -48,13 +31,13 @@ export function ReelActionRail({
       />
 
       <Pressable
-        onPress={onApply}
+        onPress={onAutoApply}
         accessibilityRole="button"
-        accessibilityLabel={`Apply to ${jobTitle}`}
-        accessibilityHint="Opens the application sheet. Nothing is submitted."
+        accessibilityLabel={`Auto apply to ${jobTitle}`}
+        accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
         style={({ pressed }) => [styles.applyButton, pressed ? styles.pressed : null]}>
-        <Ionicons name="paper-plane" size={20} color={colors.text} />
-        <Text style={styles.applyLabel}>Apply</Text>
+        <Ionicons name="flash" size={20} color={colors.accentText} />
+        <Text style={styles.applyLabel}>Auto Apply</Text>
       </Pressable>
     </View>
   );
@@ -69,14 +52,7 @@ interface RailActionProps {
   activeColor?: string;
 }
 
-function RailAction({
-  icon,
-  label,
-  onPress,
-  accessibilityLabel,
-  active = false,
-  activeColor = colors.reelText,
-}: RailActionProps) {
+function RailAction({ icon, label, onPress, accessibilityLabel, active = false, activeColor = colors.text }: RailActionProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -86,7 +62,7 @@ function RailAction({
       hitSlop={6}
       style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
       <View style={[styles.actionCircle, active ? styles.actionCircleActive : null]}>
-        <Ionicons name={icon} size={22} color={active ? activeColor : colors.reelText} />
+        <Ionicons name={icon} size={22} color={active ? activeColor : colors.text} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
@@ -109,32 +85,35 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.reelSurface,
+    backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.reelBorder,
+    borderColor: colors.border,
+    ...shadow.soft,
   },
   actionCircleActive: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: '#FFECEF',
+    borderColor: '#FFD3DA',
   },
   actionLabel: {
     fontSize: fontSize.caption,
     fontWeight: '600',
-    color: colors.reelTextSecondary,
+    color: colors.textSecondary,
   },
   applyButton: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    width: 60,
-    height: 60,
+    width: 64,
+    height: 64,
     borderRadius: radius.pill,
-    backgroundColor: colors.reelText,
+    backgroundColor: colors.accent,
+    ...shadow.lifted,
   },
   applyLabel: {
-    fontSize: fontSize.caption,
+    fontSize: 9,
     fontWeight: '700',
-    color: colors.text,
+    color: colors.accentText,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.7,

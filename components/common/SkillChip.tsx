@@ -4,7 +4,7 @@ import { colors, fontSize, radius, spacing } from '@/constants/theme';
 
 interface SkillChipProps {
   label: string;
-  /** Chips on the Reels screen sit on a dark background. */
+  /** Reserved for the dark-theme toggle; unused while the app is light-only. */
   onDark?: boolean;
 }
 
