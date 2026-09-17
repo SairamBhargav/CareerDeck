@@ -1,22 +1,25 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { HomeHeader } from '@/components/home/HomeHeader';
+import { NewsCarousel } from '@/components/home/NewsCarousel';
 import { ResumeCard } from '@/components/home/ResumeCard';
 import { StatRow, type Stat } from '@/components/home/StatRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
-import { JobPreviewCard } from '@/components/jobs/JobPreviewCard';
 import { colors, fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useJobFeeds } from '@/hooks/useJobFeeds';
+import { useNewsFeed } from '@/hooks/useNewsFeed';
+import type { NewsItem } from '@/types';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, companies, followedCompanyIds, toggleFollow, toggleSave } = useCareerDeck();
-  const { homeJobs, suggestedCompanies } = useJobFeeds();
+  const { user, companies, followedCompanyIds, toggleFollow } = useCareerDeck();
+  const { suggestedCompanies } = useJobFeeds();
+  const newsFeed = useNewsFeed();
 
   const logoColorByCompany = useMemo(
     () => new Map(companies.map((company) => [company.id, company.logoColor])),
@@ -29,58 +32,51 @@ export default function HomeScreen() {
     { label: 'Applied', value: user.appliedCount },
   ];
 
+  const handlePressNews = (item: NewsItem) => router.push(`/news/${item.id}`);
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <FlatList
-        data={homeJobs}
-        keyExtractor={(job) => job.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={styles.headerPadded}>
-              <HomeHeader
-                firstName={user.firstName}
-                initials={initialsOf(user.firstName, user.lastName)}
-                onProfilePress={() => router.push('/profile')}
-              />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.headerPadded}>
+          <HomeHeader
+            firstName={user.firstName}
+            initials={initialsOf(user.firstName, user.lastName)}
+            onProfilePress={() => router.push('/profile')}
+          />
 
-              <Text style={styles.name}>{user.displayName}</Text>
-              <Text style={styles.subtitle}>
-                {user.major} {'·'} Class of {user.graduationYear}
-              </Text>
+          <Text style={styles.name}>{user.displayName}</Text>
+          <Text style={styles.subtitle}>
+            {user.major} {'·'} Class of {user.graduationYear}
+          </Text>
 
-              <StatRow stats={stats} />
+          <StatRow stats={stats} />
 
-              <ResumeCard
-                resumeName={user.resumeName}
-                updatedAt={user.resumeUpdatedAt}
-                onPress={() => router.push('/profile')}
-              />
-            </View>
+          <ResumeCard
+            resumeName={user.resumeName}
+            updatedAt={user.resumeUpdatedAt}
+            onPress={() => router.push('/profile')}
+          />
+        </View>
 
-            <SuggestedCompanies
-              companies={suggestedCompanies}
-              onToggleFollow={toggleFollow}
-              onSeeAll={() => router.push('/profile')}
-            />
+        <SuggestedCompanies
+          companies={suggestedCompanies}
+          onToggleFollow={toggleFollow}
+          onSeeAll={() => router.push('/profile')}
+        />
 
-            <View style={styles.feedHeading}>
-              <SectionHeader title="Your Feed" />
-            </View>
+        <View style={styles.feedSection}>
+          <View style={styles.feedHeading}>
+            <SectionHeader title="Your News" />
           </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.cardWrapper}>
-            <JobPreviewCard
-              job={item}
-              logoColor={logoColorByCompany.get(item.companyId)}
-              onPress={() => router.push(`/job/${item.id}`)}
-              onToggleSave={() => toggleSave(item.id)}
-            />
-          </View>
-        )}
-      />
+          <NewsCarousel
+            items={newsFeed}
+            companyColors={logoColorByCompany}
+            onPressItem={handlePressNews}
+          />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -94,16 +90,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  listContent: {
+  content: {
     paddingBottom: spacing.xxl,
-  },
-  header: {
     gap: spacing.xl,
-    paddingTop: spacing.sm,
   },
   headerPadded: {
     paddingHorizontal: screenPadding,
     gap: spacing.md,
+    paddingTop: spacing.sm,
   },
   name: {
     fontSize: fontSize.display,
@@ -117,11 +111,10 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: -spacing.sm,
   },
+  feedSection: {
+    gap: spacing.md,
+  },
   feedHeading: {
     paddingHorizontal: screenPadding,
-  },
-  cardWrapper: {
-    paddingHorizontal: screenPadding,
-    paddingBottom: spacing.md,
   },
 });
