@@ -79,7 +79,6 @@ export default function HomeScreen() {
 
       <ResumeViewerModal
         resume={viewingResume}
-        userName={user.displayName}
         isDefault={viewingResume?.id === defaultResumeId}
         visible={viewingResume !== null}
         onClose={() => setViewingResumeId(null)}

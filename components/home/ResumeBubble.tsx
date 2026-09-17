@@ -1,12 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, fontSize, radius, shadow, spacing } from '@/constants/theme';
 import type { Resume } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
 export const RESUME_BUBBLE_WIDTH = 128;
-const PREVIEW_HEIGHT = 100;
+const PREVIEW_HEIGHT = 150;
 
 interface ResumeBubbleProps {
   resume: Resume;
@@ -15,10 +15,10 @@ interface ResumeBubbleProps {
 }
 
 /**
- * A resume rendered as a small "peek into the page" card — a Google Docs–style thumbnail
- * with a mock header bar and paragraph lines hinting at the real content underneath.
- * Tapping opens the full document in ResumeViewerModal; the checkmark badge is a pure
- * status indicator for "this is the default," not something you tap here to change.
+ * A resume rendered as a real page-1 thumbnail — Google Drive–style, readable at a
+ * glance without opening it. Tapping opens the actual PDF in ResumeViewerModal; the
+ * checkmark badge is a pure status indicator for "this is the default," not something
+ * you tap here to change.
  */
 export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) {
   return (
@@ -32,10 +32,7 @@ export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) 
         pressed ? styles.pressed : null,
       ]}>
       <View style={styles.preview}>
-        <View style={styles.previewHeader} />
-        {resume.previewLines.map((width, index) => (
-          <View key={index} style={[styles.previewLine, { width: `${width * 100}%` }]} />
-        ))}
+        <Image source={resume.thumbnail} style={styles.previewImage} resizeMode="cover" />
 
         {isDefault ? (
           <View style={styles.badge}>
@@ -73,21 +70,10 @@ const styles = StyleSheet.create({
   preview: {
     height: PREVIEW_HEIGHT,
     backgroundColor: colors.backgroundMuted,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
-    gap: 5,
   },
-  previewHeader: {
-    width: '55%',
-    height: 6,
-    borderRadius: radius.sm,
-    backgroundColor: colors.borderStrong,
-    marginBottom: 2,
-  },
-  previewLine: {
-    height: 4,
-    borderRadius: radius.sm,
-    backgroundColor: colors.border,
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
   badge: {
     position: 'absolute',
