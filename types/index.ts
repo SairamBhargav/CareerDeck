@@ -6,3 +6,4 @@ export type {
 } from './job';
 export type { Company } from './company';
 export type { User } from './user';
+export type { NewsItem, NewsCategory } from './news';
