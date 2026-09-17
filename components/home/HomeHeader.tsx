@@ -11,10 +11,7 @@ interface HomeHeaderProps {
 export function HomeHeader({ firstName, initials, onProfilePress }: HomeHeaderProps) {
   return (
     <View style={styles.row}>
-      <View>
-        <Text style={styles.brand}>CareerDeck</Text>
-        <Text style={styles.greeting}>Hey, {firstName}</Text>
-      </View>
+      <Text style={styles.greeting}>Hey {firstName}</Text>
 
       <Pressable
         onPress={onProfilePress}
@@ -33,19 +30,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  brand: {
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.textTertiary,
-  },
   greeting: {
-    fontSize: fontSize.heading,
+    fontSize: 34,
     fontWeight: '700',
     color: colors.text,
-    letterSpacing: -0.4,
-    marginTop: 2,
+    letterSpacing: -0.8,
+    lineHeight: 40,
   },
   avatar: {
     width: 44,
