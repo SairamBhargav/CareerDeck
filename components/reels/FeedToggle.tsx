@@ -17,7 +17,7 @@ const INACTIVE_OPACITY = 0.45;
 
 const TABS: { key: ReelFeed; label: string }[] = [
   { key: 'following', label: 'Following' },
-  { key: 'forYou', label: 'For You' },
+  { key: 'forYou', label: 'Explore' },
 ];
 
 interface FeedToggleProps {

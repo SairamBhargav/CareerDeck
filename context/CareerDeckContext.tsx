@@ -32,10 +32,14 @@ interface CareerDeckState {
   followedCompanyIds: string[];
   likedJobIds: string[];
   savedJobIds: string[];
+  /** News items the user has already watched in the stories row. */
+  seenNewsIds: string[];
   isFollowing: (companyId: string) => boolean;
   toggleFollow: (companyId: string) => void;
   toggleLike: (jobId: string) => void;
   toggleSave: (jobId: string) => void;
+  /** One-way: a story that has been watched stays watched for the session. */
+  markNewsSeen: (newsId: string) => void;
   setDefaultResume: (resumeId: string) => void;
 }
 
@@ -62,6 +66,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [followedIds, setFollowedIds] = useState<Set<string>>(seedFollowedCompanies);
   const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set<string>());
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set<string>());
+  const [seenNewsIds, setSeenNewsIds] = useState<Set<string>>(() => new Set<string>());
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
@@ -80,6 +85,12 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
   const toggleSave = useCallback((jobId: string) => {
     setSavedIds((current) => toggleInSet(current, jobId));
+  }, []);
+
+  // Returning the same Set when nothing changes matters here: this fires from an effect
+  // on every story frame, and a fresh Set each time would re-render the whole tree.
+  const markNewsSeen = useCallback((newsId: string) => {
+    setSeenNewsIds((current) => (current.has(newsId) ? current : new Set(current).add(newsId)));
   }, []);
 
   const setDefaultResume = useCallback((resumeId: string) => {
@@ -109,10 +120,12 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       followedCompanyIds: [...followedIds],
       likedJobIds: [...likedIds],
       savedJobIds: [...savedIds],
+      seenNewsIds: [...seenNewsIds],
       isFollowing: (companyId: string) => followedIds.has(companyId),
       toggleFollow,
       toggleLike,
       toggleSave,
+      markNewsSeen,
       setDefaultResume,
     };
   }, [
@@ -120,10 +133,12 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     followedIds,
     likedIds,
     savedIds,
+    seenNewsIds,
     defaultResumeId,
     toggleFollow,
     toggleLike,
     toggleSave,
+    markNewsSeen,
     setDefaultResume,
   ]);
 

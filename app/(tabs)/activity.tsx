@@ -112,7 +112,7 @@ export default function ActivityScreen() {
               <EmptyState
                 icon="bookmark-outline"
                 title="No saved jobs yet"
-                message="Save a posting from Home or Reels to keep it here."
+                message="Save a posting from Home or Deck to keep it here."
               />
             )
           ) : null}
@@ -133,7 +133,7 @@ export default function ActivityScreen() {
               <EmptyState
                 icon="heart-outline"
                 title="No liked jobs yet"
-                message="Double-tap or like a reel in Reels to keep it here."
+                message="Double-tap or like a card in Deck to keep it here."
               />
             )
           ) : null}
