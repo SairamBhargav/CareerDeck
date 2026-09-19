@@ -42,6 +42,7 @@ function RootNavigator() {
         <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="job/[id]" options={{ presentation: 'modal', title: 'Job details' }} />
+        <Stack.Screen name="company/[id]" options={{ title: '' }} />
       </Stack>
     </>
   );

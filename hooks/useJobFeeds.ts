@@ -42,3 +42,12 @@ export function useJobById(jobId: string | undefined): Job | undefined {
   const { jobs } = useCareerDeck();
   return useMemo(() => jobs.find((job) => job.id === jobId), [jobs, jobId]);
 }
+
+/** Every posting from one company, newest first — the openings list on its profile page. */
+export function useCompanyJobs(companyId: string | undefined): Job[] {
+  const { jobs } = useCareerDeck();
+  return useMemo(
+    () => (companyId ? jobs.filter((job) => job.companyId === companyId).sort(byNewest) : []),
+    [jobs, companyId],
+  );
+}

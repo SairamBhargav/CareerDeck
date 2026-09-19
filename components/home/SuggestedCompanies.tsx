@@ -12,11 +12,18 @@ const SKELETON_COUNT = 3;
 interface SuggestedCompaniesProps {
   companies: Company[];
   loading: boolean;
+  onPressCompany: (company: Company) => void;
   onToggleFollow: (companyId: string) => void;
   onSeeAll: () => void;
 }
 
-export function SuggestedCompanies({ companies, loading, onToggleFollow, onSeeAll }: SuggestedCompaniesProps) {
+export function SuggestedCompanies({
+  companies,
+  loading,
+  onPressCompany,
+  onToggleFollow,
+  onSeeAll,
+}: SuggestedCompaniesProps) {
   const styles = useStyles();
 
   return (
@@ -39,7 +46,11 @@ export function SuggestedCompanies({ companies, loading, onToggleFollow, onSeeAl
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <CompanySuggestionCard company={item} onToggleFollow={() => onToggleFollow(item.id)} />
+            <CompanySuggestionCard
+              company={item}
+              onPress={() => onPressCompany(item)}
+              onToggleFollow={() => onToggleFollow(item.id)}
+            />
           )}
         />
       )}

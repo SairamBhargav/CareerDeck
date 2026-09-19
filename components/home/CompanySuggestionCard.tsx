@@ -10,15 +10,22 @@ export const SUGGESTION_CARD_WIDTH = 132;
 
 interface CompanySuggestionCardProps {
   company: Company;
+  onPress: () => void;
   onToggleFollow: () => void;
 }
 
-export function CompanySuggestionCard({ company, onToggleFollow }: CompanySuggestionCardProps) {
+export function CompanySuggestionCard({ company, onPress, onToggleFollow }: CompanySuggestionCardProps) {
   const styles = useStyles();
   const { isFollowing } = company;
 
   return (
-    <View style={styles.card}>
+    // The card opens the company; the button inside it stops the press from reaching
+    // here, so following never doubles as navigating.
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${company.name}`}
+      style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}>
       <CompanyLogo logo={company.logo} name={company.name} color={company.logoColor} size="md" />
 
       <View style={styles.text}>
@@ -46,11 +53,14 @@ export function CompanySuggestionCard({ company, onToggleFollow }: CompanySugges
           {isFollowing ? 'Following' : 'Follow'}
         </Text>
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
+  cardPressed: {
+    opacity: 0.85,
+  },
   card: {
     width: SUGGESTION_CARD_WIDTH,
     alignItems: 'center',

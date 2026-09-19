@@ -5,6 +5,8 @@ import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CompanyListRow } from '@/components/activity/CompanyListRow';
+import { ResumeShelf } from '@/components/activity/ResumeShelf';
+import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
 import { EmptyState } from '@/components/common/EmptyState';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { StatRow, type Stat } from '@/components/home/StatRow';
@@ -25,9 +27,23 @@ type Filter = 'following' | 'saved' | 'liked';
 export default function ActivityScreen() {
   const router = useRouter();
   const styles = useStyles();
-  const { companies, jobs, followedCompanyIds, savedJobIds, likedJobIds, user, toggleFollow, toggleSave } =
-    useCareerDeck();
+  const {
+    isInitialLoading,
+    companies,
+    jobs,
+    resumes,
+    defaultResumeId,
+    followedCompanyIds,
+    savedJobIds,
+    likedJobIds,
+    user,
+    toggleFollow,
+    toggleSave,
+    setDefaultResume,
+  } = useCareerDeck();
   const [filter, setFilter] = useState<Filter>('following');
+  const [viewingResumeId, setViewingResumeId] = useState<string | null>(null);
+  const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
   const tabBarHeight = useTabBarHeight();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
@@ -74,6 +90,13 @@ export default function ActivityScreen() {
         <Text style={styles.heading} accessibilityRole="header">
           Activity
         </Text>
+
+        <ResumeShelf
+          resumes={resumes}
+          defaultResumeId={defaultResumeId}
+          loading={isInitialLoading}
+          onView={setViewingResumeId}
+        />
 
         <StatRow stats={stats} />
 
@@ -139,6 +162,16 @@ export default function ActivityScreen() {
           ) : null}
         </View>
       </Animated.ScrollView>
+
+      <ResumeViewerModal
+        resume={viewingResume}
+        isDefault={viewingResume?.id === defaultResumeId}
+        visible={viewingResume !== null}
+        onClose={() => setViewingResumeId(null)}
+        onSetDefault={() => {
+          if (viewingResume) setDefaultResume(viewingResume.id);
+        }}
+      />
     </SafeAreaView>
   );
 }
