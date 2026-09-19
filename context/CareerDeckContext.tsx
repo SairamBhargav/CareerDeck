@@ -1,11 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { mockApplications } from '@/data/mockApplications';
+import { mockCommentActivity } from '@/data/mockCommentActivity';
 import { mockCompanies } from '@/data/mockCompanies';
 import { mockJobs } from '@/data/mockJobs';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
 import { mockUser } from '@/data/mockUser';
-import type { Application, ApplicationStatus, Company, Job, Resume, User } from '@/types';
+import type {
+  Application,
+  ApplicationStatus,
+  CommentActivity,
+  Company,
+  Job,
+  Resume,
+  User,
+} from '@/types';
 
 /**
  * Single in-memory store for CareerDeck.
@@ -30,6 +39,9 @@ interface CareerDeckState {
   defaultResumeId: string;
   /** The user's tracked applications, newest activity first. */
   applications: Application[];
+  /** Replies and likes on the user's own comments, newest first. */
+  commentActivity: CommentActivity[];
+  unreadCommentCount: number;
   /** The resume currently used to pre-fill the apply sheet. */
   defaultResume: Resume | undefined;
   followedCompanyIds: string[];
@@ -53,6 +65,8 @@ interface CareerDeckState {
   logApplication: (jobId: string, source: Application['source']) => void;
   /** Whether this job is already in the tracker, so Apply can read "Applied" instead. */
   hasApplied: (jobId: string) => boolean;
+  markCommentActivityRead: (activityId: string) => void;
+  markAllCommentActivityRead: () => void;
 }
 
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
@@ -82,6 +96,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [applications, setApplications] = useState<Application[]>(mockApplications);
+  const [commentActivity, setCommentActivity] = useState<CommentActivity[]>(mockCommentActivity);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoading(false), INITIAL_LOAD_MS);
@@ -140,6 +155,20 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const markCommentActivityRead = useCallback((activityId: string) => {
+    setCommentActivity((current) =>
+      current.map((entry) => (entry.id === activityId ? { ...entry, read: true } : entry)),
+    );
+  }, []);
+
+  const markAllCommentActivityRead = useCallback(() => {
+    setCommentActivity((current) =>
+      // Same array back when there's nothing unread, so opening the tab twice doesn't
+      // re-render the list for no reason.
+      current.some((entry) => !entry.read) ? current.map((entry) => ({ ...entry, read: true })) : current,
+    );
+  }, []);
+
   const value = useMemo<CareerDeckState>(() => {
     const companies = mockCompanies.map((company) => ({
       ...company,
@@ -161,6 +190,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       defaultResumeId,
       defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
       applications,
+      commentActivity,
+      unreadCommentCount: commentActivity.filter((entry) => !entry.read).length,
       followedCompanyIds: [...followedIds],
       likedJobIds: [...likedIds],
       savedJobIds: [...savedIds],
@@ -174,6 +205,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       setApplicationStatus,
       logApplication,
       hasApplied: (jobId: string) => applications.some((application) => application.jobId === jobId),
+      markCommentActivityRead,
+      markAllCommentActivityRead,
     };
   }, [
     isInitialLoading,
@@ -183,6 +216,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     seenNewsIds,
     defaultResumeId,
     applications,
+    commentActivity,
     toggleFollow,
     toggleLike,
     toggleSave,
@@ -190,6 +224,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     setDefaultResume,
     setApplicationStatus,
     logApplication,
+    markCommentActivityRead,
+    markAllCommentActivityRead,
   ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;

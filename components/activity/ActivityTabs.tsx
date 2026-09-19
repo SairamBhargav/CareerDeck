@@ -6,13 +6,12 @@ import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated'
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 
-export type ActivityTab = 'applications' | 'saved' | 'liked' | 'following';
+export type ActivityTab = 'applications' | 'liked' | 'comments';
 
 const TABS: { key: ActivityTab; label: string }[] = [
   { key: 'applications', label: 'Applications' },
-  { key: 'saved', label: 'Saved' },
   { key: 'liked', label: 'Liked' },
-  { key: 'following', label: 'Following' },
+  { key: 'comments', label: 'Comments' },
 ];
 
 const PADDING = 4;
@@ -22,15 +21,17 @@ const SLIDE_SPRING = { damping: 20, stiffness: 220, mass: 0.7 };
 interface ActivityTabsProps {
   tab: ActivityTab;
   counts: Record<ActivityTab, number>;
+  /** Unread comment notifications — shown as a badge on the Comments tab, not a tally. */
+  unreadComments: number;
   onChange: (tab: ActivityTab) => void;
 }
 
 /**
- * Activity's four lists. Same sliding-pill idiom as search's scope tabs, so switching
+ * Activity's three lists. Same sliding-pill idiom as search's scope tabs, so switching
  * what you're looking at feels the same in both places — one object moving rather than
  * two backgrounds repainting.
  */
-export function ActivityTabs({ tab, counts, onChange }: ActivityTabsProps) {
+export function ActivityTabs({ tab, counts, unreadComments, onChange }: ActivityTabsProps) {
   const styles = useStyles();
   const [trackWidth, setTrackWidth] = useState(0);
 
@@ -62,9 +63,12 @@ export function ActivityTabs({ tab, counts, onChange }: ActivityTabsProps) {
             accessibilityState={{ selected }}
             accessibilityLabel={`${entry.label}, ${counts[entry.key]} items`}
             style={styles.tab}>
-            <Text style={[styles.label, selected ? styles.labelActive : null]} numberOfLines={1}>
-              {entry.label}
-            </Text>
+            <View style={styles.labelRow}>
+              <Text style={[styles.label, selected ? styles.labelActive : null]} numberOfLines={1}>
+                {entry.label}
+              </Text>
+              {entry.key === 'comments' && unreadComments > 0 ? <View style={styles.badge} /> : null}
+            </View>
             <Text style={[styles.count, selected ? styles.countActive : null]}>{counts[entry.key]}</Text>
           </Pressable>
         );
@@ -94,6 +98,17 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     gap: 1,
     paddingVertical: spacing.sm,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  badge: {
+    width: 6,
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.autoApply,
   },
   label: {
     fontSize: fontSize.caption + 1,

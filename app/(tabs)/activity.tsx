@@ -1,13 +1,13 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
-import { CompanyListRow } from '@/components/activity/CompanyListRow';
-import { PipelineStrip } from '@/components/activity/PipelineStrip';
+import { CommentActivityCard } from '@/components/activity/CommentActivityCard';
+import { PipelineChart } from '@/components/activity/PipelineChart';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
 import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
 import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
@@ -19,15 +19,15 @@ import { makeStyles } from '@/context/ThemeContext';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
-import type { ApplicationStatus, Company, Job } from '@/types';
+import type { ApplicationStatus, Job } from '@/types';
 
 /** Per-row stagger on a list's entrance, capped so a long list's tail isn't left waiting. */
 const STAGGER_MS = 45;
 const MAX_STAGGER_INDEX = 7;
 
 /**
- * Activity is the record of everything the user has done: the applications they're
- * tracking, the jobs they set aside, and the companies they follow.
+ * Activity is the record of a recruiting season: the applications being tracked, the
+ * postings set aside to come back to, and what people said in reply to the user.
  *
  * The tracker is self-reported on purpose. CareerDeck hands users off to Greenhouse,
  * Workday and the rest to actually apply — it has no way to read a submission back out
@@ -43,11 +43,13 @@ export default function ActivityScreen() {
     jobs,
     resumes,
     defaultResumeId,
-    followedCompanyIds,
-    toggleFollow,
+    commentActivity,
+    unreadCommentCount,
     toggleSave,
     setDefaultResume,
     setApplicationStatus,
+    markCommentActivityRead,
+    markAllCommentActivityRead,
   } = useCareerDeck();
 
   const applications = useTrackedApplications();
@@ -63,23 +65,26 @@ export default function ActivityScreen() {
   const pickerEntry = applications.find((entry) => entry.application.id === pickerFor) ?? null;
 
   const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
-  const followedCompanies = useMemo(
-    () => companies.filter((company) => followedCompanyIds.includes(company.id)),
-    [companies, followedCompanyIds],
-  );
-  const savedJobs = useMemo(() => jobs.filter((job) => job.isSaved), [jobs]);
+  const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const likedJobs = useMemo(() => jobs.filter((job) => job.isLiked), [jobs]);
+
+  // The unread badge clears a beat after the list is opened, rather than the instant
+  // the tab is pressed — long enough that the user sees which rows were new.
+  // markAllCommentActivityRead returns the same array when nothing is unread, so this
+  // settles after one pass instead of re-triggering itself.
+  useEffect(() => {
+    if (tab !== 'comments') return;
+    const timer = setTimeout(markAllCommentActivityRead, 1200);
+    return () => clearTimeout(timer);
+  }, [tab, commentActivity, markAllCommentActivityRead]);
 
   const tabCounts: Record<ActivityTab, number> = {
     applications: applications.length,
-    saved: savedJobs.length,
     liked: likedJobs.length,
-    following: followedCompanies.length,
+    comments: commentActivity.length,
   };
 
   const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
-  const handlePressCompany = (company: Company) =>
-    router.push({ pathname: '/company/[id]', params: { id: company.id } });
 
   const handleSelectStatus = (status: ApplicationStatus) => {
     if (pickerEntry) setApplicationStatus(pickerEntry.application.id, status);
@@ -98,11 +103,11 @@ export default function ActivityScreen() {
             Activity
           </Text>
           <Text style={styles.subtitle}>
-            {counts.active} in play {'·'} {counts.total} total
+            {counts.active} in play {'·'} {counts.closed} closed out
           </Text>
         </View>
 
-        <PipelineStrip counts={counts} />
+        <PipelineChart counts={counts} />
 
         <ResumeShelf
           resumes={resumes}
@@ -111,7 +116,12 @@ export default function ActivityScreen() {
           onView={setViewingResumeId}
         />
 
-        <ActivityTabs tab={tab} counts={tabCounts} onChange={setTab} />
+        <ActivityTabs
+          tab={tab}
+          counts={tabCounts}
+          unreadComments={unreadCommentCount}
+          onChange={setTab}
+        />
 
         {/* Keyed on the tab so each list runs its own entrance, rather than swapping
             rows out underneath a container that never changes. */}
@@ -135,30 +145,6 @@ export default function ActivityScreen() {
                 icon="paper-plane-outline"
                 title="No applications yet"
                 message="Apply to a posting and mark it here to start tracking your season."
-              />
-            )
-          ) : null}
-
-          {tab === 'saved' ? (
-            savedJobs.length > 0 ? (
-              savedJobs.map((job, index) => (
-                <Animated.View
-                  key={job.id}
-                  entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                  <JobFeedCard
-                    job={job}
-                    logoColor={companyById.get(job.companyId)?.logoColor}
-                    logoUrl={companyById.get(job.companyId)?.logo}
-                    onPress={() => handlePressJob(job)}
-                    onToggleSave={() => toggleSave(job.id)}
-                  />
-                </Animated.View>
-              ))
-            ) : (
-              <EmptyState
-                icon="bookmark-outline"
-                title="Nothing saved yet"
-                message="Save a posting from Home or Deck to come back to it here."
               />
             )
           ) : null}
@@ -187,24 +173,31 @@ export default function ActivityScreen() {
             )
           ) : null}
 
-          {tab === 'following' ? (
-            followedCompanies.length > 0 ? (
-              followedCompanies.map((company, index) => (
-                <Animated.View
-                  key={company.id}
-                  entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                  <CompanyListRow
-                    company={company}
-                    onPress={() => handlePressCompany(company)}
-                    onToggleFollow={() => toggleFollow(company.id)}
-                  />
-                </Animated.View>
-              ))
+          {tab === 'comments' ? (
+            commentActivity.length > 0 ? (
+              commentActivity.map((entry, index) => {
+                const job = jobById.get(entry.jobId);
+                return (
+                  <Animated.View
+                    key={entry.id}
+                    entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
+                    <CommentActivityCard
+                      entry={entry}
+                      jobTitle={job?.title ?? 'A posting'}
+                      companyName={job?.companyName ?? ''}
+                      onPress={() => {
+                        markCommentActivityRead(entry.id);
+                        if (job) handlePressJob(job);
+                      }}
+                    />
+                  </Animated.View>
+                );
+              })
             ) : (
               <EmptyState
-                icon="business-outline"
-                title="Not following anyone yet"
-                message="Follow companies on Home and their news shows up in your stories."
+                icon="chatbubbles-outline"
+                title="No replies yet"
+                message="Comment on a posting in Deck and replies to it land here."
               />
             )
           ) : null}
