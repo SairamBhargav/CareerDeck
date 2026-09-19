@@ -1,18 +1,23 @@
 import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { ReelFeed } from '@/hooks/useJobFeeds';
 
-const TAB_WIDTH = 100;
-const TRACK_PADDING = 4;
-const SPRING = { damping: 16, stiffness: 220 };
+/**
+ * Deliberately a timing curve, not a spring: the bottom tab bar's indicator is allowed
+ * to overshoot and settle, but up here the same bounce reads as jello.
+ */
+const FADE = { duration: 180, easing: Easing.out(Easing.cubic) };
+
+/** How far back the unselected word sits — dimmed, not hidden. */
+const INACTIVE_OPACITY = 0.45;
 
 const TABS: { key: ReelFeed; label: string }[] = [
   { key: 'following', label: 'Following' },
-  { key: 'forYou', label: 'For You' },
+  { key: 'forYou', label: 'Explore' },
 ];
 
 interface FeedToggleProps {
@@ -20,70 +25,92 @@ interface FeedToggleProps {
   onChange: (feed: ReelFeed) => void;
 }
 
-/** Following / For You switch: a segmented-control pill that springs to whichever is selected. */
+/**
+ * Following / For You as bare words at the top of the feed, the way Reels and TikTok do
+ * it — no track, no pill, no sliding indicator. The selected feed is simply the one that
+ * reads louder: full weight and full opacity against a dimmed sibling.
+ */
 export function FeedToggle({ value, onChange }: FeedToggleProps) {
   const styles = useStyles();
-  const activeIndex = TABS.findIndex((tab) => tab.key === value);
-  const pillX = useSharedValue(activeIndex * TAB_WIDTH);
-
-  useEffect(() => {
-    pillX.value = withSpring(activeIndex * TAB_WIDTH, SPRING);
-  }, [activeIndex, pillX]);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: pillX.value }],
-  }));
 
   return (
-    <View style={styles.track} accessibilityRole="tablist">
-      <Animated.View style={[styles.pill, { width: TAB_WIDTH - TRACK_PADDING * 2 }, pillStyle]} />
-
-      {TABS.map((tab) => {
-        const selected = tab.key === value;
-        return (
-          <Pressable
-            key={tab.key}
-            onPress={() => onChange(tab.key)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            accessibilityLabel={`${tab.label} feed`}
-            style={styles.tab}>
-            <Text style={[styles.label, selected ? styles.labelActive : styles.labelInactive]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View style={styles.row} accessibilityRole="tablist">
+      {TABS.map((tab, index) => (
+        <View key={tab.key} style={styles.item}>
+          {index > 0 ? <View style={styles.divider} /> : null}
+          <FeedTab label={tab.label} selected={tab.key === value} onPress={() => onChange(tab.key)} />
+        </View>
+      ))}
     </View>
   );
 }
 
+interface FeedTabProps {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
+function FeedTab({ label, selected, onPress }: FeedTabProps) {
+  const styles = useStyles();
+  const emphasis = useSharedValue(selected ? 1 : 0);
+
+  useEffect(() => {
+    emphasis.value = withTiming(selected ? 1 : 0, FADE);
+  }, [selected, emphasis]);
+
+  // Opacity rather than two colours: it crossfades cleanly and stays legible over both
+  // the light shell and a dark, company-tinted reel.
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: INACTIVE_OPACITY + emphasis.value * (1 - INACTIVE_OPACITY),
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${label} feed`}
+      hitSlop={8}
+      style={({ pressed }) => [styles.tab, pressed ? styles.pressed : null]}>
+      <Animated.Text style={[styles.label, selected ? styles.labelSelected : null, animatedStyle]}>
+        {label}
+      </Animated.Text>
+    </Pressable>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
-  track: {
+  row: {
     flexDirection: 'row',
-    backgroundColor: colors.backgroundMuted,
-    borderRadius: radius.pill,
-    padding: TRACK_PADDING,
-  },
-  pill: {
-    position: 'absolute',
-    top: TRACK_PADDING,
-    left: TRACK_PADDING,
-    bottom: TRACK_PADDING,
-    borderRadius: radius.pill,
-    // Not `surface`: in dark that matches the track exactly and the selection vanishes.
-    backgroundColor: colors.controlSurface,
-    ...colors.shadowSoft,
-  },
-  tab: {
-    width: TAB_WIDTH,
-    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  label: {
-    fontSize: fontSize.small,
-    fontWeight: '600',
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  labelActive: { color: colors.text, fontWeight: '700' },
-  labelInactive: { color: colors.textTertiary },
+  divider: {
+    width: 1,
+    height: 13,
+    borderRadius: 1,
+    marginHorizontal: spacing.md,
+    backgroundColor: colors.textTertiary,
+    opacity: 0.4,
+  },
+  tab: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  label: {
+    fontSize: fontSize.title,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    color: colors.text,
+  },
+  labelSelected: {
+    fontWeight: '700',
+  },
 }));

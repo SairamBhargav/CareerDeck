@@ -34,11 +34,12 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: 'space-between',
   },
   greeting: {
-    fontSize: fontSize.hero,
+    // One step down the scale from `hero`, which crowded the avatar beside it.
+    fontSize: fontSize.display,
     fontWeight: '700',
     color: colors.text,
-    letterSpacing: -0.8,
-    lineHeight: 40,
+    letterSpacing: -0.7,
+    lineHeight: 36,
   },
   avatar: {
     width: 44,

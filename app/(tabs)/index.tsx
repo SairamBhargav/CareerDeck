@@ -7,18 +7,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { HomeJobFeed } from '@/components/home/HomeJobFeed';
-import { NewsCarousel } from '@/components/home/NewsCarousel';
-import { ResumeCarousel } from '@/components/home/ResumeCarousel';
-import { ResumeViewerModal } from '@/components/home/ResumeViewerModal';
-import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
+import { StoriesRow } from '@/components/home/StoriesRow';
+import { StoryViewer } from '@/components/stories/StoryViewer';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useJobFeeds } from '@/hooks/useJobFeeds';
-import { useNewsFeed } from '@/hooks/useNewsFeed';
+import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
-import type { Job, NewsItem } from '@/types';
+import type { Job, StoryGroup } from '@/types';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -27,30 +25,31 @@ export default function HomeScreen() {
     isInitialLoading,
     user,
     companies,
-    resumes,
-    defaultResumeId,
+    seenNewsIds,
     toggleFollow,
     toggleSave,
-    setDefaultResume,
+    markNewsSeen,
   } = useCareerDeck();
   const { forYouJobs, suggestedCompanies } = useJobFeeds();
-  const newsFeed = useNewsFeed();
+  const storyGroups = useStoryGroups();
   const tabBarHeight = useTabBarHeight();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
-  const [viewingResumeId, setViewingResumeId] = useState<string | null>(null);
-  const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
+  // A snapshot of the rings taken at open time. The live `storyGroups` array re-sorts as
+  // stories are marked watched, which would shuffle the deck out from under an open
+  // viewer mid-playback.
+  const [storySession, setStorySession] = useState<StorySession | null>(null);
 
   const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
-  const logoColorByCompany = useMemo(
-    () => new Map(companies.map((company) => [company.id, company.logoColor])),
-    [companies],
-  );
-
-  const handlePressNews = (item: NewsItem) =>
-    router.push({ pathname: '/news/[id]', params: { id: item.id } });
 
   const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
+
+  const handlePressStory = (group: StoryGroup, index: number) =>
+    setStorySession({
+      groups: storyGroups,
+      groupIndex: index,
+      itemIndex: firstUnseenIndex(group, seenNewsIds),
+    });
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -67,60 +66,44 @@ export default function HomeScreen() {
           />
         </View>
 
-        <ResumeCarousel
-          resumes={resumes}
-          defaultResumeId={defaultResumeId}
-          loading={isInitialLoading}
-          onView={setViewingResumeId}
-          onSeeAll={() => router.push('/profile')}
-        />
-
-        <SuggestedCompanies
-          companies={suggestedCompanies}
-          loading={isInitialLoading}
-          onToggleFollow={toggleFollow}
-          onSeeAll={() => router.push('/profile')}
-        />
-
-        <View style={styles.feedSection}>
-          <View style={styles.feedHeading}>
-            <SectionHeader title="Your News" />
-          </View>
-          <NewsCarousel
-            items={newsFeed}
-            companyColors={logoColorByCompany}
-            loading={isInitialLoading}
-            onPressItem={handlePressNews}
-          />
-        </View>
+        <StoriesRow groups={storyGroups} loading={isInitialLoading} onPressGroup={handlePressStory} />
 
         <View style={styles.feedSection}>
           <View style={styles.feedHeading}>
             <SectionHeader title="Your Feed" actionLabel="See all" onActionPress={() => router.push('/reels')} />
           </View>
-          <View style={styles.feedPadded}>
-            <HomeJobFeed
-              jobs={forYouJobs}
-              companyById={companyById}
-              loading={isInitialLoading}
-              onPressJob={handlePressJob}
-              onToggleSave={toggleSave}
-            />
-          </View>
+          <HomeJobFeed
+            jobs={forYouJobs}
+            companyById={companyById}
+            suggestedCompanies={suggestedCompanies}
+            loading={isInitialLoading}
+            onPressJob={handlePressJob}
+            onToggleSave={toggleSave}
+            onToggleFollow={toggleFollow}
+            onSeeAllCompanies={() => router.push('/profile')}
+          />
         </View>
       </Animated.ScrollView>
 
-      <ResumeViewerModal
-        resume={viewingResume}
-        isDefault={viewingResume?.id === defaultResumeId}
-        visible={viewingResume !== null}
-        onClose={() => setViewingResumeId(null)}
-        onSetDefault={() => {
-          if (viewingResume) setDefaultResume(viewingResume.id);
-        }}
-      />
+      {storySession ? (
+        <StoryViewer
+          groups={storySession.groups}
+          startGroupIndex={storySession.groupIndex}
+          startItemIndex={storySession.itemIndex}
+          companyById={companyById}
+          onClose={() => setStorySession(null)}
+          onSeen={markNewsSeen}
+          onToggleFollow={toggleFollow}
+        />
+      ) : null}
     </SafeAreaView>
   );
+}
+
+interface StorySession {
+  groups: StoryGroup[];
+  groupIndex: number;
+  itemIndex: number;
 }
 
 function initialsOf(firstName: string, lastName: string): string {
@@ -143,9 +126,6 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.md,
   },
   feedHeading: {
-    paddingHorizontal: screenPadding,
-  },
-  feedPadded: {
     paddingHorizontal: screenPadding,
   },
 }));
