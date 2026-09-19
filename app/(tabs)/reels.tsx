@@ -7,6 +7,7 @@ import Animated, {
   runOnJS,
   useAnimatedScrollHandler,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withSpring,
@@ -20,14 +21,17 @@ import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
 import { INDICATOR_TRAVEL, ReelsRefreshIndicator } from '@/components/reels/ReelsRefreshIndicator';
-import { spacing } from '@/constants/theme';
+import { ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
+import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useJobFeeds, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
+import { resumeMatchScore } from '@/utils/resumeMatch';
 
 const TOGGLE_HEIGHT = 44;
+const MATCH_RING_SIZE = 56;
 
 /** How far past the top edge the user has to drag before a release triggers a refresh. */
 const PULL_THRESHOLD = 88;
@@ -82,6 +86,33 @@ export default function ReelsScreen() {
 
   const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
 
+  // How well the default resume matches each job on screen, in the same order as
+  // `jobs` so the scroll-position math below can index straight into it.
+  const matchScores = useMemo(
+    () => jobs.map((job) => resumeMatchScore(job, defaultResume)),
+    [jobs, defaultResume],
+  );
+
+  // Raw scroll offset, shared with the scroll handler below — a second signal read off
+  // the same `onScroll` event `pull` already listens to, not a separate subscription.
+  const scrollY = useSharedValue(0);
+
+  // The match ring's live value: interpolated between the current and next reel's score
+  // by how far through the swipe the drag is, so dragging between two jobs morphs the
+  // ring smoothly from one score to the other instead of snapping at the page boundary.
+  const matchProgress = useDerivedValue(() => {
+    if (pageHeight <= 0 || matchScores.length === 0) return matchScores[0] ?? 0;
+
+    const floatIndex = Math.min(Math.max(scrollY.value / pageHeight, 0), matchScores.length - 1);
+    const lowerIndex = Math.floor(floatIndex);
+    const upperIndex = Math.min(lowerIndex + 1, matchScores.length - 1);
+    const fraction = floatIndex - lowerIndex;
+
+    const lowerScore = matchScores[lowerIndex] ?? 0;
+    const upperScore = matchScores[upperIndex] ?? lowerScore;
+    return lowerScore + (upperScore - lowerScore) * fraction;
+  }, [matchScores, pageHeight]);
+
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setPageHeight(event.nativeEvent.layout.height);
   }, []);
@@ -126,6 +157,7 @@ export default function ReelsScreen() {
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       'worklet';
+      scrollY.value = event.contentOffset.y;
       pull.value = Math.max(0, -event.contentOffset.y) / PULL_THRESHOLD;
 
       if (pull.value >= 1 && armed.value === 0) {
@@ -222,6 +254,16 @@ export default function ReelsScreen() {
         <FeedToggle value={feed} onChange={handleFeedChange} />
       </View>
 
+      {jobs.length > 0 ? (
+        <View
+          style={[
+            styles.matchRingWrap,
+            { top: insets.top + (TOGGLE_HEIGHT - MATCH_RING_SIZE) / 2 },
+          ]}>
+          <ResumeMatchRing progress={matchProgress} />
+        </View>
+      ) : null}
+
       <JobDetailsModal
         job={detailsJob}
         logoColor={detailsJob ? companyById.get(detailsJob.companyId)?.logoColor : undefined}
@@ -261,6 +303,10 @@ const useStyles = makeStyles((colors) => ({
     left: 0,
     right: 0,
     alignItems: 'center',
+  },
+  matchRingWrap: {
+    position: 'absolute',
+    right: screenPadding,
   },
   empty: {
     flex: 1,
