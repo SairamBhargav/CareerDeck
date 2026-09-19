@@ -51,3 +51,40 @@ export function useCompanyJobs(companyId: string | undefined): Job[] {
     [jobs, companyId],
   );
 }
+
+export type JobSort = 'recent' | 'salary' | 'company';
+
+/** Hours-per-year used to put an hourly rate on the same scale as a salary when sorting. */
+const FULL_TIME_HOURS = 2080;
+
+/**
+ * A single comparable number for a posting's pay. Hourly roles are annualized so an
+ * internship at $52/hr sorts against a new-grad salary rather than below every one of
+ * them, and postings with no salary listed sort last instead of reading as $0.
+ */
+function payFloor(job: Job): number {
+  const top = job.salaryMax ?? job.salaryMin;
+  if (top === null) return -1;
+  return job.salaryPeriod === 'hour' ? top * FULL_TIME_HOURS : top;
+}
+
+/** Sorts a copy — callers hold onto the original feed order. */
+export function sortJobs(jobs: Job[], sort: JobSort): Job[] {
+  const sorted = [...jobs];
+
+  switch (sort) {
+    case 'salary':
+      // Newest first within an equal pay band, so the tie-break still surfaces fresh posts.
+      return sorted.sort((a, b) => payFloor(b) - payFloor(a) || byNewest(a, b));
+    case 'company':
+      return sorted.sort((a, b) => a.companyName.localeCompare(b.companyName) || byNewest(a, b));
+    case 'recent':
+    default:
+      return sorted.sort(byNewest);
+  }
+}
+
+/** The Home feed under the user's chosen ordering. */
+export function useSortedJobs(jobs: Job[], sort: JobSort): Job[] {
+  return useMemo(() => sortJobs(jobs, sort), [jobs, sort]);
+}

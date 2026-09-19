@@ -4,7 +4,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
-import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { FollowButton } from '@/components/common/FollowButton';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
@@ -62,10 +62,11 @@ export default function CompanyDetailScreen() {
         </Text>
 
         <View style={styles.action}>
-          <PrimaryButton
-            label={company.isFollowing ? 'Following' : 'Follow'}
-            onPress={() => toggleFollow(company.id)}
-            variant={company.isFollowing ? 'secondary' : 'primary'}
+          <FollowButton
+            isFollowing={company.isFollowing}
+            companyName={company.name}
+            onToggle={() => toggleFollow(company.id)}
+            size="md"
           />
         </View>
       </View>

@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { FollowButton } from '@/components/common/FollowButton';
+import { fontSize, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
 import { formatFollowerCount } from '@/utils/format';
@@ -37,20 +38,13 @@ export function CompanyResultRow({ company, onPress, onToggleFollow }: CompanyRe
         </Text>
       </View>
 
-      <Pressable
-        onPress={onToggleFollow}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`${company.isFollowing ? 'Unfollow' : 'Follow'} ${company.name}`}
-        style={({ pressed }) => [
-          styles.follow,
-          company.isFollowing ? styles.following : null,
-          pressed ? styles.pressed : null,
-        ]}>
-        <Text style={[styles.followLabel, company.isFollowing ? styles.followingLabel : null]}>
-          {company.isFollowing ? 'Following' : 'Follow'}
-        </Text>
-      </Pressable>
+      <FollowButton
+        isFollowing={company.isFollowing}
+        companyName={company.name}
+        onToggle={onToggleFollow}
+        size="sm"
+        style={styles.follow}
+      />
     </Pressable>
   );
 }
@@ -78,23 +72,10 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     color: colors.textTertiary,
   },
+  // Overrides FollowButton's stretch-to-fill default: in a row it should hug its label
+  // and stay centred rather than growing to the row's full height.
   follow: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-  },
-  following: {
-    backgroundColor: 'transparent',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-  },
-  followLabel: {
-    fontSize: fontSize.small,
-    fontWeight: '700',
-    color: colors.accentText,
-  },
-  followingLabel: {
-    color: colors.textSecondary,
+    alignSelf: 'center',
+    flexShrink: 0,
   },
 }));

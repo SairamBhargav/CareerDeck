@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
+import { FollowButton } from '@/components/common/FollowButton';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
@@ -37,22 +38,12 @@ export function CompanySuggestionCard({ company, onPress, onToggleFollow }: Comp
         </Text>
       </View>
 
-      <Pressable
-        onPress={onToggleFollow}
-        accessibilityRole="button"
-        accessibilityState={{ selected: isFollowing }}
-        accessibilityLabel={
-          isFollowing ? `Unfollow ${company.name}` : `Follow ${company.name}`
-        }
-        style={({ pressed }) => [
-          styles.button,
-          isFollowing ? styles.buttonFollowing : styles.buttonFollow,
-          pressed ? styles.pressed : null,
-        ]}>
-        <Text style={[styles.buttonLabel, isFollowing ? styles.labelFollowing : styles.labelFollow]}>
-          {isFollowing ? 'Following' : 'Follow'}
-        </Text>
-      </Pressable>
+      <FollowButton
+        isFollowing={isFollowing}
+        companyName={company.name}
+        onToggle={onToggleFollow}
+        size="sm"
+      />
     </Pressable>
   );
 }
@@ -84,30 +75,5 @@ const useStyles = makeStyles((colors) => ({
   followers: {
     fontSize: fontSize.caption,
     color: colors.textTertiary,
-  },
-  button: {
-    minHeight: 32,
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-  },
-  buttonFollow: {
-    backgroundColor: colors.accent,
-  },
-  buttonFollowing: {
-    backgroundColor: colors.backgroundMuted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  buttonLabel: {
-    fontSize: fontSize.caption + 1,
-    fontWeight: '700',
-  },
-  labelFollow: { color: colors.accentText },
-  labelFollowing: { color: colors.textSecondary },
-  pressed: {
-    opacity: 0.7,
   },
 }));

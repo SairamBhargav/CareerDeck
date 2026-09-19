@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
-import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { FollowButton } from '@/components/common/FollowButton';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
@@ -36,10 +36,11 @@ export function CompanyListRow({ company, onPress, onToggleFollow }: CompanyList
         </Text>
       </View>
 
-      <PrimaryButton
-        label="Following"
-        variant="secondary"
-        onPress={onToggleFollow}
+      <FollowButton
+        isFollowing={company.isFollowing}
+        companyName={company.name}
+        onToggle={onToggleFollow}
+        size="sm"
         style={styles.button}
       />
     </Pressable>
@@ -73,8 +74,9 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.caption + 1,
     color: colors.textTertiary,
   },
+  // FollowButton stretches to fill by default; in a row it should hug its label.
   button: {
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
+    alignSelf: 'center',
+    flexShrink: 0,
   },
 }));

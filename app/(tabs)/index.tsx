@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { HomeHeader } from '@/components/home/HomeHeader';
+import { FeedSortBar } from '@/components/home/FeedSortBar';
 import { HomeJobFeed } from '@/components/home/HomeJobFeed';
 import { SearchBar } from '@/components/home/SearchBar';
 import { StoriesRow } from '@/components/home/StoriesRow';
@@ -16,7 +17,7 @@ import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
-import { useJobFeeds } from '@/hooks/useJobFeeds';
+import { useJobFeeds, useSortedJobs, type JobSort } from '@/hooks/useJobFeeds';
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Company, Job, StoryGroup } from '@/types';
@@ -35,6 +36,8 @@ export default function HomeScreen() {
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sort, setSort] = useState<JobSort>('recent');
+  const sortedJobs = useSortedJobs(forYouJobs, sort);
 
   // A snapshot of the rings taken at open time. The live `storyGroups` array re-sorts as
   // stories are marked watched, which would shuffle the deck out from under an open
@@ -86,14 +89,18 @@ export default function HomeScreen() {
           <View style={styles.feedHeading}>
             <SectionHeader title="Your Feed" actionLabel="See all" onActionPress={() => router.push('/reels')} />
           </View>
+
+          <FeedSortBar sort={sort} onChange={setSort} />
+
           <Animated.View
-            // Keyed on the loading flag so the fade runs once, when the skeletons give
-            // way to real cards, rather than on every save or follow.
-            key={isInitialLoading ? 'feed-loading' : 'feed-ready'}
+            // Keyed on the loading flag and the sort, so the fade runs when the skeletons
+            // give way to real cards and again when the order changes underneath — but
+            // not on every save or follow.
+            key={isInitialLoading ? 'feed-loading' : `feed-${sort}`}
             entering={FadeIn.duration(REVEAL_MS)}
             style={styles.feedPadded}>
             <HomeJobFeed
-              jobs={forYouJobs}
+              jobs={sortedJobs}
               companyById={companyById}
               loading={isInitialLoading}
               onPressJob={handlePressJob}
