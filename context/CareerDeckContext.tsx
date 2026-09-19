@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { mockApplications } from '@/data/mockApplications';
 import { mockCompanies } from '@/data/mockCompanies';
 import { mockJobs } from '@/data/mockJobs';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
 import { mockUser } from '@/data/mockUser';
-import type { Company, Job, Resume, User } from '@/types';
+import type { Application, ApplicationStatus, Company, Job, Resume, User } from '@/types';
 
 /**
  * Single in-memory store for CareerDeck.
@@ -27,6 +28,8 @@ interface CareerDeckState {
   companies: Company[];
   resumes: Resume[];
   defaultResumeId: string;
+  /** The user's tracked applications, newest activity first. */
+  applications: Application[];
   /** The resume currently used to pre-fill the apply sheet. */
   defaultResume: Resume | undefined;
   followedCompanyIds: string[];
@@ -41,6 +44,15 @@ interface CareerDeckState {
   /** One-way: a story that has been watched stays watched for the session. */
   markNewsSeen: (newsId: string) => void;
   setDefaultResume: (resumeId: string) => void;
+  /** Moves an application to a new stage and stamps `updatedAt`. */
+  setApplicationStatus: (applicationId: string, status: ApplicationStatus) => void;
+  /**
+   * Records that the user applied to a job. Called after they come back from the
+   * employer's site and confirm it — nothing here can observe a real submission.
+   */
+  logApplication: (jobId: string, source: Application['source']) => void;
+  /** Whether this job is already in the tracker, so Apply can read "Applied" instead. */
+  hasApplied: (jobId: string) => boolean;
 }
 
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
@@ -69,6 +81,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [seenNewsIds, setSeenNewsIds] = useState<Set<string>>(() => new Set<string>());
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [applications, setApplications] = useState<Application[]>(mockApplications);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoading(false), INITIAL_LOAD_MS);
@@ -97,6 +110,36 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     setDefaultResumeId(resumeId);
   }, []);
 
+  const setApplicationStatus = useCallback((applicationId: string, status: ApplicationStatus) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setApplications((current) =>
+      current.map((application) =>
+        application.id === applicationId ? { ...application, status, updatedAt: today } : application,
+      ),
+    );
+  }, []);
+
+  const logApplication = useCallback((jobId: string, source: Application['source']) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setApplications((current) => {
+      // Re-applying to something already tracked shouldn't create a duplicate row —
+      // the user is telling us about the same application again.
+      if (current.some((application) => application.jobId === jobId)) return current;
+      return [
+        {
+          id: `app-${jobId}-${Date.now()}`,
+          jobId,
+          status: 'applied',
+          source,
+          appliedAt: today,
+          updatedAt: today,
+          selfReported: true,
+        },
+        ...current,
+      ];
+    });
+  }, []);
+
   const value = useMemo<CareerDeckState>(() => {
     const companies = mockCompanies.map((company) => ({
       ...company,
@@ -117,6 +160,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       resumes: mockResumes,
       defaultResumeId,
       defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
+      applications,
       followedCompanyIds: [...followedIds],
       likedJobIds: [...likedIds],
       savedJobIds: [...savedIds],
@@ -127,6 +171,9 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       toggleSave,
       markNewsSeen,
       setDefaultResume,
+      setApplicationStatus,
+      logApplication,
+      hasApplied: (jobId: string) => applications.some((application) => application.jobId === jobId),
     };
   }, [
     isInitialLoading,
@@ -135,11 +182,14 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     savedIds,
     seenNewsIds,
     defaultResumeId,
+    applications,
     toggleFollow,
     toggleLike,
     toggleSave,
     markNewsSeen,
     setDefaultResume,
+    setApplicationStatus,
+    logApplication,
   ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;

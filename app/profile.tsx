@@ -19,7 +19,8 @@ import { makeStyles } from '@/context/ThemeContext';
 export default function ProfileScreen() {
   const router = useRouter();
   const styles = useStyles();
-  const { user, resumes, defaultResume, followedCompanyIds, savedJobIds, likedJobIds } = useCareerDeck();
+  const { user, resumes, defaultResume, applications, followedCompanyIds, savedJobIds, likedJobIds } =
+    useCareerDeck();
 
   const careerRows: RowGroupItem[] = [
     {
@@ -32,7 +33,9 @@ export default function ProfileScreen() {
       value: `${resumes.length} saved`,
     },
     { key: 'preferences', icon: 'options-outline', label: 'Preferences', value: `${user.preferredRoles.length} roles` },
-    { key: 'applications', icon: 'briefcase-outline', label: 'Applications', value: String(user.appliedCount) },
+    // Counted off the tracker rather than the seeded figure on `user`, so this can't
+    // drift away from what Activity shows.
+    { key: 'applications', icon: 'briefcase-outline', label: 'Applications', value: String(applications.length) },
     {
       key: 'following',
       icon: 'business-outline',

@@ -1,11 +1,37 @@
+import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
-import type { Job } from '@/types';
+import type { ApplicationSource, Job } from '@/types';
+
+/**
+ * Which applicant tracking system a posting's URL points at. CareerDeck can't submit
+ * on the user's behalf to any of them — Greenhouse and Lever gate submission behind
+ * per-employer API keys, and every Workday customer is a separate tenant with its own
+ * account system — so the only honest flow is: hand off, then ask.
+ */
+function sourceFromUrl(url: string): ApplicationSource {
+  const target = url.toLowerCase();
+  if (target.includes('greenhouse')) return 'greenhouse';
+  if (target.includes('workday') || target.includes('myworkdayjobs')) return 'workday';
+  if (target.includes('lever')) return 'lever';
+  if (target.includes('ashby')) return 'ashby';
+  return 'company';
+}
+
+const SOURCE_LABEL: Record<ApplicationSource, string> = {
+  greenhouse: 'Greenhouse',
+  workday: 'Workday',
+  lever: 'Lever',
+  ashby: 'Ashby',
+  company: "the company's site",
+};
 
 interface ApplicationModalProps {
   job: Job | null;
@@ -17,19 +43,40 @@ interface ApplicationModalProps {
 
 /**
  * Bottom sheet shown when a reel's Apply action is pressed.
- * Nothing is submitted - this is the entry point for the future AI-assisted review flow.
+ *
+ * Two steps, because there is no third option: send the user to the employer's ATS,
+ * then ask whether they finished. Nothing here can observe a real submission, so the
+ * sheet asks instead of guessing, and what the user says is what Activity tracks.
  */
 export function ApplicationModal({ job, resumeName, visible, onClose }: ApplicationModalProps) {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const [reviewRequested, setReviewRequested] = useState(false);
+  const { logApplication, hasApplied } = useCareerDeck();
+  const [handedOff, setHandedOff] = useState(false);
 
-  // Reset the confirmation message whenever a different job opens the sheet.
+  // Reset the step whenever a different job opens the sheet.
   useEffect(() => {
-    if (!visible) setReviewRequested(false);
+    if (!visible) setHandedOff(false);
   }, [visible]);
 
   if (!job) return null;
+
+  const source = sourceFromUrl(job.applicationUrl);
+  const alreadyTracked = hasApplied(job.id);
+
+  const handleOpen = () => {
+    setHandedOff(true);
+    Linking.openURL(job.applicationUrl).catch(() => {
+      // A dead link shouldn't strand the sheet mid-flow — the confirm step still
+      // stands, since the user may well have applied another way.
+    });
+  };
+
+  const handleConfirm = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    logApplication(job.id, source);
+    onClose();
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -49,19 +96,27 @@ export function ApplicationModal({ job, resumeName, visible, onClose }: Applicat
           <DetailRow label="Resume" value={resumeName} />
         </View>
 
-        {reviewRequested ? (
-          <Text style={styles.notice} accessibilityLiveRegion="polite">
-            Application review flow coming soon.
-          </Text>
-        ) : null}
+        <Text style={styles.notice}>
+          {alreadyTracked
+            ? "This one's already in your Activity tracker."
+            : `${job.companyName} takes applications on ${SOURCE_LABEL[source]}. We'll send you over, then you can mark it here.`}
+        </Text>
 
         <View style={styles.actions}>
-          <PrimaryButton
-            label="Review Application"
-            onPress={() => setReviewRequested(true)}
-            accessibilityHint="Opens the application review step. Nothing is submitted yet."
-          />
-          <PrimaryButton label="Cancel" variant="ghost" onPress={onClose} />
+          {handedOff ? (
+            <PrimaryButton
+              label="I applied — track it"
+              onPress={handleConfirm}
+              accessibilityHint="Adds this job to your Activity tracker as applied."
+            />
+          ) : (
+            <PrimaryButton
+              label={`Continue to ${SOURCE_LABEL[source]}`}
+              onPress={handleOpen}
+              accessibilityHint="Opens the employer's application page in your browser."
+            />
+          )}
+          <PrimaryButton label={handedOff ? 'Not yet' : 'Cancel'} variant="ghost" onPress={onClose} />
         </View>
       </View>
     </Modal>
@@ -134,8 +189,8 @@ const useStyles = makeStyles((colors) => ({
   },
   notice: {
     fontSize: fontSize.small,
+    lineHeight: 19,
     color: colors.textSecondary,
-    textAlign: 'center',
   },
   actions: {
     gap: spacing.sm,
