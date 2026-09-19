@@ -2,8 +2,8 @@ import { FlatList, View } from 'react-native';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { Skeleton } from '@/components/common/Skeleton';
-import { STORY_CIRCLE_WIDTH, StoryCircle } from '@/components/home/StoryCircle';
-import { screenPadding, spacing } from '@/constants/theme';
+import { STORY_TILE_SIZE, StoryTile } from '@/components/home/StoryTile';
+import { radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { StoryGroup } from '@/types';
 
@@ -36,8 +36,8 @@ export function StoriesRow({ groups, loading, onPressGroup }: StoriesRowProps) {
         <View style={styles.skeletonRow}>
           {Array.from({ length: SKELETON_COUNT }, (_, index) => (
             <View key={index} style={styles.skeletonItem}>
-              <Skeleton width={STORY_CIRCLE_WIDTH} height={STORY_CIRCLE_WIDTH} borderRadius={999} />
-              <Skeleton width={STORY_CIRCLE_WIDTH - 16} height={9} borderRadius={4} />
+              <Skeleton width={STORY_TILE_SIZE} height={STORY_TILE_SIZE} borderRadius={radius.xl} />
+              <Skeleton width={STORY_TILE_SIZE - 16} height={9} borderRadius={4} />
             </View>
           ))}
         </View>
@@ -51,7 +51,7 @@ export function StoriesRow({ groups, loading, onPressGroup }: StoriesRowProps) {
           initialNumToRender={6}
           windowSize={5}
           renderItem={({ item, index }) => (
-            <StoryCircle group={item} onPress={() => onPressGroup(item, index)} />
+            <StoryTile group={item} onPress={() => onPressGroup(item, index)} />
           )}
         />
       )}
@@ -75,6 +75,6 @@ const useStyles = makeStyles(() => ({
   skeletonItem: {
     alignItems: 'center',
     gap: spacing.xs + 1,
-    height: STORY_CIRCLE_WIDTH + LABEL_HEIGHT,
+    height: STORY_TILE_SIZE + LABEL_HEIGHT,
   },
 }));

@@ -125,13 +125,7 @@ export function StoryPage({
                 <Ionicons name="trending-up" size={44} color={colors.textInverse} />
               </View>
             ) : (
-              <CompanyLogo
-                logo={group.logo}
-                name={group.name}
-                color={group.logoColor}
-                size="xl"
-                shape="circle"
-              />
+              <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="xl" />
             )}
           </View>
 
@@ -151,13 +145,7 @@ export function StoryPage({
         <StoryProgressBar count={group.items.length} activeIndex={itemIndex} progress={progress} />
 
         <View style={styles.headerRow} pointerEvents="box-none">
-          <CompanyLogo
-            logo={group.logo}
-            name={group.name}
-            color={group.logoColor}
-            size="sm"
-            shape="circle"
-          />
+          <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="sm" />
           <Text style={styles.headerName} numberOfLines={1}>
             {group.name}
           </Text>
@@ -205,7 +193,7 @@ const styles = StyleSheet.create({
   industryMark: {
     width: 96,
     height: 96,
-    borderRadius: radius.pill,
+    borderRadius: radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: INK,
