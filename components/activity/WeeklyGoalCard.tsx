@@ -30,15 +30,20 @@ interface WeeklyGoalCardProps {
 export function WeeklyGoalCard({ goal, onEditGoal }: WeeklyGoalCardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const { autoApplyCredits, awardStreakBonus } = useCareerDeck();
+  const { autoApplyCredits, awardStreakBonus, lastStreakAward } = useCareerDeck();
 
-  // The week's bonus is paid the moment the goal is reached rather than on Monday: the
-  // reward has to land while the user is looking at the thing they just finished.
+  // The bonus is paid the moment the goal is reached rather than on Monday: the reward
+  // has to land while the user is looking at the thing they just finished.
   // awardStreakBonus is idempotent per week, so re-renders can't pay it twice.
   const currentWeekKey = goal.history[goal.history.length - 1]?.key;
   useEffect(() => {
     if (goal.met && currentWeekKey) awardStreakBonus(currentWeekKey, goal.bonusThisWeek);
   }, [goal.met, goal.bonusThisWeek, currentWeekKey, awardStreakBonus]);
+
+  // What this week actually paid, which a full bank can cut short. Any other week's
+  // receipt is somebody else's news.
+  const awarded =
+    lastStreakAward && lastStreakAward.weekKey === currentWeekKey ? lastStreakAward.amount : null;
 
   return (
     <View style={styles.card}>
@@ -103,14 +108,19 @@ export function WeeklyGoalCard({ goal, onEditGoal }: WeeklyGoalCardProps) {
           </Text>
         </View>
 
-        <Text style={styles.rewardNote}>
-          {goal.met
-            ? `+${goal.bonusThisWeek} earned this week`
-            : `+${goal.bonusThisWeek} when you hit ${goal.target}`}
-        </Text>
+        <Text style={styles.rewardNote}>{rewardNoteFor(goal, awarded)}</Text>
       </View>
     </View>
   );
+}
+
+/** `awarded` is what this week actually paid, or null when it hasn't paid yet. */
+function rewardNoteFor(goal: WeeklyGoal, awarded: number | null): string {
+  if (!goal.met) return `+${goal.bonusThisWeek} when you hit ${goal.target}`;
+  if (awarded === null) return 'Goal met';
+  // A met week that paid nothing means the bank was already full — say that rather
+  // than printing "+0", which reads as the reward having been denied.
+  return awarded > 0 ? `+${awarded} earned this week` : 'Bank full — spend some first';
 }
 
 function headlineFor(goal: WeeklyGoal): string {

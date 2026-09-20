@@ -94,6 +94,17 @@ interface CareerDeckState {
    * what was actually added, which is zero for a week already paid or a full bank.
    */
   awardStreakBonus: (weekKey: string, amount: number) => number;
+  /**
+   * Receipt for the most recent bonus — what was paid, and for which week. Kept here
+   * rather than recomputed by the card, because a full bank can pay less than a week
+   * was worth and only the ledger knows the difference.
+   */
+  lastStreakAward: StreakAward | null;
+}
+
+export interface StreakAward {
+  weekKey: string;
+  amount: number;
 }
 
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
@@ -135,6 +146,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const creditsRef = useRef(autoApplyCredits);
   /** Week keys already paid, so a re-render or a tab revisit can't pay twice. */
   const paidWeeks = useRef<Set<string>>(new Set());
+  const [lastStreakAward, setLastStreakAward] = useState<StreakAward | null>(null);
 
   const setCredits = useCallback((next: number) => {
     creditsRef.current = next;
@@ -217,6 +229,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       const next = Math.min(creditsRef.current + amount, AUTO_APPLY_ECONOMY.bankCap);
       const awarded = next - creditsRef.current;
       if (awarded > 0) setCredits(next);
+      setLastStreakAward({ weekKey, amount: awarded });
       return awarded;
     },
     [setCredits],
@@ -279,6 +292,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       autoApplyCredits,
       spendAutoApplyCredit,
       awardStreakBonus,
+      lastStreakAward,
     };
   }, [
     isInitialLoading,
@@ -303,6 +317,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     autoApplyCredits,
     spendAutoApplyCredit,
     awardStreakBonus,
+    lastStreakAward,
   ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;

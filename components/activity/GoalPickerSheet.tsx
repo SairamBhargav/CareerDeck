@@ -10,11 +10,10 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 /** Rough sense of what each target asks of a week, so the numbers aren't abstract. */
 const GOAL_NOTE: Record<number, string> = {
-  2: 'Casual — a couple a week',
-  3: 'Steady',
-  5: 'One most weekdays',
-  8: 'Heavy search',
-  10: 'All-in',
+  3: 'Casual — a few a week',
+  7: 'One a day',
+  14: 'Two a day',
+  30: 'All-in',
 };
 
 interface GoalPickerSheetProps {
@@ -95,8 +94,9 @@ export function GoalPickerSheet({ visible, current, countThisWeek, onSelect, onC
         <Text style={styles.footnote}>
           Finish a week at your goal to earn {AUTO_APPLY_ECONOMY.streakBonus} extra Auto Apply,
           or {AUTO_APPLY_ECONOMY.longStreakBonus} once the streak reaches{' '}
-          {AUTO_APPLY_ECONOMY.longStreakWeeks} weeks. You get {AUTO_APPLY_ECONOMY.dailyGrant} a day
-          either way.
+          {AUTO_APPLY_ECONOMY.longStreakWeeks} weeks — never more than{' '}
+          {AUTO_APPLY_ECONOMY.maxWeeklyBonus} in a week. You get {AUTO_APPLY_ECONOMY.dailyGrant} a
+          day either way.
         </Text>
       </Animated.View>
     </Modal>
@@ -165,8 +165,9 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: '700',
     color: colors.text,
     letterSpacing: -0.6,
-    // Keeps the "a week" labels on one line however wide the figure is.
-    minWidth: 26,
+    // Wide enough for the two-digit targets, so every "a week" below starts on the
+    // same line however many digits sit beside it.
+    minWidth: 38,
   },
   countSelected: {
     color: colors.goalMet,
