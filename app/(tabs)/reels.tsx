@@ -16,22 +16,29 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/common/EmptyState';
+import { CommentSheet } from '@/components/comments/CommentSheet';
 import { ApplicationModal } from '@/components/jobs/ApplicationModal';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
 import { INDICATOR_TRAVEL, ReelsRefreshIndicator } from '@/components/reels/ReelsRefreshIndicator';
-import { ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
+import { MATCH_RING_SIZE, ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useCommentCounts } from '@/hooks/useComments';
 import { useJobFeeds, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
 import { resumeMatchScore } from '@/utils/resumeMatch';
 
 const TOGGLE_HEIGHT = 44;
-const MATCH_RING_SIZE = 56;
+/**
+ * Drops the badge below the line it would otherwise share with the feed toggle. Level
+ * with the toggle they read as one row of chrome competing for the same glance; a bit
+ * lower and the badge belongs to the reel underneath it instead.
+ */
+const MATCH_RING_DROP = 12;
 
 /** How far past the top edge the user has to drag before a release triggers a refresh. */
 const PULL_THRESHOLD = 88;
@@ -43,12 +50,14 @@ export default function ReelsScreen() {
   const styles = useStyles();
   const { companies, defaultResume, toggleLike } = useCareerDeck();
   const { forYouJobs, followingJobs } = useJobFeeds();
+  const commentCounts = useCommentCounts();
   const tabBarHeight = useTabBarHeight();
 
   const [feed, setFeed] = useState<ReelFeed>('forYou');
   const [pageHeight, setPageHeight] = useState(0);
   const [applyJob, setApplyJob] = useState<Job | null>(null);
   const [detailsJob, setDetailsJob] = useState<Job | null>(null);
+  const [commentsJob, setCommentsJob] = useState<Job | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   const listRef = useRef<FlatList<Job>>(null);
@@ -230,7 +239,9 @@ export default function ReelsScreen() {
                   paddingBottom={cardPaddingBottom}
                   logoColor={companyById.get(item.companyId)?.logoColor}
                   logoUrl={companyById.get(item.companyId)?.logo}
+                  commentCount={commentCounts.get(item.id) ?? 0}
                   onLike={() => toggleLike(item.id)}
+                  onComment={() => setCommentsJob(item)}
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
                 />
@@ -258,7 +269,7 @@ export default function ReelsScreen() {
         <View
           style={[
             styles.matchRingWrap,
-            { top: insets.top + (TOGGLE_HEIGHT - MATCH_RING_SIZE) / 2 },
+            { top: insets.top + (TOGGLE_HEIGHT - MATCH_RING_SIZE) / 2 + MATCH_RING_DROP },
           ]}>
           <ResumeMatchRing progress={matchProgress} />
         </View>
@@ -275,6 +286,14 @@ export default function ReelsScreen() {
           setDetailsJob(null);
           if (job) handleAutoApply(job);
         }}
+      />
+
+      <CommentSheet
+        // Keyed so each posting gets a clean composer — see CommentSheet.
+        key={commentsJob?.id ?? 'no-comments-open'}
+        job={commentsJob}
+        visible={commentsJob !== null}
+        onClose={() => setCommentsJob(null)}
       />
 
       <ApplicationModal

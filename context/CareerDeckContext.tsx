@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { mockApplications } from '@/data/mockApplications';
 import { mockCommentActivity } from '@/data/mockCommentActivity';
+import { mockComments } from '@/data/mockComments';
 import { mockCompanies } from '@/data/mockCompanies';
 import { mockJobs } from '@/data/mockJobs';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
@@ -12,6 +13,7 @@ import type {
   CommentActivity,
   Company,
   Job,
+  JobComment,
   Resume,
   User,
 } from '@/types';
@@ -39,6 +41,8 @@ interface CareerDeckState {
   defaultResumeId: string;
   /** The user's tracked applications, newest activity first. */
   applications: Application[];
+  /** Every comment on every posting, with the viewer's own likes already applied. */
+  comments: JobComment[];
   /** Replies and likes on the user's own comments, newest first. */
   commentActivity: CommentActivity[];
   unreadCommentCount: number;
@@ -65,6 +69,15 @@ interface CareerDeckState {
   logApplication: (jobId: string, source: Application['source']) => void;
   /** Whether this job is already in the tracker, so Apply can read "Applied" instead. */
   hasApplied: (jobId: string) => boolean;
+  likedCommentIds: string[];
+  toggleCommentLike: (commentId: string) => void;
+  /**
+   * Posts on a job's thread. `parentId` is the top-level comment being answered, or
+   * null for a new thread — replies never nest further, see JobComment.
+   */
+  addComment: (jobId: string, body: string, parentId: string | null, gifId?: string) => void;
+  /** Removes a comment and anything replying to it — an orphaned reply reads as a non sequitur. */
+  deleteComment: (commentId: string) => void;
   markCommentActivityRead: (activityId: string) => void;
   markAllCommentActivityRead: () => void;
 }
@@ -97,6 +110,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [applications, setApplications] = useState<Application[]>(mockApplications);
   const [commentActivity, setCommentActivity] = useState<CommentActivity[]>(mockCommentActivity);
+  const [comments, setComments] = useState<JobComment[]>(mockComments);
+  const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(() => new Set<string>());
 
   useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoading(false), INITIAL_LOAD_MS);
@@ -155,6 +170,40 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const toggleCommentLike = useCallback((commentId: string) => {
+    setLikedCommentIds((current) => toggleInSet(current, commentId));
+  }, []);
+
+  const addComment = useCallback((jobId: string, body: string, parentId: string | null, gifId?: string) => {
+    const trimmed = body.trim();
+    // A GIF on its own is a comment; text on its own is a comment; neither is not.
+    if (trimmed.length === 0 && gifId === undefined) return;
+
+    setComments((current) => [
+      ...current,
+      {
+        id: `c-local-${Date.now()}`,
+        jobId,
+        parentId,
+        authorName: mockUser.displayName,
+        authorInitials: `${mockUser.firstName.charAt(0)}${mockUser.lastName.charAt(0)}`.toUpperCase(),
+        // Matches the avatar on Home and Profile, which both use the accent fill.
+        authorColor: '#111114',
+        isYou: true,
+        body: trimmed,
+        gifId,
+        createdAt: new Date().toISOString().slice(0, 10),
+        likeCount: 0,
+      },
+    ]);
+  }, []);
+
+  const deleteComment = useCallback((commentId: string) => {
+    setComments((current) =>
+      current.filter((comment) => comment.id !== commentId && comment.parentId !== commentId),
+    );
+  }, []);
+
   const markCommentActivityRead = useCallback((activityId: string) => {
     setCommentActivity((current) =>
       current.map((entry) => (entry.id === activityId ? { ...entry, read: true } : entry)),
@@ -190,6 +239,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       defaultResumeId,
       defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
       applications,
+      // The viewer's own like is folded in here rather than at the component, so a
+      // count is never the raw fixture number plus a separately-tracked flag.
+      comments: comments.map((comment) =>
+        likedCommentIds.has(comment.id) ? { ...comment, likeCount: comment.likeCount + 1 } : comment,
+      ),
       commentActivity,
       unreadCommentCount: commentActivity.filter((entry) => !entry.read).length,
       followedCompanyIds: [...followedIds],
@@ -205,6 +259,10 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       setApplicationStatus,
       logApplication,
       hasApplied: (jobId: string) => applications.some((application) => application.jobId === jobId),
+      likedCommentIds: [...likedCommentIds],
+      toggleCommentLike,
+      addComment,
+      deleteComment,
       markCommentActivityRead,
       markAllCommentActivityRead,
     };
@@ -216,6 +274,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     seenNewsIds,
     defaultResumeId,
     applications,
+    comments,
+    likedCommentIds,
     commentActivity,
     toggleFollow,
     toggleLike,
@@ -224,6 +284,9 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     setDefaultResume,
     setApplicationStatus,
     logApplication,
+    toggleCommentLike,
+    addComment,
+    deleteComment,
     markCommentActivityRead,
     markAllCommentActivityRead,
   ]);

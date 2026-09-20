@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -17,13 +16,16 @@ import { Circle, Svg } from 'react-native-svg';
 import { fontSize } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 
-const SIZE = 56;
-/** The document mark above the figure — small enough to read as a unit label, not an icon button. */
-const GLYPH_SIZE = 11;
-const STROKE_WIDTH = 5;
-const RADIUS = (SIZE - STROKE_WIDTH) / 2;
+/**
+ * Exported because Reels positions the badge against this number. Keeping one copy is
+ * what stops the screen's centring maths drifting away from the ring it's centring.
+ */
+export const MATCH_RING_SIZE = 48;
+
+const STROKE_WIDTH = 4.5;
+const RADIUS = (MATCH_RING_SIZE - STROKE_WIDTH) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-const CENTER = SIZE / 2;
+const CENTER = MATCH_RING_SIZE / 2;
 
 // Fixed rather than themed, so a given score reads the same in light and dark.
 // Worth revisiting: red/amber/green is borrowed from status indicators, where red means
@@ -47,9 +49,8 @@ interface ResumeMatchRingProps {
  * stray white (or dark) disc sitting on top of the company wash.
  *
  * A bare ring around a percentage is the same shape as a battery or storage gauge, so
- * the document mark and the word underneath are doing the real work here: they say the
- * figure is a percentage *of a resume against this posting*, not a level of something
- * filling up.
+ * the word underneath is doing the real work: it says the figure is a percentage *of a
+ * resume against this posting*, not a level of something filling up.
  */
 export function ResumeMatchRing({ progress }: ResumeMatchRingProps) {
   const { colors } = useTheme();
@@ -90,7 +91,7 @@ export function ResumeMatchRing({ progress }: ResumeMatchRingProps) {
   return (
     <Animated.View style={[styles.wrap, entranceStyle]}>
       <View style={styles.ring}>
-        <Svg width={SIZE} height={SIZE} style={StyleSheet.absoluteFill}>
+        <Svg width={MATCH_RING_SIZE} height={MATCH_RING_SIZE} style={StyleSheet.absoluteFill}>
           <Circle cx={CENTER} cy={CENTER} r={RADIUS} stroke={colors.border} strokeWidth={STROKE_WIDTH} fill="none" />
           <AnimatedCircle
             cx={CENTER}
@@ -106,7 +107,6 @@ export function ResumeMatchRing({ progress }: ResumeMatchRingProps) {
           />
         </Svg>
 
-        <Ionicons name="document-text" size={GLYPH_SIZE} color={colors.textSecondary} style={styles.glyph} />
         <Text style={styles.label}>{label}%</Text>
       </View>
 
@@ -119,42 +119,31 @@ const useStyles = makeStyles((colors) => ({
   // The badge is absolutely positioned by its top edge in Reels, so growing downward to
   // fit the caption leaves the ring itself aligned with the feed toggle beside it.
   wrap: {
-    width: SIZE,
+    width: MATCH_RING_SIZE,
     alignItems: 'center',
   },
   ring: {
-    width: SIZE,
-    height: SIZE,
+    width: MATCH_RING_SIZE,
+    height: MATCH_RING_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glyph: {
-    // Pulled tight to the figure so the two read as one stacked unit rather than an
-    // icon that happens to sit above a number.
-    marginBottom: -1,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowRadius: 4,
-    textShadowOffset: { width: 0, height: 0 },
-  },
+  // No text shadow on either of these. A soft dark halo was standing in for a backing
+  // plate, but at this size it fattens the strokes into a smudge instead of lifting the
+  // text — the reel's own background is close enough to the page that the palette's
+  // contrast carries it on its own.
   label: {
-    fontSize: fontSize.small,
+    // With the glyph gone the ring still has room for a figure you can read at a glance.
+    fontSize: 15,
     fontWeight: '700',
     color: colors.text,
-    letterSpacing: -0.2,
-    // A soft dark shadow behind the text substitutes for the backing plate's contrast —
-    // keeps the percentage legible over a light wash without a shape behind the ring.
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowRadius: 4,
-    textShadowOffset: { width: 0, height: 0 },
+    letterSpacing: -0.3,
   },
   caption: {
-    marginTop: 3,
-    fontSize: 9,
+    marginTop: 2,
+    fontSize: fontSize.caption,
     fontWeight: '700',
-    letterSpacing: 0.7,
+    letterSpacing: 0.6,
     color: colors.textSecondary,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowRadius: 4,
-    textShadowOffset: { width: 0, height: 0 },
   },
 }));

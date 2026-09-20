@@ -6,14 +6,24 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface ReelActionRailProps {
   isLiked: boolean;
+  commentCount: number;
   onLike: () => void;
+  onComment: () => void;
   onMore: () => void;
   onAutoApply: () => void;
   jobTitle: string;
 }
 
 /** Vertical social-style rail on the right edge of a reel. */
-export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle }: ReelActionRailProps) {
+export function ReelActionRail({
+  isLiked,
+  commentCount,
+  onLike,
+  onComment,
+  onMore,
+  onAutoApply,
+  jobTitle,
+}: ReelActionRailProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -26,6 +36,18 @@ export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle 
         activeColor={colors.like}
         onPress={onLike}
         accessibilityLabel={isLiked ? `Unlike ${jobTitle}` : `Like ${jobTitle}`}
+      />
+      <RailAction
+        icon="chatbubble-outline"
+        // The count is the label once there is one: the icon already says what this is,
+        // and how busy a thread is decides whether it's worth opening.
+        label={commentCount > 0 ? String(commentCount) : 'Comment'}
+        onPress={onComment}
+        accessibilityLabel={
+          commentCount === 0
+            ? `Comment on ${jobTitle}`
+            : `Comments on ${jobTitle}, ${commentCount} so far`
+        }
       />
       <RailAction
         icon="ellipsis-horizontal"
