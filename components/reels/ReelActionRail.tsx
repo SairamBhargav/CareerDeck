@@ -10,10 +10,19 @@ interface ReelActionRailProps {
   onMore: () => void;
   onAutoApply: () => void;
   jobTitle: string;
+  /** Auto Applies left to spend. Shown on the button so the cost is never a surprise. */
+  autoApplyCredits: number;
 }
 
 /** Vertical social-style rail on the right edge of a reel. */
-export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle }: ReelActionRailProps) {
+export function ReelActionRail({
+  isLiked,
+  onLike,
+  onMore,
+  onAutoApply,
+  jobTitle,
+  autoApplyCredits,
+}: ReelActionRailProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -34,15 +43,27 @@ export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle 
         accessibilityLabel={`More options for ${jobTitle}`}
       />
 
-      <Pressable
-        onPress={onAutoApply}
-        accessibilityRole="button"
-        accessibilityLabel={`Auto apply to ${jobTitle}`}
-        accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
-        style={({ pressed }) => [styles.applyButton, pressed ? styles.pressed : null]}>
-        <Ionicons name="flash" size={22} color={colors.autoApply} />
-        <Text style={styles.applyLabel}>Auto Apply</Text>
-      </Pressable>
+      <View>
+        <Pressable
+          onPress={onAutoApply}
+          accessibilityRole="button"
+          accessibilityLabel={`Auto apply to ${jobTitle}. ${autoApplyCredits} left this week.`}
+          accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
+          style={({ pressed }) => [
+            styles.applyButton,
+            autoApplyCredits === 0 ? styles.applyButtonSpent : null,
+            pressed ? styles.pressed : null,
+          ]}>
+          <Ionicons name="flash" size={22} color={colors.autoApply} />
+          <Text style={styles.applyLabel}>Auto Apply</Text>
+        </Pressable>
+
+        {/* The balance rides on the button rather than sitting under it: the rail is
+            already a column of labels, and one more line would read as another action. */}
+        <View style={styles.creditBadge}>
+          <Text style={styles.creditCount}>{autoApplyCredits}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -123,6 +144,32 @@ const useStyles = makeStyles((colors) => ({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     elevation: 10,
+  },
+  // Keeps its shape when empty — the button still opens the ordinary apply sheet, so
+  // dimming it would promise a wall that isn't there.
+  applyButtonSpent: {
+    shadowOpacity: 0,
+    elevation: 0,
+    opacity: 0.72,
+  },
+  creditBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 21,
+    height: 21,
+    paddingHorizontal: 5,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.autoApply,
+    borderWidth: 2,
+    borderColor: colors.autoApplySurface,
+  },
+  creditCount: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textOnBrand,
   },
   applyLabel: {
     fontSize: 9,

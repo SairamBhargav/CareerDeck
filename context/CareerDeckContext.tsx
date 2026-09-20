@@ -1,5 +1,15 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
+import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { mockApplications } from '@/data/mockApplications';
 import { mockCommentActivity } from '@/data/mockCommentActivity';
 import { mockCompanies } from '@/data/mockCompanies';
@@ -67,6 +77,23 @@ interface CareerDeckState {
   hasApplied: (jobId: string) => boolean;
   markCommentActivityRead: (activityId: string) => void;
   markAllCommentActivityRead: () => void;
+
+  /** Applications the user is aiming to send each week. Set by them, not by us. */
+  weeklyGoal: number;
+  /** Clamped to the picker's range — a goal of zero would make the ring meaningless. */
+  setWeeklyGoal: (target: number) => void;
+  /** Auto Applies available to spend right now. */
+  autoApplyCredits: number;
+  /**
+   * Spends one. Returns false when the balance is empty so the caller can say so
+   * rather than silently doing nothing.
+   */
+  spendAutoApplyCredit: () => boolean;
+  /**
+   * Pays the bonus for a week that reached the goal, at most once per week. Returns
+   * what was actually added, which is zero for a week already paid or a full bank.
+   */
+  awardStreakBonus: (weekKey: string, amount: number) => number;
 }
 
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
@@ -96,6 +123,23 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [applications, setApplications] = useState<Application[]>(mockApplications);
+  const [weeklyGoal, setWeeklyGoalState] = useState(DEFAULT_WEEKLY_GOAL);
+  // Seeded with a single day's grant. Accrual across days, and the balance surviving a
+  // restart, both need storage this milestone doesn't have — see the note on the file.
+  const [autoApplyCredits, setAutoApplyCredits] = useState<number>(AUTO_APPLY_ECONOMY.dailyGrant);
+  /**
+   * The balance again, readable synchronously. Spending and awarding both need to
+   * report what happened to their caller, and a state setter's callback can't be read
+   * back in time to answer that.
+   */
+  const creditsRef = useRef(autoApplyCredits);
+  /** Week keys already paid, so a re-render or a tab revisit can't pay twice. */
+  const paidWeeks = useRef<Set<string>>(new Set());
+
+  const setCredits = useCallback((next: number) => {
+    creditsRef.current = next;
+    setAutoApplyCredits(next);
+  }, []);
   const [commentActivity, setCommentActivity] = useState<CommentActivity[]>(mockCommentActivity);
 
   useEffect(() => {
@@ -155,6 +199,29 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setWeeklyGoal = useCallback((target: number) => {
+    setWeeklyGoalState(Math.min(Math.max(Math.round(target), MIN_WEEKLY_GOAL), MAX_WEEKLY_GOAL));
+  }, []);
+
+  const spendAutoApplyCredit = useCallback(() => {
+    if (creditsRef.current <= 0) return false;
+    setCredits(creditsRef.current - 1);
+    return true;
+  }, [setCredits]);
+
+  const awardStreakBonus = useCallback(
+    (weekKey: string, amount: number) => {
+      if (amount <= 0 || paidWeeks.current.has(weekKey)) return 0;
+      paidWeeks.current.add(weekKey);
+
+      const next = Math.min(creditsRef.current + amount, AUTO_APPLY_ECONOMY.bankCap);
+      const awarded = next - creditsRef.current;
+      if (awarded > 0) setCredits(next);
+      return awarded;
+    },
+    [setCredits],
+  );
+
   const markCommentActivityRead = useCallback((activityId: string) => {
     setCommentActivity((current) =>
       current.map((entry) => (entry.id === activityId ? { ...entry, read: true } : entry)),
@@ -207,6 +274,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       hasApplied: (jobId: string) => applications.some((application) => application.jobId === jobId),
       markCommentActivityRead,
       markAllCommentActivityRead,
+      weeklyGoal,
+      setWeeklyGoal,
+      autoApplyCredits,
+      spendAutoApplyCredit,
+      awardStreakBonus,
     };
   }, [
     isInitialLoading,
@@ -226,6 +298,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     logApplication,
     markCommentActivityRead,
     markAllCommentActivityRead,
+    weeklyGoal,
+    setWeeklyGoal,
+    autoApplyCredits,
+    spendAutoApplyCredit,
+    awardStreakBonus,
   ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;

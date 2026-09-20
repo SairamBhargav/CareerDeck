@@ -43,6 +43,7 @@ interface JobReelCardProps {
   onLike: () => void;
   onMore: () => void;
   onAutoApply: () => void;
+  autoApplyCredits: number;
 }
 
 export function JobReelCard({
@@ -55,6 +56,7 @@ export function JobReelCard({
   onLike,
   onMore,
   onAutoApply,
+  autoApplyCredits,
 }: JobReelCardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -190,6 +192,7 @@ export function JobReelCard({
           onMore={onMore}
           onAutoApply={onAutoApply}
           jobTitle={job.title}
+          autoApplyCredits={autoApplyCredits}
         />
       </View>
     </View>
