@@ -1,15 +1,23 @@
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
 import { SectionHeader } from '@/components/common/SectionHeader';
-import { Toggle } from '@/components/common/Toggle';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
+import { AUTO_APPLY_ECONOMY } from '@/constants/goal';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
+import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
+
+/** Per-section stagger as the page settles. */
+const STAGGER_MS = 55;
 
 /**
  * Reached from the gear icon on Profile. Split out from Profile so identity/career stats
@@ -22,9 +30,30 @@ export default function SettingsScreen() {
   const { scheme } = useTheme();
   const isDark = scheme === 'dark';
 
-  // Local-only: there's no notification pipeline yet, so this doesn't send anything
-  // anywhere. It's real state, just with nothing behind it to flip on.
-  const [pushEnabled, setPushEnabled] = useState(true);
+  const { weeklyGoal, setWeeklyGoal, autoApplyCredits } = useCareerDeck();
+  const goal = useWeeklyGoal();
+
+  const [editingGoal, setEditingGoal] = useState(false);
+
+  const applyingRows: RowGroupItem[] = [
+    {
+      key: 'weekly-goal',
+      icon: 'golf-outline',
+      label: 'Weekly goal',
+      hint: goal.met ? `Met — ${goal.count} sent this week` : `${goal.remaining} to go this week`,
+      value: `${weeklyGoal} a week`,
+      onPress: () => setEditingGoal(true),
+    },
+    {
+      key: 'auto-apply',
+      icon: 'flash-outline',
+      label: 'Auto Apply',
+      // Spells out the whole economy rather than just the balance: a currency the user
+      // can't predict the supply of is one they hoard instead of spending.
+      hint: `${AUTO_APPLY_ECONOMY.dailyGrant} a day, up to ${AUTO_APPLY_ECONOMY.maxWeeklyBonus} more for a week at goal`,
+      value: `${autoApplyCredits} left`,
+    },
+  ];
 
   const appearanceRows: RowGroupItem[] = [
     {
@@ -36,20 +65,16 @@ export default function SettingsScreen() {
     },
   ];
 
+  // Honest as "Soon": a toggle that flips is a promise that something gets delivered,
+  // and there is no notification pipeline behind it. It was local state before, which
+  // looked like it worked and didn't.
   const notificationRows: RowGroupItem[] = [
-    {
-      key: 'push',
-      icon: 'notifications-outline',
-      label: 'Push notifications',
-      hint: pushEnabled ? 'On' : 'Off',
-      right: (
-        <Toggle value={pushEnabled} onValueChange={setPushEnabled} accessibilityLabel="Push notifications" />
-      ),
-    },
+    { key: 'push', icon: 'notifications-outline', label: 'Push notifications', soon: true },
+    { key: 'goal-reminder', icon: 'alarm-outline', label: 'Weekly goal reminder', soon: true },
   ];
 
   const accountRows: RowGroupItem[] = [
-    { key: 'edit-profile', icon: 'person-outline', label: 'Edit profile', soon: true },
+    { key: 'edit-profile', icon: 'person-outline', label: 'Edit profile', onPress: () => router.push('/profile') },
     { key: 'password', icon: 'lock-closed-outline', label: 'Change password', soon: true },
   ];
 
@@ -60,6 +85,15 @@ export default function SettingsScreen() {
   ];
 
   const sessionRows: RowGroupItem[] = [{ key: 'sign-out', icon: 'log-out-outline', label: 'Sign out', soon: true }];
+
+  const sections: { key: string; title?: string; rows: RowGroupItem[] }[] = [
+    { key: 'applying', title: 'Applying', rows: applyingRows },
+    { key: 'appearance', title: 'Appearance', rows: appearanceRows },
+    { key: 'notifications', title: 'Notifications', rows: notificationRows },
+    { key: 'account', title: 'Account', rows: accountRows },
+    { key: 'support', title: 'Support', rows: supportRows },
+    { key: 'session', rows: sessionRows },
+  ];
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -72,34 +106,38 @@ export default function SettingsScreen() {
           <View style={styles.spacer} />
         </View>
 
-        <View>
-          <SectionHeader title="Appearance" />
-          <RowGroup items={appearanceRows} />
+        {sections.map((section, index) => (
+          <Animated.View key={section.key} entering={FadeInDown.duration(280).delay(index * STAGGER_MS)}>
+            {section.title ? <SectionHeader title={section.title} /> : null}
+            <RowGroup items={section.rows} />
+          </Animated.View>
+        ))}
+
+        <View style={styles.footer}>
+          <Text style={styles.version}>CareerDeck {version()}</Text>
+          <Text style={styles.footnote}>
+            Accounts, notification delivery and support links arrive once CareerDeck has a backend.
+          </Text>
         </View>
-
-        <View>
-          <SectionHeader title="Notifications" />
-          <RowGroup items={notificationRows} />
-        </View>
-
-        <View>
-          <SectionHeader title="Account" />
-          <RowGroup items={accountRows} />
-        </View>
-
-        <View>
-          <SectionHeader title="Support" />
-          <RowGroup items={supportRows} />
-        </View>
-
-        <RowGroup items={sessionRows} />
-
-        <Text style={styles.footnote}>
-          Account, notifications delivery, and support links arrive once CareerDeck has a backend.
-        </Text>
       </ScrollView>
+
+      <GoalPickerSheet
+        visible={editingGoal}
+        current={weeklyGoal}
+        countThisWeek={goal.count}
+        onSelect={(target) => {
+          setWeeklyGoal(target);
+          setEditingGoal(false);
+        }}
+        onClose={() => setEditingGoal(false)}
+      />
     </SafeAreaView>
   );
+}
+
+/** Reads the version straight off app.json, so it can't be a hard-coded lie. */
+function version(): string {
+  return Constants.expoConfig?.version ?? '—';
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -126,6 +164,16 @@ const useStyles = makeStyles((colors) => ({
   },
   spacer: {
     width: 44,
+  },
+  footer: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  version: {
+    fontSize: fontSize.caption + 1,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: colors.textTertiary,
   },
   footnote: {
     fontSize: fontSize.small,

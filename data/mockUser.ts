@@ -11,5 +11,4 @@ export const mockUser: User = {
   location: 'Dallas, TX',
   preferredRoles: ['Software Engineer Intern', 'Machine Learning Intern'],
   preferredLocations: ['Remote', 'Austin, TX', 'Bay Area, CA'],
-  appliedCount: 12,
 };

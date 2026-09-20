@@ -24,6 +24,7 @@ import type {
   Job,
   Resume,
   User,
+  UserIdentityEdit,
 } from '@/types';
 
 /**
@@ -100,6 +101,18 @@ interface CareerDeckState {
    * was worth and only the ledger knows the difference.
    */
   lastStreakAward: StreakAward | null;
+
+  /** Roles the user is looking for. Shown and edited on Profile. */
+  preferredRoles: string[];
+  /** Where they'd take a job — "Remote" counts as a location here. */
+  preferredLocations: string[];
+  setPreferredRoles: (roles: string[]) => void;
+  setPreferredLocations: (locations: string[]) => void;
+  /**
+   * Updates the identity fields. `displayName` is derived from the names rather than
+   * edited, so there's only ever one spelling of who this is.
+   */
+  updateIdentity: (edit: UserIdentityEdit) => void;
 }
 
 export interface StreakAward {
@@ -147,6 +160,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   /** Week keys already paid, so a re-render or a tab revisit can't pay twice. */
   const paidWeeks = useRef<Set<string>>(new Set());
   const [lastStreakAward, setLastStreakAward] = useState<StreakAward | null>(null);
+  const [user, setUser] = useState<User>(mockUser);
 
   const setCredits = useCallback((next: number) => {
     creditsRef.current = next;
@@ -235,6 +249,22 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     [setCredits],
   );
 
+  const setPreferredRoles = useCallback((roles: string[]) => {
+    setUser((current) => ({ ...current, preferredRoles: roles }));
+  }, []);
+
+  const setPreferredLocations = useCallback((locations: string[]) => {
+    setUser((current) => ({ ...current, preferredLocations: locations }));
+  }, []);
+
+  const updateIdentity = useCallback((edit: UserIdentityEdit) => {
+    setUser((current) => ({
+      ...current,
+      ...edit,
+      displayName: `${edit.firstName} ${edit.lastName}`.trim(),
+    }));
+  }, []);
+
   const markCommentActivityRead = useCallback((activityId: string) => {
     setCommentActivity((current) =>
       current.map((entry) => (entry.id === activityId ? { ...entry, read: true } : entry)),
@@ -263,7 +293,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
     return {
       isInitialLoading,
-      user: mockUser,
+      user,
       jobs,
       companies,
       resumes: mockResumes,
@@ -293,6 +323,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       spendAutoApplyCredit,
       awardStreakBonus,
       lastStreakAward,
+      preferredRoles: user.preferredRoles,
+      preferredLocations: user.preferredLocations,
+      setPreferredRoles,
+      setPreferredLocations,
+      updateIdentity,
     };
   }, [
     isInitialLoading,
@@ -318,6 +353,10 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     spendAutoApplyCredit,
     awardStreakBonus,
     lastStreakAward,
+    user,
+    setPreferredRoles,
+    setPreferredLocations,
+    updateIdentity,
   ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;

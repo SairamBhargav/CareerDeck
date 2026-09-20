@@ -1,49 +1,111 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
 import { SectionHeader } from '@/components/common/SectionHeader';
-import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { SkillChip } from '@/components/common/SkillChip';
+import { EditProfileSheet } from '@/components/profile/EditProfileSheet';
+import { PreferencesSheet } from '@/components/profile/PreferencesSheet';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
+import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
+
+/** How many preference chips the Profile row previews before it stops counting them out. */
+const PREVIEW_CHIPS = 3;
 
 /**
  * Reached from the avatar button on Home — not a tab. There's no dedicated Profile
  * slot in the bottom bar; this screen is pushed on top of it instead.
  *
- * Identity and career stats live here; preferences and account live on Settings,
- * reached via the gear icon — see app/settings.tsx.
+ * Identity, how the season is going, and what the user is looking for live here.
+ * Preferences and account live on Settings, reached via the gear — see app/settings.tsx.
  */
 export default function ProfileScreen() {
   const router = useRouter();
   const styles = useStyles();
-  const { user, resumes, defaultResume, applications, followedCompanyIds, savedJobIds, likedJobIds } =
-    useCareerDeck();
+  const {
+    user,
+    resumes,
+    defaultResume,
+    applications,
+    followedCompanyIds,
+    savedJobIds,
+    likedJobIds,
+    preferredRoles,
+    preferredLocations,
+    autoApplyCredits,
+    setPreferredRoles,
+    setPreferredLocations,
+    updateIdentity,
+  } = useCareerDeck();
 
-  const careerRows: RowGroupItem[] = [
+  const goal = useWeeklyGoal();
+
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editingPreferences, setEditingPreferences] = useState(false);
+
+  const previewRoles = preferredRoles.slice(0, PREVIEW_CHIPS);
+  const extraRoles = preferredRoles.length - previewRoles.length;
+
+  const lookingRows: RowGroupItem[] = [
+    {
+      key: 'preferences',
+      icon: 'options-outline',
+      label: 'Roles and locations',
+      hint:
+        preferredRoles.length > 0 || preferredLocations.length > 0
+          ? `${preferredRoles.length} ${preferredRoles.length === 1 ? 'role' : 'roles'} · ${preferredLocations.length} ${preferredLocations.length === 1 ? 'location' : 'locations'}`
+          : 'Nothing set yet',
+      onPress: () => setEditingPreferences(true),
+    },
     {
       key: 'resumes',
       icon: 'document-text-outline',
       label: 'Resumes',
       // Which one the apply sheet will reach for. The resumes themselves live on
-      // Activity now, so this is a read-only figure rather than a way in.
+      // Activity, so this is a read-only figure rather than a way in.
       hint: defaultResume ? `Default · ${defaultResume.focus}` : 'No default set',
       value: `${resumes.length} saved`,
     },
-    { key: 'preferences', icon: 'options-outline', label: 'Preferences', value: `${user.preferredRoles.length} roles` },
-    // Counted off the tracker rather than the seeded figure on `user`, so this can't
-    // drift away from what Activity shows.
-    { key: 'applications', icon: 'briefcase-outline', label: 'Applications', value: String(applications.length) },
+  ];
+
+  const collectionRows: RowGroupItem[] = [
+    {
+      key: 'applications',
+      icon: 'briefcase-outline',
+      label: 'Applications',
+      // Counted off the tracker rather than a seeded figure, so this can't drift away
+      // from what Activity shows.
+      hint: `${goal.count} this week`,
+      onPress: () => router.push('/(tabs)/activity'),
+    },
     {
       key: 'following',
       icon: 'business-outline',
       label: 'Following companies',
-      value: String(followedCompanyIds.length),
+      hint: countLabel(followedCompanyIds.length, 'company', 'companies'),
+      onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'following' } }),
     },
-    { key: 'saved', icon: 'bookmark-outline', label: 'Saved jobs', value: String(savedJobIds.length) },
-    { key: 'liked', icon: 'heart-outline', label: 'Liked jobs', value: String(likedJobIds.length) },
+    {
+      key: 'saved',
+      icon: 'bookmark-outline',
+      label: 'Saved jobs',
+      hint: countLabel(savedJobIds.length, 'posting', 'postings'),
+      onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'saved' } }),
+    },
+    {
+      key: 'liked',
+      icon: 'heart-outline',
+      label: 'Liked jobs',
+      hint: countLabel(likedJobIds.length, 'posting', 'postings'),
+      onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'liked' } }),
+    },
   ];
 
   return (
@@ -67,32 +129,65 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.identity}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user.firstName.charAt(0)}
-              {user.lastName.charAt(0)}
-            </Text>
-          </View>
-          <Text style={styles.name}>{user.displayName}</Text>
-          <Text style={styles.detail}>{user.school}</Text>
-          <Text style={styles.detail}>
-            {user.major} {'·'} Class of {user.graduationYear}
-          </Text>
-          <Text style={styles.detail}>{user.location}</Text>
-        </View>
+        <ProfileHeader
+          user={user}
+          streakWeeks={goal.streakWeeks}
+          applications={applications.length}
+          autoApplyCredits={autoApplyCredits}
+          onEdit={() => setEditingProfile(true)}
+        />
 
-        <View>
-          <SectionHeader title="Your career" />
-          <RowGroup items={careerRows} />
-        </View>
+        <Animated.View entering={FadeInDown.duration(300).delay(150)}>
+          <SectionHeader title="Looking for" actionLabel="Edit" onActionPress={() => setEditingPreferences(true)} />
 
-        <Text style={styles.footnote}>
-          Editing, applications history, and saved collections arrive in a later milestone.
-        </Text>
+          {previewRoles.length > 0 ? (
+            <View style={styles.chips}>
+              {previewRoles.map((role) => (
+                <SkillChip key={role} label={role} />
+              ))}
+              {extraRoles > 0 ? <SkillChip label={`+${extraRoles} more`} /> : null}
+            </View>
+          ) : null}
+
+          <RowGroup items={lookingRows} />
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.duration(300).delay(210)}>
+          <SectionHeader title="Your collections" />
+          <RowGroup items={collectionRows} />
+        </Animated.View>
       </ScrollView>
+
+      {editingPreferences ? (
+        <PreferencesSheet
+          roles={preferredRoles}
+          locations={preferredLocations}
+          onSave={(roles, locations) => {
+            setPreferredRoles(roles);
+            setPreferredLocations(locations);
+            setEditingPreferences(false);
+          }}
+          onClose={() => setEditingPreferences(false)}
+        />
+      ) : null}
+
+      {editingProfile ? (
+        <EditProfileSheet
+          user={user}
+          onSave={(edit) => {
+            updateIdentity(edit);
+            setEditingProfile(false);
+          }}
+          onClose={() => setEditingProfile(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
+}
+
+/** "3 postings", "1 company" — a figure that reads as a sentence rather than a tally. */
+function countLabel(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -117,39 +212,10 @@ const useStyles = makeStyles((colors) => ({
     color: colors.text,
     letterSpacing: -0.4,
   },
-  identity: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  avatar: {
-    width: 76,
-    height: 76,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     marginBottom: spacing.md,
-  },
-  avatarText: {
-    color: colors.accentText,
-    fontSize: fontSize.heading,
-    fontWeight: '700',
-  },
-  name: {
-    fontSize: fontSize.heading,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: -0.4,
-    marginBottom: spacing.xs,
-  },
-  detail: {
-    fontSize: fontSize.small,
-    color: colors.textSecondary,
-  },
-  footnote: {
-    fontSize: fontSize.small,
-    color: colors.textTertiary,
-    textAlign: 'center',
-    lineHeight: 19,
   },
 }));
