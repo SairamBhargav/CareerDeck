@@ -48,7 +48,7 @@ const REFRESH_DURATION = 1100;
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { companies, defaultResume, toggleLike } = useCareerDeck();
+  const { companies, defaultResume, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
   const { forYouJobs, followingJobs } = useJobFeeds();
   const commentCounts = useCommentCounts();
   const tabBarHeight = useTabBarHeight();
@@ -191,14 +191,21 @@ export default function ReelsScreen() {
   // Shared by the rail's Auto Apply button and the details modal's, so the "strong
   // buzz" only needs to be defined once: a heavy impact immediately, followed by a
   // notification pulse a beat later so it reads as a buzz rather than a single thud.
-  const handleAutoApply = useCallback((job: Job) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    autoApplyTimer.current = setTimeout(
-      () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
-      90,
-    );
-    setApplyJob(job);
-  }, []);
+  // Spends a credit where there is one. An empty balance still opens the sheet: nothing
+  // here submits anything on the user's behalf yet, so there is no work to withhold —
+  // the credit buys the pre-filled shortcut, and the button says how many are left.
+  const handleAutoApply = useCallback(
+    (job: Job) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      autoApplyTimer.current = setTimeout(
+        () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+        90,
+      );
+      spendAutoApplyCredit();
+      setApplyJob(job);
+    },
+    [spendAutoApplyCredit],
+  );
 
   // Each reel fills the tab content area; the toggle floats above it and the floating
   // tab bar floats below it, so both ends reserve space for their overlay.
@@ -244,6 +251,7 @@ export default function ReelsScreen() {
                   onComment={() => setCommentsJob(item)}
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
+                  autoApplyCredits={autoApplyCredits}
                 />
               )}
             />

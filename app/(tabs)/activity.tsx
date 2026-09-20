@@ -7,16 +7,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
 import { CommentActivityCard } from '@/components/activity/CommentActivityCard';
-import { PipelineChart } from '@/components/activity/PipelineChart';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
 import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
 import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
+import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
 import { EmptyState } from '@/components/common/EmptyState';
+import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
+import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { ApplicationStatus, Job } from '@/types';
@@ -50,16 +52,20 @@ export default function ActivityScreen() {
     setApplicationStatus,
     markCommentActivityRead,
     markAllCommentActivityRead,
+    weeklyGoal,
+    setWeeklyGoal,
   } = useCareerDeck();
 
   const applications = useTrackedApplications();
   const counts = usePipelineCounts();
+  const goal = useWeeklyGoal();
   const tabBarHeight = useTabBarHeight();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
   const [tab, setTab] = useState<ActivityTab>('applications');
   const [viewingResumeId, setViewingResumeId] = useState<string | null>(null);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [editingGoal, setEditingGoal] = useState(false);
 
   const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
   const pickerEntry = applications.find((entry) => entry.application.id === pickerFor) ?? null;
@@ -107,7 +113,7 @@ export default function ActivityScreen() {
           </Text>
         </View>
 
-        <PipelineChart counts={counts} />
+        <WeeklyGoalCard goal={goal} onEditGoal={() => setEditingGoal(true)} />
 
         <ResumeShelf
           resumes={resumes}
@@ -210,6 +216,17 @@ export default function ActivityScreen() {
         jobTitle={pickerEntry ? `${pickerEntry.job.title} · ${pickerEntry.job.companyName}` : ''}
         onSelect={handleSelectStatus}
         onClose={() => setPickerFor(null)}
+      />
+
+      <GoalPickerSheet
+        visible={editingGoal}
+        current={weeklyGoal}
+        countThisWeek={goal.count}
+        onSelect={(target) => {
+          setWeeklyGoal(target);
+          setEditingGoal(false);
+        }}
+        onClose={() => setEditingGoal(false)}
       />
 
       <ResumeViewerModal

@@ -9,5 +9,10 @@ export interface User {
   location: string;
   preferredRoles: string[];
   preferredLocations: string[];
-  appliedCount: number;
 }
+
+/** The fields the profile editor can change. Identity only — preferences have their own sheet. */
+export type UserIdentityEdit = Pick<
+  User,
+  'firstName' | 'lastName' | 'school' | 'major' | 'graduationYear' | 'location'
+>;

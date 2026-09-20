@@ -1,5 +1,15 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
+import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { mockApplications } from '@/data/mockApplications';
 import { mockCommentActivity } from '@/data/mockCommentActivity';
 import { mockComments } from '@/data/mockComments';
@@ -16,6 +26,7 @@ import type {
   JobComment,
   Resume,
   User,
+  UserIdentityEdit,
 } from '@/types';
 
 /**
@@ -80,6 +91,46 @@ interface CareerDeckState {
   deleteComment: (commentId: string) => void;
   markCommentActivityRead: (activityId: string) => void;
   markAllCommentActivityRead: () => void;
+
+  /** Applications the user is aiming to send each week. Set by them, not by us. */
+  weeklyGoal: number;
+  /** Clamped to the picker's range — a goal of zero would make the ring meaningless. */
+  setWeeklyGoal: (target: number) => void;
+  /** Auto Applies available to spend right now. */
+  autoApplyCredits: number;
+  /**
+   * Spends one. Returns false when the balance is empty so the caller can say so
+   * rather than silently doing nothing.
+   */
+  spendAutoApplyCredit: () => boolean;
+  /**
+   * Pays the bonus for a week that reached the goal, at most once per week. Returns
+   * what was actually added, which is zero for a week already paid or a full bank.
+   */
+  awardStreakBonus: (weekKey: string, amount: number) => number;
+  /**
+   * Receipt for the most recent bonus — what was paid, and for which week. Kept here
+   * rather than recomputed by the card, because a full bank can pay less than a week
+   * was worth and only the ledger knows the difference.
+   */
+  lastStreakAward: StreakAward | null;
+
+  /** Roles the user is looking for. Shown and edited on Profile. */
+  preferredRoles: string[];
+  /** Where they'd take a job — "Remote" counts as a location here. */
+  preferredLocations: string[];
+  setPreferredRoles: (roles: string[]) => void;
+  setPreferredLocations: (locations: string[]) => void;
+  /**
+   * Updates the identity fields. `displayName` is derived from the names rather than
+   * edited, so there's only ever one spelling of who this is.
+   */
+  updateIdentity: (edit: UserIdentityEdit) => void;
+}
+
+export interface StreakAward {
+  weekKey: string;
+  amount: number;
 }
 
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
@@ -109,6 +160,25 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [applications, setApplications] = useState<Application[]>(mockApplications);
+  const [weeklyGoal, setWeeklyGoalState] = useState(DEFAULT_WEEKLY_GOAL);
+  // Seeded with a single day's grant. Accrual across days, and the balance surviving a
+  // restart, both need storage this milestone doesn't have — see the note on the file.
+  const [autoApplyCredits, setAutoApplyCredits] = useState<number>(AUTO_APPLY_ECONOMY.dailyGrant);
+  /**
+   * The balance again, readable synchronously. Spending and awarding both need to
+   * report what happened to their caller, and a state setter's callback can't be read
+   * back in time to answer that.
+   */
+  const creditsRef = useRef(autoApplyCredits);
+  /** Week keys already paid, so a re-render or a tab revisit can't pay twice. */
+  const paidWeeks = useRef<Set<string>>(new Set());
+  const [lastStreakAward, setLastStreakAward] = useState<StreakAward | null>(null);
+  const [user, setUser] = useState<User>(mockUser);
+
+  const setCredits = useCallback((next: number) => {
+    creditsRef.current = next;
+    setAutoApplyCredits(next);
+  }, []);
   const [commentActivity, setCommentActivity] = useState<CommentActivity[]>(mockCommentActivity);
   const [comments, setComments] = useState<JobComment[]>(mockComments);
   const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(() => new Set<string>());
@@ -185,8 +255,10 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
         id: `c-local-${Date.now()}`,
         jobId,
         parentId,
-        authorName: mockUser.displayName,
-        authorInitials: `${mockUser.firstName.charAt(0)}${mockUser.lastName.charAt(0)}`.toUpperCase(),
+        // Read off live `user`, not the fixture: the profile is editable now, and a
+        // comment posted after a rename should carry the new name.
+        authorName: user.displayName,
+        authorInitials: `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase(),
         // Matches the avatar on Home and Profile, which both use the accent fill.
         authorColor: '#111114',
         isYou: true,
@@ -196,12 +268,52 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
         likeCount: 0,
       },
     ]);
-  }, []);
+  }, [user]);
 
   const deleteComment = useCallback((commentId: string) => {
     setComments((current) =>
       current.filter((comment) => comment.id !== commentId && comment.parentId !== commentId),
     );
+  }, []);
+
+  const setWeeklyGoal = useCallback((target: number) => {
+    setWeeklyGoalState(Math.min(Math.max(Math.round(target), MIN_WEEKLY_GOAL), MAX_WEEKLY_GOAL));
+  }, []);
+
+  const spendAutoApplyCredit = useCallback(() => {
+    if (creditsRef.current <= 0) return false;
+    setCredits(creditsRef.current - 1);
+    return true;
+  }, [setCredits]);
+
+  const awardStreakBonus = useCallback(
+    (weekKey: string, amount: number) => {
+      if (amount <= 0 || paidWeeks.current.has(weekKey)) return 0;
+      paidWeeks.current.add(weekKey);
+
+      const next = Math.min(creditsRef.current + amount, AUTO_APPLY_ECONOMY.bankCap);
+      const awarded = next - creditsRef.current;
+      if (awarded > 0) setCredits(next);
+      setLastStreakAward({ weekKey, amount: awarded });
+      return awarded;
+    },
+    [setCredits],
+  );
+
+  const setPreferredRoles = useCallback((roles: string[]) => {
+    setUser((current) => ({ ...current, preferredRoles: roles }));
+  }, []);
+
+  const setPreferredLocations = useCallback((locations: string[]) => {
+    setUser((current) => ({ ...current, preferredLocations: locations }));
+  }, []);
+
+  const updateIdentity = useCallback((edit: UserIdentityEdit) => {
+    setUser((current) => ({
+      ...current,
+      ...edit,
+      displayName: `${edit.firstName} ${edit.lastName}`.trim(),
+    }));
   }, []);
 
   const markCommentActivityRead = useCallback((activityId: string) => {
@@ -232,7 +344,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
     return {
       isInitialLoading,
-      user: mockUser,
+      user,
       jobs,
       companies,
       resumes: mockResumes,
@@ -265,6 +377,17 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       deleteComment,
       markCommentActivityRead,
       markAllCommentActivityRead,
+      weeklyGoal,
+      setWeeklyGoal,
+      autoApplyCredits,
+      spendAutoApplyCredit,
+      awardStreakBonus,
+      lastStreakAward,
+      preferredRoles: user.preferredRoles,
+      preferredLocations: user.preferredLocations,
+      setPreferredRoles,
+      setPreferredLocations,
+      updateIdentity,
     };
   }, [
     isInitialLoading,
@@ -289,6 +412,16 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     deleteComment,
     markCommentActivityRead,
     markAllCommentActivityRead,
+    weeklyGoal,
+    setWeeklyGoal,
+    autoApplyCredits,
+    spendAutoApplyCredit,
+    awardStreakBonus,
+    lastStreakAward,
+    user,
+    setPreferredRoles,
+    setPreferredLocations,
+    updateIdentity,
   ]);
 
   return <CareerDeckContext.Provider value={value}>{children}</CareerDeckContext.Provider>;

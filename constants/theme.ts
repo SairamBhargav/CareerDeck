@@ -41,6 +41,10 @@ export interface Palette {
   likeSurface: string;
   likeBorder: string;
 
+  /** The weekly goal ring once the week is done, and the streak marks behind it. */
+  goalMet: string;
+  goalMetSurface: string;
+
   /** Auto Apply's distinct "AI-assisted" violet. */
   autoApply: string;
   autoApplyGlow: string;
@@ -89,6 +93,9 @@ const lightPalette: Palette = {
   like: '#FF3B5C',
   likeSurface: '#FFECEF',
   likeBorder: '#FFD3DA',
+
+  goalMet: '#12A150',
+  goalMetSurface: '#E4F6EB',
 
   autoApply: '#7B5CFA',
   autoApplyGlow: 'rgba(123, 92, 250, 0.45)',
@@ -142,6 +149,10 @@ const darkPalette: Palette = {
   like: '#FF4D6D',
   likeSurface: 'rgba(255, 77, 109, 0.18)',
   likeBorder: 'rgba(255, 77, 109, 0.38)',
+
+  // Lifted off the light value: #12A150 goes muddy against near-black.
+  goalMet: '#34D77F',
+  goalMetSurface: 'rgba(52, 215, 127, 0.16)',
 
   autoApply: '#A78BFF',
   autoApplyGlow: 'rgba(167, 139, 255, 0.55)',
