@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -29,6 +29,10 @@ const RAIL_RESERVED_WIDTH = 92;
 const RAIL_LIFT = spacing.sm;
 /** Extra breathing room between the end of the caption and the rail line, on top of RAIL_LIFT. */
 const CONTENT_BOTTOM_GAP = spacing.xl;
+/** Must match `description`'s own lineHeight — it's what a clamped line costs. */
+const DESCRIPTION_LINE_HEIGHT = 22;
+/** Never clamp the blurb below this, however tight the card gets. */
+const MIN_DESCRIPTION_LINES = 2;
 
 interface JobReelCardProps {
   job: Job;
@@ -41,7 +45,8 @@ interface JobReelCardProps {
   /** Company's real logo image, when available — falls back to job.companyLogo's monogram. */
   logoUrl?: string;
   onLike: () => void;
-  onMore: () => void;
+  onSave: () => void;
+  onOpenDetails: () => void;
   onAutoApply: () => void;
 }
 
@@ -53,7 +58,8 @@ export function JobReelCard({
   logoColor,
   logoUrl,
   onLike,
-  onMore,
+  onSave,
+  onOpenDetails,
   onAutoApply,
 }: JobReelCardProps) {
   const { colors } = useTheme();
@@ -64,11 +70,24 @@ export function JobReelCard({
   // text visibly stops short of the rail line instead of running right up to it.
   const availableContentHeight = height - paddingTop - paddingBottom - RAIL_LIFT - CONTENT_BOTTOM_GAP;
 
-  // The un-clipped content's own natural height, measured via onLayout on the inner
-  // wrapper below. Compared against the available (clipped) box to decide whether this
-  // job's copy actually needs "Read more" or comfortably fits on its own.
-  const [naturalHeight, setNaturalHeight] = useState<number | null>(null);
-  const needsReadMore = naturalHeight !== null && naturalHeight > availableContentHeight;
+  // Both measured on the first, unclamped pass and then frozen: clamping the description
+  // shrinks the caption, which would otherwise re-fire these and oscillate.
+  const [natural, setNatural] = useState<{ content: number; description: number } | null>(null);
+  const measured = useRef<{ content?: number; description?: number }>({});
+
+  // "Read more" renders on every card, so it is already inside this measurement — the
+  // overflow is exactly how much the blurb has to give back, nothing more to reserve.
+  const overflowBy = natural === null ? 0 : natural.content - availableContentHeight;
+
+  // Trim the blurb by exactly that, so the skill chips below always land whole instead of
+  // being sliced by the clipping box. Left unclamped when the copy already fits.
+  const descriptionLines =
+    natural !== null && overflowBy > 0
+      ? Math.max(
+          MIN_DESCRIPTION_LINES,
+          Math.floor((natural.description - overflowBy) / DESCRIPTION_LINE_HEIGHT),
+        )
+      : undefined;
 
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
@@ -102,8 +121,15 @@ export function JobReelCard({
     transform: [{ scale: heartScale.value }],
   }));
 
-  const handleContentLayout = (event: LayoutChangeEvent) => {
-    setNaturalHeight(event.nativeEvent.layout.height);
+  // Each half of the measurement arrives in its own layout pass; commit only once both
+  // have, and only the first time, so the frozen numbers describe unclamped copy.
+  const capture = (key: 'content' | 'description') => (event: LayoutChangeEvent) => {
+    const measurement = event.nativeEvent.layout.height;
+    if (measurement <= 0 || measured.current[key] !== undefined) return;
+
+    measured.current[key] = measurement;
+    const { content, description } = measured.current;
+    if (content !== undefined && description !== undefined) setNatural({ content, description });
   };
 
   return (
@@ -134,10 +160,10 @@ export function JobReelCard({
               styles.contentBox,
               { paddingRight: RAIL_RESERVED_WIDTH, paddingBottom: RAIL_LIFT + CONTENT_BOTTOM_GAP },
             ]}>
-            {/* Unconstrained on purpose: contentBox's fixed height + overflow:hidden is
-                what visually clips this, but leaving this view free to size to its natural
-                content means onLayout reports the true, un-clipped height. */}
-            <View style={styles.contentInner} onLayout={handleContentLayout}>
+            {/* Free to size to its content on the first pass, which is what lets onLayout
+                report the true un-clamped height. contentBox's fixed height still clips
+                that pass; once the description is clamped, everything fits inside it. */}
+            <View style={styles.contentInner} onLayout={capture('content')}>
               <View style={styles.companyRow}>
                 <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
                 <View style={styles.companyText}>
@@ -152,7 +178,26 @@ export function JobReelCard({
 
               <JobMetadata job={job} emphasizeSalary />
 
-              <Text style={styles.description}>{job.description}</Text>
+              <View style={styles.descriptionBlock}>
+                <Text
+                  style={styles.description}
+                  numberOfLines={descriptionLines}
+                  onLayout={capture('description')}>
+                  {job.description}
+                </Text>
+
+                {/* On every card, not just clamped ones: the sheet always carries the
+                    full requirements list, which the reel never shows at all. */}
+                <Pressable
+                  onPress={onOpenDetails}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Read the full posting for ${job.title}`}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.readMore, pressed ? styles.readMorePressed : null]}>
+                  <Text style={styles.readMoreLabel}>Read more</Text>
+                  <Ionicons name="chevron-down" size={11} color={colors.text} />
+                </Pressable>
+              </View>
 
               <View style={styles.skills}>
                 {skills.map((skill) => (
@@ -161,21 +206,6 @@ export function JobReelCard({
               </View>
             </View>
           </View>
-
-          {needsReadMore ? (
-            <Pressable
-              onPress={onMore}
-              accessibilityRole="button"
-              accessibilityLabel="Read the full job description"
-              style={({ pressed }) => [
-                styles.readMore,
-                { bottom: RAIL_LIFT + CONTENT_BOTTOM_GAP },
-                pressed ? styles.readMorePressed : null,
-              ]}>
-              <Text style={styles.readMoreLabel}>Read more</Text>
-              <Ionicons name="chevron-down" size={11} color={colors.text} />
-            </Pressable>
-          ) : null}
 
           <Animated.View pointerEvents="none" style={[styles.heartBurst, heartBurstStyle]}>
             <Ionicons name="heart" size={104} color={colors.like} />
@@ -186,8 +216,9 @@ export function JobReelCard({
       <View style={[styles.rail, { bottom: paddingBottom + RAIL_LIFT }]}>
         <ReelActionRail
           isLiked={job.isLiked}
+          isSaved={job.isSaved}
           onLike={handleLike}
-          onMore={onMore}
+          onSave={onSave}
           onAutoApply={onAutoApply}
           jobTitle={job.title}
         />
@@ -272,28 +303,24 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.sm,
     marginTop: spacing.xs,
   },
-  // Pinned to the bottom of the tapZone (lifted the same amount as the rail), which
-  // already sits at the same Y as the action rail's bottom — so this lines up with the
-  // bottom of the Auto Apply button without any extra math.
+  // Kept tight to the blurb it continues, with less air than contentInner's own gap.
+  descriptionBlock: {
+    gap: spacing.xs,
+  },
+  // Part of the caption rather than a control floating over it: no pill, no border, no
+  // shadow — just the one line of the copy that happens to be tappable, which is why it
+  // takes the full-strength text colour the body copy around it doesn't.
   readMore: {
-    position: 'absolute',
-    left: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.controlSurface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    ...colors.shadowSoft,
   },
   readMorePressed: {
     opacity: 0.7,
   },
   readMoreLabel: {
-    fontSize: fontSize.caption,
+    fontSize: fontSize.small,
     fontWeight: '700',
     color: colors.text,
   },

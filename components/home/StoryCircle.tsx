@@ -13,6 +13,15 @@ const RING_WIDTH = 2.5;
 
 export const STORY_CIRCLE_WIDTH = AVATAR + (RING_GAP + RING_WIDTH) * 2;
 
+/** Matches the `xl` corner CompanyLogo rounds its own plate to. */
+const AVATAR_RADIUS = radius.lg;
+/**
+ * The ring sits `RING_GAP + RING_WIDTH` outside the avatar, so its corner has to grow by
+ * exactly that much to stay concentric — a shared radius would leave the gap pinching at
+ * the corners and bulging along the sides.
+ */
+export const STORY_RING_RADIUS = AVATAR_RADIUS + RING_GAP + RING_WIDTH;
+
 interface StoryCircleProps {
   group: StoryGroup;
   onPress: () => void;
@@ -49,13 +58,7 @@ export function StoryCircle({ group, onPress }: StoryCircleProps) {
             <Ionicons name="trending-up" size={26} color={colors.textInverse} />
           </View>
         ) : (
-          <CompanyLogo
-            logo={group.logo}
-            name={group.name}
-            color={group.logoColor}
-            size="xl"
-            shape="circle"
-          />
+          <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="xl" />
         )}
       </View>
 
@@ -81,14 +84,14 @@ const useStyles = makeStyles((colors) => ({
   ring: {
     width: STORY_CIRCLE_WIDTH,
     height: STORY_CIRCLE_WIDTH,
-    borderRadius: radius.pill,
+    borderRadius: STORY_RING_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
   },
   industryAvatar: {
     width: AVATAR,
     height: AVATAR,
-    borderRadius: radius.pill,
+    borderRadius: AVATAR_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.text,

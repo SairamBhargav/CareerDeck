@@ -37,7 +37,7 @@ const REFRESH_DURATION = 1100;
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { companies, defaultResume, toggleLike } = useCareerDeck();
+  const { companies, defaultResume, toggleLike, toggleSave } = useCareerDeck();
   const { forYouJobs, followingJobs } = useJobFeeds();
   const tabBarHeight = useTabBarHeight();
 
@@ -199,7 +199,8 @@ export default function ReelsScreen() {
                   logoColor={companyById.get(item.companyId)?.logoColor}
                   logoUrl={companyById.get(item.companyId)?.logo}
                   onLike={() => toggleLike(item.id)}
-                  onMore={() => setDetailsJob(item)}
+                  onSave={() => toggleSave(item.id)}
+                  onOpenDetails={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
                 />
               )}

@@ -2,7 +2,7 @@ import { FlatList, View } from 'react-native';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { Skeleton } from '@/components/common/Skeleton';
-import { STORY_CIRCLE_WIDTH, StoryCircle } from '@/components/home/StoryCircle';
+import { STORY_CIRCLE_WIDTH, STORY_RING_RADIUS, StoryCircle } from '@/components/home/StoryCircle';
 import { screenPadding, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { StoryGroup } from '@/types';
@@ -36,7 +36,7 @@ export function StoriesRow({ groups, loading, onPressGroup }: StoriesRowProps) {
         <View style={styles.skeletonRow}>
           {Array.from({ length: SKELETON_COUNT }, (_, index) => (
             <View key={index} style={styles.skeletonItem}>
-              <Skeleton width={STORY_CIRCLE_WIDTH} height={STORY_CIRCLE_WIDTH} borderRadius={999} />
+              <Skeleton width={STORY_CIRCLE_WIDTH} height={STORY_CIRCLE_WIDTH} borderRadius={STORY_RING_RADIUS} />
               <Skeleton width={STORY_CIRCLE_WIDTH - 16} height={9} borderRadius={4} />
             </View>
           ))}

@@ -6,14 +6,20 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface ReelActionRailProps {
   isLiked: boolean;
+  isSaved: boolean;
   onLike: () => void;
-  onMore: () => void;
+  onSave: () => void;
   onAutoApply: () => void;
   jobTitle: string;
 }
 
-/** Vertical social-style rail on the right edge of a reel. */
-export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle }: ReelActionRailProps) {
+/**
+ * Vertical social-style rail on the right edge of a reel: the three things you do to a
+ * job. The middle slot used to be an "ellipsis" that opened the details sheet, which is
+ * what the caption's own "Read more" already does — and left Save unreachable from this
+ * tab entirely, despite Activity telling people to save from here.
+ */
+export function ReelActionRail({ isLiked, isSaved, onLike, onSave, onAutoApply, jobTitle }: ReelActionRailProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -25,13 +31,15 @@ export function ReelActionRail({ isLiked, onLike, onMore, onAutoApply, jobTitle 
         active={isLiked}
         activeColor={colors.like}
         onPress={onLike}
+        highlightSurface
         accessibilityLabel={isLiked ? `Unlike ${jobTitle}` : `Like ${jobTitle}`}
       />
       <RailAction
-        icon="ellipsis-horizontal"
-        label="More"
-        onPress={onMore}
-        accessibilityLabel={`More options for ${jobTitle}`}
+        icon={isSaved ? 'bookmark' : 'bookmark-outline'}
+        label="Save"
+        active={isSaved}
+        onPress={onSave}
+        accessibilityLabel={isSaved ? `Unsave ${jobTitle}` : `Save ${jobTitle}`}
       />
 
       <Pressable
@@ -54,9 +62,19 @@ interface RailActionProps {
   accessibilityLabel: string;
   active?: boolean;
   activeColor?: string;
+  /** Washes the circle behind the icon too. Like wants it; Save just fills its bookmark. */
+  highlightSurface?: boolean;
 }
 
-function RailAction({ icon, label, onPress, accessibilityLabel, active = false, activeColor }: RailActionProps) {
+function RailAction({
+  icon,
+  label,
+  onPress,
+  accessibilityLabel,
+  active = false,
+  activeColor,
+  highlightSurface = false,
+}: RailActionProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -68,7 +86,7 @@ function RailAction({ icon, label, onPress, accessibilityLabel, active = false, 
       accessibilityState={{ selected: active }}
       hitSlop={6}
       style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
-      <View style={[styles.actionCircle, active ? styles.actionCircleActive : null]}>
+      <View style={[styles.actionCircle, active && highlightSurface ? styles.actionCircleActive : null]}>
         <Ionicons name={icon} size={22} color={active ? activeColor ?? colors.text : colors.text} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
