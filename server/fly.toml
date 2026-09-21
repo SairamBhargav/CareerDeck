@@ -1,0 +1,41 @@
+# Fly.io deployment for the CareerDeck API service (§2.1).
+#
+# Not deployed yet — deploying needs a Fly account and an app name that is globally
+# unique, both of which are yours to pick. To ship it:
+#
+#   fly launch --no-deploy --copy-config --name <your-app-name>
+#   fly secrets set SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=...
+#   fly deploy
+#
+# Secrets go through `fly secrets`, never into this file — it is committed.
+
+app = "careerdeck-api"
+primary_region = "dfw"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8787"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Phase 0 has no traffic and no background work, so idle machines stop. The feed in
+  # phase 5 has a cold-start budget and will want min_machines_running = 1 instead.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

@@ -50,6 +50,11 @@ export default function ProfileScreen() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingPreferences, setEditingPreferences] = useState(false);
 
+  // The root layout holds the splash until the profile has loaded and shows an error
+  // screen if it can't, so this screen is never reached without one. Narrowing the type
+  // rather than defaulting it — there is no sensible stand-in for "who you are".
+  if (!user) return null;
+
   const previewRoles = preferredRoles.slice(0, PREVIEW_CHIPS);
   const extraRoles = preferredRoles.length - previewRoles.length;
 

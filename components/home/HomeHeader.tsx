@@ -1,16 +1,19 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, Text, View } from 'react-native';
 
 import { fontSize, radius } from '@/constants/theme';
-import { makeStyles } from '@/context/ThemeContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface HomeHeaderProps {
   firstName: string;
-  initials: string;
+  /** Null until the user has given a name — the avatar falls back to a glyph. */
+  initials: string | null;
   onProfilePress: () => void;
 }
 
 export function HomeHeader({ firstName, initials, onProfilePress }: HomeHeaderProps) {
   const styles = useStyles();
+  const { colors } = useTheme();
 
   return (
     <View style={styles.row}>
@@ -21,7 +24,11 @@ export function HomeHeader({ firstName, initials, onProfilePress }: HomeHeaderPr
         accessibilityRole="button"
         accessibilityLabel="Open your profile"
         style={({ pressed }) => [styles.avatar, pressed ? styles.pressed : null]}>
-        <Text style={styles.avatarText}>{initials}</Text>
+        {initials ? (
+          <Text style={styles.avatarText}>{initials}</Text>
+        ) : (
+          <Ionicons name="person" size={20} color={colors.accentText} />
+        )}
       </Pressable>
     </View>
   );

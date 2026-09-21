@@ -21,6 +21,7 @@ import { useJobFeeds, useSortedJobs, type JobSort } from '@/hooks/useJobFeeds';
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Company, Job, StoryGroup } from '@/types';
+import { greetingNameOf, initialsOf } from '@/utils/profile';
 
 /** Fade for the page's first paint, once the mock "fetch" resolves. */
 const REVEAL_MS = 260;
@@ -67,8 +68,8 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.top}>
           <HomeHeader
-            firstName={user.firstName}
-            initials={initialsOf(user.firstName, user.lastName)}
+            firstName={greetingNameOf(user)}
+            initials={initialsOf(user)}
             onProfilePress={() => router.push('/profile')}
           />
 
@@ -136,10 +137,6 @@ interface StorySession {
   groups: StoryGroup[];
   groupIndex: number;
   itemIndex: number;
-}
-
-function initialsOf(firstName: string, lastName: string): string {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 }
 
 const useStyles = makeStyles((colors) => ({

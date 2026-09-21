@@ -8,5 +8,8 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules"]
+  // scripts/ and server/ are Node programs, not app code — they run under a different
+  // module resolution and have their own tsconfig. Typechecking them with the app's
+  // React Native settings only produces noise about `node:` imports.
+  "exclude": ["node_modules", "scripts", "server"]
 }

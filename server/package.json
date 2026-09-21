@@ -1,0 +1,22 @@
+{
+  "name": "careerdeck-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CareerDeck API service — the half of the backend that RLS cannot express.",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.0",
+    "@sentry/node": "^10.0.0",
+    "@supabase/supabase-js": "^2.116.0",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "~6.0.3"
+  }
+}

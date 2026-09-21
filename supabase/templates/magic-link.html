@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <!--
+      Deliberately a code and not a link.
+
+      Supabase's default magic-link template sends {{ .ConfirmationURL }}. Tapping a link
+      in a mail app opens a browser, which then has to hand the session back to the app
+      through a deep link — a round trip with several ways to fail and no way to explain
+      itself when it does. A six-digit code is typed into the app that asked for it, so
+      the session is created where it is used.
+
+      app/sign-in.tsx expects exactly this: {{ .Token }}, six digits, nothing else to tap.
+    -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:420px;background:#ffffff;border-radius:18px;padding:32px;">
+            <tr>
+              <td style="font-size:20px;font-weight:700;color:#111114;letter-spacing:-0.4px;padding-bottom:8px;">
+                CareerDeck
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:15px;color:#5c5c68;line-height:22px;padding-bottom:24px;">
+                Here is your sign-in code. It expires in an hour and can only be used once.
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding-bottom:24px;">
+                <div style="font-size:32px;font-weight:700;letter-spacing:10px;color:#111114;background:#f6f6f7;border-radius:12px;padding:18px 12px;">
+                  {{ .Token }}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;color:#8e8e9a;line-height:19px;">
+                If you didn&rsquo;t ask for this, you can ignore it — nobody can sign in without the code.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -32,6 +32,11 @@ yarn-error.*
 
 # local env files
 .env*.local
+# .env* would swallow .env.example, which is meant to be committed.
+.env
+.env.development
+.env.production
+server/.env
 
 # typescript
 *.tsbuildinfo

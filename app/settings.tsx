@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import { SectionHeader } from '@/components/common/SectionHeader';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
 import { AUTO_APPLY_ECONOMY } from '@/constants/goal';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
@@ -31,9 +32,26 @@ export default function SettingsScreen() {
   const isDark = scheme === 'dark';
 
   const { weeklyGoal, setWeeklyGoal, autoApplyCredits } = useCareerDeck();
+  const { session, signOut } = useAuth();
   const goal = useWeeklyGoal();
 
   const [editingGoal, setEditingGoal] = useState(false);
+
+  // Signing out is cheap to undo but expensive to do by accident — you lose whatever
+  // was mid-edit and have to wait on an email for a new code.
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'You will need to sign in again to get back in.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: () => {
+          signOut().catch((error: unknown) =>
+            Alert.alert('Could not sign out', error instanceof Error ? error.message : String(error)),
+          );
+        },
+      },
+    ]);
 
   const applyingRows: RowGroupItem[] = [
     {
@@ -75,7 +93,14 @@ export default function SettingsScreen() {
 
   const accountRows: RowGroupItem[] = [
     { key: 'edit-profile', icon: 'person-outline', label: 'Edit profile', onPress: () => router.push('/profile') },
-    { key: 'password', icon: 'lock-closed-outline', label: 'Change password', soon: true },
+    {
+      key: 'email',
+      icon: 'mail-outline',
+      label: 'Email',
+      // Straight off the session rather than the profile: this is the address the
+      // account is keyed on, and it is not one of the fields the profile editor owns.
+      hint: session?.user.email ?? undefined,
+    },
   ];
 
   const supportRows: RowGroupItem[] = [
@@ -84,7 +109,14 @@ export default function SettingsScreen() {
     { key: 'terms', icon: 'document-text-outline', label: 'Terms of Service', soon: true },
   ];
 
-  const sessionRows: RowGroupItem[] = [{ key: 'sign-out', icon: 'log-out-outline', label: 'Sign out', soon: true }];
+  const sessionRows: RowGroupItem[] = [
+    {
+      key: 'sign-out',
+      icon: 'log-out-outline',
+      label: 'Sign out',
+      onPress: confirmSignOut,
+    },
+  ];
 
   const sections: { key: string; title?: string; rows: RowGroupItem[] }[] = [
     { key: 'applying', title: 'Applying', rows: applyingRows },
@@ -116,7 +148,7 @@ export default function SettingsScreen() {
         <View style={styles.footer}>
           <Text style={styles.version}>CareerDeck {version()}</Text>
           <Text style={styles.footnote}>
-            Accounts, notification delivery and support links arrive once CareerDeck has a backend.
+            Notification delivery and support links arrive with the rest of the backend.
           </Text>
         </View>
       </ScrollView>

@@ -9,9 +9,11 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.careerdeck.app"
     },
     "android": {
+      "package": "com.careerdeck.app",
       "adaptiveIcon": {
         "backgroundColor": "#0E0F13",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,7 +37,11 @@
           "imageWidth": 76
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-apple-authentication",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

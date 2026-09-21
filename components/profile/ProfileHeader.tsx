@@ -7,6 +7,7 @@ import { AnimatedCount } from '@/components/common/AnimatedCount';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { User } from '@/types';
+import { initialsOf, studyLineOf } from '@/utils/profile';
 
 const AVATAR_SIZE = 84;
 const RING_STROKE = 3;
@@ -43,6 +44,11 @@ export function ProfileHeader({
   const styles = useStyles();
 
   const onStreak = streakWeeks > 0;
+  // A brand-new account has an email and nothing else — §3.2 asks for nothing more at
+  // signup. Each line below appears only once there is something to put in it, rather
+  // than rendering an empty row or "Class of 0".
+  const initials = initialsOf(user);
+  const studyLine = studyLineOf(user);
 
   return (
     <View style={styles.wrap}>
@@ -63,10 +69,11 @@ export function ProfileHeader({
         ) : null}
 
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user.firstName.charAt(0)}
-            {user.lastName.charAt(0)}
-          </Text>
+          {initials ? (
+            <Text style={styles.avatarText}>{initials}</Text>
+          ) : (
+            <Ionicons name="person" size={34} color={colors.accentText} />
+          )}
         </View>
 
         {onStreak ? (
@@ -79,7 +86,9 @@ export function ProfileHeader({
 
       <Animated.View entering={FadeInDown.duration(280).delay(STAGGER_MS)} style={styles.identity}>
         <View style={styles.nameRow}>
-          <Text style={styles.name}>{user.displayName}</Text>
+          <Text style={[styles.name, user.displayName ? null : styles.namePlaceholder]}>
+            {user.displayName || 'Add your name'}
+          </Text>
           <Pressable
             onPress={onEdit}
             hitSlop={10}
@@ -91,11 +100,9 @@ export function ProfileHeader({
           </Pressable>
         </View>
 
-        <Text style={styles.detail}>{user.school}</Text>
-        <Text style={styles.detail}>
-          {user.major} {'·'} Class of {user.graduationYear}
-        </Text>
-        <Text style={styles.detail}>{user.location}</Text>
+        {user.school ? <Text style={styles.detail}>{user.school}</Text> : null}
+        {studyLine ? <Text style={styles.detail}>{studyLine}</Text> : null}
+        {user.location ? <Text style={styles.detail}>{user.location}</Text> : null}
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(300).delay(STAGGER_MS * 2)} style={styles.stats}>
@@ -197,6 +204,9 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: '700',
     color: colors.text,
     letterSpacing: -0.4,
+  },
+  namePlaceholder: {
+    color: colors.textTertiary,
   },
   editButton: {
     flexDirection: 'row',

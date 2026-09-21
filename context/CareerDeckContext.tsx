@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,13 +9,14 @@ import {
 } from 'react';
 
 import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
+import { useAuth } from '@/context/AuthContext';
 import { mockApplications } from '@/data/mockApplications';
 import { mockCommentActivity } from '@/data/mockCommentActivity';
 import { mockComments } from '@/data/mockComments';
 import { mockCompanies } from '@/data/mockCompanies';
 import { mockJobs } from '@/data/mockJobs';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
-import { mockUser } from '@/data/mockUser';
+import { useProfile } from '@/hooks/useProfile';
 import type {
   Application,
   ApplicationStatus,
@@ -30,22 +30,25 @@ import type {
 } from '@/types';
 
 /**
- * Single in-memory store for CareerDeck.
+ * Single store for CareerDeck.
  *
- * Milestone 0 has no backend, so following / liking / saving / the default resume live
- * here as plain React state and reset when the app restarts. When a real API arrives,
- * only this file needs to change - screens read from the hooks below.
+ * Phase 0 moved identity and preferences onto Postgres — `user`, `preferredRoles`,
+ * `preferredLocations` and `weeklyGoal` are now reads and writes against Supabase, and
+ * they survive a restart. Everything else below is still in-memory mock state and resets
+ * on reload; phases 1 and 2 move jobs, interactions and applications the same way.
+ *
+ * Screens read from the hooks below, so a field graduating from mock to server changes
+ * this file and nothing else.
  */
 
 interface CareerDeckState {
-  /**
-   * True for a short window right after mount, before "data" is considered to have
-   * arrived. There's no real fetch behind any of this yet — it's a stand-in so Home's
-   * skeleton states are wired up and visible now, ready to key off a real request once
-   * one exists.
-   */
+  /** True while the signed-in user's profile is in flight. Home's skeletons key off it. */
   isInitialLoading: boolean;
-  user: User;
+  /** Null while the profile is loading, or if it failed to load. */
+  user: User | null;
+  /** Set when the profile could not be read — the app shell can't be trusted until it is. */
+  profileError: Error | null;
+  retryProfile: () => void;
   jobs: Job[];
   companies: Company[];
   resumes: Resume[];
@@ -149,20 +152,25 @@ function seedFollowedCompanies(): Set<string> {
   return new Set(mockCompanies.filter((company) => company.isFollowing).map((company) => company.id));
 }
 
-/** How long Home's skeletons stay up before the (currently instant) mock data "arrives". */
-const INITIAL_LOAD_MS = 650;
-
 export function CareerDeckProvider({ children }: { children: ReactNode }) {
+  const { userId } = useAuth();
+  const {
+    profile,
+    isLoading: isInitialLoading,
+    error: profileError,
+    retry: retryProfile,
+    updateIdentity: writeIdentity,
+    updatePreferences,
+  } = useProfile(userId);
+
   const [followedIds, setFollowedIds] = useState<Set<string>>(seedFollowedCompanies);
   const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set<string>());
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set<string>());
   const [seenNewsIds, setSeenNewsIds] = useState<Set<string>>(() => new Set<string>());
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [applications, setApplications] = useState<Application[]>(mockApplications);
-  const [weeklyGoal, setWeeklyGoalState] = useState(DEFAULT_WEEKLY_GOAL);
   // Seeded with a single day's grant. Accrual across days, and the balance surviving a
-  // restart, both need storage this milestone doesn't have — see the note on the file.
+  // restart, both need the credit ledger in §7, which phase 6 builds.
   const [autoApplyCredits, setAutoApplyCredits] = useState<number>(AUTO_APPLY_ECONOMY.dailyGrant);
   /**
    * The balance again, readable synchronously. Spending and awarding both need to
@@ -173,7 +181,9 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   /** Week keys already paid, so a re-render or a tab revisit can't pay twice. */
   const paidWeeks = useRef<Set<string>>(new Set());
   const [lastStreakAward, setLastStreakAward] = useState<StreakAward | null>(null);
-  const [user, setUser] = useState<User>(mockUser);
+
+  const user = profile?.user ?? null;
+  const weeklyGoal = profile?.weeklyGoal ?? DEFAULT_WEEKLY_GOAL;
 
   const setCredits = useCallback((next: number) => {
     creditsRef.current = next;
@@ -182,11 +192,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [commentActivity, setCommentActivity] = useState<CommentActivity[]>(mockCommentActivity);
   const [comments, setComments] = useState<JobComment[]>(mockComments);
   const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(() => new Set<string>());
-
-  useEffect(() => {
-    const timer = setTimeout(() => setIsInitialLoading(false), INITIAL_LOAD_MS);
-    return () => clearTimeout(timer);
-  }, []);
 
   const toggleFollow = useCallback((companyId: string) => {
     setFollowedIds((current) => toggleInSet(current, companyId));
@@ -248,6 +253,10 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     const trimmed = body.trim();
     // A GIF on its own is a comment; text on its own is a comment; neither is not.
     if (trimmed.length === 0 && gifId === undefined) return;
+    // No profile means no author to attribute it to. Unreachable from the UI — the
+    // thread is behind the auth gate — but a comment signed by nobody is worse than one
+    // that doesn't get posted.
+    if (!user) return;
 
     setComments((current) => [
       ...current,
@@ -276,9 +285,17 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const setWeeklyGoal = useCallback((target: number) => {
-    setWeeklyGoalState(Math.min(Math.max(Math.round(target), MIN_WEEKLY_GOAL), MAX_WEEKLY_GOAL));
-  }, []);
+  const setWeeklyGoal = useCallback(
+    (target: number) => {
+      // Clamped here as well as by the check constraint on user_preferences.weekly_goal:
+      // the database is what makes it true, this is what stops a round trip that can
+      // only come back as an error.
+      updatePreferences({
+        weeklyGoal: Math.min(Math.max(Math.round(target), MIN_WEEKLY_GOAL), MAX_WEEKLY_GOAL),
+      });
+    },
+    [updatePreferences],
+  );
 
   const spendAutoApplyCredit = useCallback(() => {
     if (creditsRef.current <= 0) return false;
@@ -300,21 +317,19 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     [setCredits],
   );
 
-  const setPreferredRoles = useCallback((roles: string[]) => {
-    setUser((current) => ({ ...current, preferredRoles: roles }));
-  }, []);
+  const setPreferredRoles = useCallback(
+    (roles: string[]) => updatePreferences({ preferredRoles: roles }),
+    [updatePreferences],
+  );
 
-  const setPreferredLocations = useCallback((locations: string[]) => {
-    setUser((current) => ({ ...current, preferredLocations: locations }));
-  }, []);
+  const setPreferredLocations = useCallback(
+    (locations: string[]) => updatePreferences({ preferredLocations: locations }),
+    [updatePreferences],
+  );
 
-  const updateIdentity = useCallback((edit: UserIdentityEdit) => {
-    setUser((current) => ({
-      ...current,
-      ...edit,
-      displayName: `${edit.firstName} ${edit.lastName}`.trim(),
-    }));
-  }, []);
+  // `displayName` isn't sent: it's a generated column on `profiles`, composed from the
+  // two name fields, so there is only ever one spelling of who this is.
+  const updateIdentity = useCallback((edit: UserIdentityEdit) => writeIdentity(edit), [writeIdentity]);
 
   const markCommentActivityRead = useCallback((activityId: string) => {
     setCommentActivity((current) =>
@@ -345,6 +360,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     return {
       isInitialLoading,
       user,
+      profileError,
+      retryProfile,
       jobs,
       companies,
       resumes: mockResumes,
@@ -383,14 +400,16 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       spendAutoApplyCredit,
       awardStreakBonus,
       lastStreakAward,
-      preferredRoles: user.preferredRoles,
-      preferredLocations: user.preferredLocations,
+      preferredRoles: user?.preferredRoles ?? [],
+      preferredLocations: user?.preferredLocations ?? [],
       setPreferredRoles,
       setPreferredLocations,
       updateIdentity,
     };
   }, [
     isInitialLoading,
+    profileError,
+    retryProfile,
     followedIds,
     likedIds,
     savedIds,
