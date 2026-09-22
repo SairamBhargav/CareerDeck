@@ -81,6 +81,27 @@ async function signInByEmailCode(email) {
   return { client, store, userId: verified.data.user?.id };
 }
 
+/**
+ * Retries a read a few times with a short backoff.
+ *
+ * The trigger that provisions `profiles` / `user_preferences` runs inside the same
+ * transaction as GoTrue's own write, so by the time `verifyOtp` resolves the row is
+ * committed. But PostgREST sits between this script and Postgres, and immediately after
+ * a long-idle local stack wakes back up its connection pool can serve a stale read for
+ * one request. A mobile client hitting the same endpoint a moment after sign-in would
+ * see the same thing, so tolerating it here is the honest check — the failure worth
+ * catching is the row never showing up, not it taking an extra 300ms.
+ */
+async function eventually(read, isReady, attempts = 5, delayMs = 300) {
+  let last;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    last = await read();
+    if (isReady(last)) return last;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return last;
+}
+
 const stamp = Date.now();
 const primary = await signInByEmailCode(`verify-${stamp}@example.com`);
 if (!primary?.userId) {
@@ -93,8 +114,14 @@ const { client, store, userId } = primary;
 // ── provisioning ───────────────────────────────────────────────────────────────
 
 const [seededProfile, seededPrefs] = await Promise.all([
-  client.from('profiles').select('id, verification_tier').eq('id', userId).maybeSingle(),
-  client.from('user_preferences').select('weekly_goal, open_to_remote').eq('user_id', userId).maybeSingle(),
+  eventually(
+    () => client.from('profiles').select('id, verification_tier').eq('id', userId).maybeSingle(),
+    (result) => result.data !== null,
+  ),
+  eventually(
+    () => client.from('user_preferences').select('weekly_goal, open_to_remote').eq('user_id', userId).maybeSingle(),
+    (result) => result.data !== null,
+  ),
 ]);
 
 check('handle_auth_user_change created a profile', seededProfile.data !== null);
