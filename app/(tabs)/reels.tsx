@@ -27,6 +27,7 @@ import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCommentCounts } from '@/hooks/useComments';
+import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
@@ -62,6 +63,14 @@ export default function ReelsScreen() {
   const followingFeed = useFollowingFeed();
   const commentCounts = useCommentCounts();
   const tabBarHeight = useTabBarHeight();
+  /*
+   * §3.6: "reels.tsx already knows which page is active; it just needs to time it."
+   *
+   * Dwell is the strongest implicit signal in the system and the reason a Reels-style UI
+   * is worth building at all — how long a card held someone says far more than whether
+   * they tapped anything. One impression per card, written when they leave it.
+   */
+  const impressions = useDwellImpressions('reels');
 
   const [feed, setFeed] = useState<ReelFeed>('forYou');
   const [pageHeight, setPageHeight] = useState(0);
@@ -128,10 +137,18 @@ export default function ReelsScreen() {
     setPageHeight(event.nativeEvent.layout.height);
   }, []);
 
-  const handleFeedChange = useCallback((next: ReelFeed) => {
-    setFeed(next);
-    listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, []);
+  const settleDwell = impressions.settle;
+
+  const handleFeedChange = useCallback(
+    (next: ReelFeed) => {
+      // Settle before the list changes under us: the card being left is the one in the
+      // feed being left, and a beat later its index means something else entirely.
+      settleDwell(null);
+      setFeed(next);
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    },
+    [settleDwell],
+  );
 
   // A light tick the instant the drag passes the release point, so the threshold is felt
   // rather than guessed at.
@@ -248,6 +265,7 @@ export default function ReelsScreen() {
               removeClippedSubviews
               onEndReached={activeFeed.hasNextPage ? activeFeed.fetchNextPage : undefined}
               onEndReachedThreshold={END_REACHED_THRESHOLD}
+              viewabilityConfigCallbackPairs={impressions.viewabilityConfigCallbackPairs}
               renderItem={({ item }) => (
                 <JobReelCard
                   job={item}

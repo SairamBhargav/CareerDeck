@@ -28,6 +28,7 @@ import { SearchScopeTabs } from '@/components/search/SearchScopeTabs';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { useListImpressions } from '@/hooks/useImpressions';
 import { MIN_QUERY_LENGTH, useSearch, type SearchScope } from '@/hooks/useSearch';
 import type { Company, Job } from '@/types';
 
@@ -118,6 +119,17 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
   };
 
   const showingJobs = scope === 'jobs';
+  /*
+   * §3.6. Search impressions are the most legible signal in the system: the reader said
+   * what they wanted, and these are the postings shown in answer. Gated on the jobs tab
+   * — the same list renders companies under the other one — and reset per query, because
+   * the same card returned for a different search is a different impression.
+   */
+  const impressions = useListImpressions('search', {
+    enabled: showingJobs,
+    resetKey: query.trim().toLowerCase(),
+  });
+
   const activeResults = showingJobs ? results.jobs : results.companies;
 
   return (
@@ -197,6 +209,7 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
             contentContainerStyle={[styles.results, { paddingBottom: insets.bottom + spacing.xxl }]}
             initialNumToRender={8}
             windowSize={7}
+            viewabilityConfigCallbackPairs={impressions.viewabilityConfigCallbackPairs}
             renderItem={({ item, index }) => (
               <Animated.View entering={FadeInDown.duration(220).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
                 {showingJobs ? (

@@ -19,7 +19,9 @@ import type { Company } from '@/types';
  * the rule, because the reason it works is exactly the reason it does not work for jobs:
  * the set is small, bounded, and the same for everyone.
  *
- * It stops being needed for the Following list in phase 2, when follows become a join.
+ * Phase 2 kept it for the Following list. `viewer_state()` answers *which* companies are
+ * followed, as slugs; this answers *what they are* — name, logo, follower count — which
+ * is a read of the same few hundred shared rows every other screen already holds.
  */
 
 export interface CompanyDirectory {

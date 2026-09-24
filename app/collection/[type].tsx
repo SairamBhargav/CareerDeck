@@ -14,6 +14,7 @@ import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
+import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useJobsByIds } from '@/hooks/useJobFeeds';
 import type { Company } from '@/types';
 import { formatFollowerCount } from '@/utils/format';
@@ -92,6 +93,10 @@ export default function CollectionScreen() {
         .filter((company): company is Company => company !== undefined),
     [followedCompanySlugs, directory],
   );
+
+  // §3.6. A collection is a small, fully-mounted list, so an impression here means
+  // "rendered" rather than "scrolled to" — see useRenderedImpressions.
+  useRenderedImpressions('collection', shownJobs);
 
   const isLoading = collection === 'following' ? directory.isLoading : jobsLoading;
   const count = collection === 'following' ? followed.length : shownJobs.length;
