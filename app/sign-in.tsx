@@ -22,6 +22,8 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 /** Matches `otp_length` in supabase/config.toml. */
 const CODE_LENGTH = 6;
 
+type SignInKind = 'email' | 'code' | 'apple' | 'google' | 'dev';
+
 /**
  * The way in. Rendered only when there is no session — see app/_layout.tsx.
  *
@@ -47,7 +49,7 @@ export default function SignInScreen() {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState<'email' | 'code' | 'apple' | 'google' | 'dev' | null>(null);
+  const [busy, setBusy] = useState<SignInKind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const codeInput = useRef<TextInput>(null);
 
@@ -58,7 +60,7 @@ export default function SignInScreen() {
    * stuck in a spinner, and so backing out of a sheet doesn't read as a failure.
    */
   const run = useCallback(
-    async (kind: NonNullable<typeof busy>, action: () => Promise<void>, after?: () => void) => {
+    async (kind: SignInKind, action: () => Promise<void>, after?: () => void) => {
       setBusy(kind);
       setError(null);
       try {
@@ -66,7 +68,7 @@ export default function SignInScreen() {
         after?.();
       } catch (caught) {
         if (caught instanceof SignInCancelled) return;
-        setError(messageFor(caught));
+        setError(messageFor(caught, kind));
       } finally {
         setBusy(null);
       }
@@ -256,22 +258,38 @@ export default function SignInScreen() {
 }
 
 /**
- * Supabase&rsquo;s auth errors are written for developers. These are the three a user
+ * Supabase&rsquo;s auth errors are written for developers. These are the ones a user
  * will actually hit; everything else falls through with its own wording rather than
  * being flattened into "Something went wrong", which tells them nothing.
+ *
+ * Scoped by `kind`: Supabase raises the same word — "invalid" — for a wrong OTP code
+ * and for a wrong password, and those need different sentences. A dev-shortcut failure
+ * pointing at "ask for a new code" would send someone hunting for an email that was
+ * never going to arrive.
  */
-function messageFor(error: unknown): string {
+function messageFor(error: unknown, kind: SignInKind): string {
   const raw = error instanceof Error ? error.message : String(error);
   const lower = raw.toLowerCase();
 
-  if (lower.includes('expired') || lower.includes('invalid') || lower.includes('not found')) {
+  if (lower.includes('network') || lower.includes('fetch')) {
+    return 'Could not reach the server. Check your connection.';
+  }
+
+  if (kind === 'dev') {
+    if (lower.includes('invalid') || lower.includes('not found')) {
+      return (
+        "That test account doesn't exist yet, or its password doesn't match .env.local. " +
+        'Run `npm run dev:create-test-user`, then try again.'
+      );
+    }
+    return raw;
+  }
+
+  if (kind === 'code' && (lower.includes('expired') || lower.includes('invalid') || lower.includes('not found'))) {
     return 'That code is wrong or has expired. Ask for a new one.';
   }
   if (lower.includes('rate limit') || lower.includes('too many') || lower.includes('security purposes')) {
     return 'Too many attempts. Wait a minute and try again.';
-  }
-  if (lower.includes('network') || lower.includes('fetch')) {
-    return 'Could not reach the server. Check your connection.';
   }
   return raw;
 }
