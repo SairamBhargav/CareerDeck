@@ -1,5 +1,9 @@
 // Generated from the local database by `npm run types:generate` — do not edit by hand.
 // Regenerate after every migration; the client is typed against this file.
+//
+// Phase 2's entries were written by hand, because that phase was built without a local
+// database to generate from — PHASE2.md §8. Regenerate after the first `npm run db:reset`
+// that applies 20260923000000_phase2_interactions.sql; that run is what checks them.
 
 export type Json =
   | string
@@ -12,6 +16,102 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      application_events: {
+        Row: {
+          application_id: string
+          created_at: string
+          from_status: Database["public"]["Enums"]["application_status"] | null
+          id: number
+          to_status: Database["public"]["Enums"]["application_status"]
+        }
+        Insert: {
+          application_id: string
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["application_status"] | null
+          id?: never
+          to_status: Database["public"]["Enums"]["application_status"]
+        }
+        Update: {
+          application_id?: string
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["application_status"] | null
+          id?: never
+          to_status?: Database["public"]["Enums"]["application_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_events_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      applications: {
+        Row: {
+          applied_at: string
+          created_at: string
+          id: string
+          job_id: string
+          notes: string | null
+          self_reported: boolean
+          source: Database["public"]["Enums"]["application_source"]
+          status: Database["public"]["Enums"]["application_status"]
+          status_changed_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string
+          created_at?: string
+          id?: string
+          job_id: string
+          notes?: string | null
+          self_reported?: boolean
+          source: Database["public"]["Enums"]["application_source"]
+          status?: Database["public"]["Enums"]["application_status"]
+          status_changed_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          applied_at?: string
+          created_at?: string
+          id?: string
+          job_id?: string
+          notes?: string | null
+          self_reported?: boolean
+          source?: Database["public"]["Enums"]["application_source"]
+          status?: Database["public"]["Enums"]["application_status"]
+          status_changed_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "applications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           claimed_by_org_id: string | null
@@ -74,6 +174,39 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      company_follows: {
+        Row: {
+          company_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_follows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_follows_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crawl_runs: {
         Row: {
@@ -189,6 +322,82 @@ export type Database = {
             columns: ["other_job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_impressions: {
+        Row: {
+          completed: boolean | null
+          dwell_ms: number | null
+          job_id: string
+          position: number | null
+          session_id: string
+          shown_at: string
+          surface: Database["public"]["Enums"]["feed_surface"]
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean | null
+          dwell_ms?: number | null
+          job_id: string
+          position?: number | null
+          session_id: string
+          shown_at?: string
+          surface: Database["public"]["Enums"]["feed_surface"]
+          user_id: string
+        }
+        Update: {
+          completed?: boolean | null
+          dwell_ms?: number | null
+          job_id?: string
+          position?: number | null
+          session_id?: string
+          shown_at?: string
+          surface?: Database["public"]["Enums"]["feed_surface"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      job_interactions: {
+        Row: {
+          created_at: string
+          job_id: string
+          kind: Database["public"]["Enums"]["interaction_kind"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          job_id: string
+          kind: Database["public"]["Enums"]["interaction_kind"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          job_id?: string
+          kind?: Database["public"]["Enums"]["interaction_kind"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_interactions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_interactions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -666,6 +875,14 @@ export type Database = {
     Functions: {
       close_stale_jobs: { Args: { p_unseen_hours?: number }; Returns: number }
       decode_cursor: { Args: { p_cursor: string }; Returns: Json }
+      drop_old_impression_partitions: {
+        Args: { p_keep_months?: number }
+        Returns: number
+      }
+      ensure_impression_partitions: {
+        Args: { p_months_ahead?: number }
+        Returns: number
+      }
       encode_cursor: {
         Args: { p_id: string; p_value: string }
         Returns: string
@@ -697,6 +914,8 @@ export type Database = {
         }
         Returns: string
       }
+      log_impressions: { Args: { p_rows: Json }; Returns: number }
+      reconcile_follower_counts: { Args: never; Returns: number }
       refresh_open_job_counts: { Args: never; Returns: number }
       search_companies: {
         Args: { p_limit?: number; p_query: string }
@@ -723,6 +942,18 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      set_company_follow: {
+        Args: { p_company_slug: string; p_on: boolean }
+        Returns: boolean
+      }
+      set_job_interaction: {
+        Args: {
+          p_job_id: string
+          p_kind: Database["public"]["Enums"]["interaction_kind"]
+          p_on: boolean
+        }
+        Returns: boolean
+      }
       suggested_companies: {
         Args: { p_limit?: number }
         Returns: Database["public"]["CompositeTypes"]["company_card"][]
@@ -737,8 +968,14 @@ export type Database = {
         Args: { p_sep: string; p_values: string[] }
         Returns: string
       }
+      viewer_state: {
+        Args: { p_limit?: number }
+        Returns: Database["public"]["CompositeTypes"]["viewer_sets"]
+      }
     }
     Enums: {
+      application_source: "greenhouse" | "workday" | "lever" | "ashby" | "company"
+      application_status: "applied" | "interview" | "offer" | "closed"
       ats_kind:
         | "greenhouse"
         | "lever"
@@ -748,6 +985,14 @@ export type Database = {
         | "company_site"
         | "feed"
       employment_type: "Internship" | "Full-time" | "Part-time" | "Contract"
+      feed_surface:
+        | "reels"
+        | "home"
+        | "search"
+        | "company"
+        | "collection"
+        | "story"
+      interaction_kind: "like" | "save" | "hide" | "not_interested"
       job_status: "open" | "closed" | "expired" | "removed" | "suppressed"
       location_type: "Onsite" | "Hybrid" | "Remote"
       salary_period: "hour" | "year"
@@ -802,6 +1047,13 @@ export type Database = {
         dedup_group_id: string | null
         page_cursor: string | null
         rank: number | null
+      }
+      viewer_sets: {
+        liked_job_ids: string[] | null
+        saved_job_ids: string[] | null
+        hidden_job_ids: string[] | null
+        followed_company_ids: string[] | null
+        followed_company_slugs: string[] | null
       }
     }
   }

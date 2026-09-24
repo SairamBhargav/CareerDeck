@@ -23,10 +23,15 @@ import type { Company, Job } from '@/types';
  * `lib/api.ts`.
  *
  * The one thing that has *not* changed is what a component receives: a `Job` with
- * `isSaved` and `isLiked` already on it. The server sends the shared entity and a
- * `viewer` object (§1.3a); the merge below folds them together, exactly as
- * `CareerDeckContext` used to in its `useMemo`. When phase 2 starts filling `viewer`
- * server-side, this merge is deleted and no card notices.
+ * `isSaved` and `isLiked` already on it. The server sends the shared entity and the
+ * viewer's relationship to it arrives separately (§1.3a); the merge below folds them
+ * together, exactly as `CareerDeckContext` used to in its `useMemo`.
+ *
+ * Phase 1 expected phase 2 to fill `viewer` per row and delete this merge. It did the
+ * opposite — PHASE2.md §3 — because per-row viewer flags are what make a feed page
+ * uncacheable, which is the problem §1.3(a) was written about. So the merge stays and its
+ * *source* changed: `useViewerState` reads `job_interactions` and `company_follows`
+ * instead of the context's in-memory sets.
  */
 
 export type ReelFeed = 'following' | 'forYou';
@@ -55,9 +60,9 @@ function pageParams() {
 /**
  * Folds the viewer's own state onto the shared entity.
  *
- * `saved` and `liked` come from the client's in-memory sets in phase 1 and from the
- * server's `viewer` object in phase 2 — `viewer.saved || savedIds.has(id)` reads correctly
- * in both worlds, which is what makes the changeover a deletion rather than a rewrite.
+ * `viewer` is still the envelope's default half — nothing fills it per row — and the sets
+ * carry the answer. `viewer.saved || saved.has(id)` is written to read correctly either
+ * way, so the day a page does arrive pre-decorated this line is already right.
  */
 function mergeViewer(pages: EnvelopePage[] | undefined, saved: Set<string>, liked: Set<string>): Job[] {
   if (!pages) return [];
@@ -123,9 +128,10 @@ export function useJobFeed(sort: JobSort = 'recent'): JobFeed {
 /**
  * Postings from the companies the viewer follows.
  *
- * The slugs are sent as a filter because `company_follows` does not exist until phase 2 —
- * PHASE1.md §7.3. When it does, this hook drops the argument and the server reads the
- * join; the query key already includes the slugs so the cache is correct either way.
+ * The slugs come from `company_follows` now, by way of `viewer_state()`, but they are
+ * still sent as a filter rather than read as a join on the server — PHASE2.md §9.2. The
+ * query key includes them, so following a company invalidates exactly this feed and
+ * nothing else.
  */
 export function useFollowingFeed(): JobFeed {
   const { followedCompanySlugs } = useCareerDeck();

@@ -1388,11 +1388,29 @@ Measured: 30,800+ postings from 140 companies, 124 of 124 sources healthy, cross
 dedup 0.00%. A separate 11% of reconcile attempts are employers posting one role under
 several requisition ids — counted apart, because it is their data rather than our defect.
 
-### Phase 2 — Interactions and tracking (2–3 weeks)
+### Phase 2 — Interactions and tracking (2–3 weeks) — **built**
 `company_follows`, `job_interactions`, `applications`, `application_events`,
 `job_impressions`. Optimistic mutations + offline outbox. Collections screens.
 Weekly goal reads real applications.
 **Exit:** every existing UI interaction persists; impressions logging at volume.
+
+Design and outcome: [PHASE2.md](./PHASE2.md). Three decisions there depart from this
+document and are argued at length in it:
+
+- **The server does not fill `viewer` per feed row.** §1.3(a) asks for the shared entity
+  and the viewer's state to travel separately, and decorating every feed row is what makes
+  a page per-viewer and uncacheable. `viewer_state()` returns the viewer's whole
+  relationship graph as five arrays, once per session, and the client merges. §3.
+- **Likes and follows have no table grants at all.** They are written only through
+  `security definer` functions that set a state rather than flipping one, so `user_id`
+  cannot be supplied and the outbox's replay cannot invert anything. §2.5, §4.1.
+- **`job_impressions` has no foreign keys and no primary key.** §3.6's own sizing is ~3M
+  rows/day; an FK check and a per-partition unique index are paid on every insert for
+  properties nothing in a request path reads. One index, `(user_id, shown_at desc)`. §2.4.
+
+Also deferred rather than built: `application_intents`, `auto_apply_run_id` on
+`applications`, a `hide` / `not_interested` UI, and the join that would replace the
+Following feed's slug filter.
 
 ### Phase 3 — Identity and social (3–4 weeks)
 Verification (both paths), `comments`, likes, reports, blocks, strikes.

@@ -103,3 +103,14 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node server/src/ingest/run.ts --sweep
+
+      # Partition creation, retention and the follower-count reconcile — PHASE2.md §7.
+      # Independent of the crawl: it has to run even on a night when every board was
+      # unreachable, because the partition it creates is what next month's impression
+      # logging writes into.
+      - name: Maintain
+        if: steps.guard.outputs.configured == 'true' && !cancelled()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run db:maintain

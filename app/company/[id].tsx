@@ -12,6 +12,7 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCompany } from '@/hooks/useCompanies';
+import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useCompanyJobs } from '@/hooks/useJobFeeds';
 import { hexToRgba } from '@/utils/color';
 import { formatFollowerCount } from '@/utils/format';
@@ -39,6 +40,9 @@ export default function CompanyDetailScreen() {
   // the move to uuid primary keys precisely so these links keep resolving.
   const { company, isLoading } = useCompany(id);
   const openings = useCompanyJobs(id);
+  // §3.6. Called before the early returns below, because a hook that runs on some renders
+  // and not others is a hook that runs once and then throws.
+  useRenderedImpressions('company', openings.jobs);
 
   if (isLoading) {
     return (

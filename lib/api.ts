@@ -14,17 +14,27 @@
  * Two shapes it is careful about:
  *
  *  - **`{job, viewer}`** (§1.3a). The shared entity and the viewer's relationship to it
- *    travel separately. In phase 1 `viewer` is always the default and the feed hooks
- *    overlay the client's in-memory sets; in phase 2 the server fills it and the overlay
- *    is deleted. The envelope shipping early is what makes that a deletion rather than a
- *    migration.
+ *    travel separately, and in phase 2 they still arrive in separate calls: the feed is
+ *    the same bytes for every reader, and `fetchViewerState()` says what this reader has
+ *    done to them. Phase 1 predicted the server would fill `viewer` per row instead;
+ *    PHASE2.md §3 argues why it should not, and the merge in `useJobFeeds` stays.
  *  - **Opaque cursors.** The server hands back a continuation token per row; the client
  *    passes the last one back and never looks inside. Keyset pagination is an
  *    implementation detail of the SQL, and phase 5 gets to change it.
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Company, EmploymentType, Job, LocationType, SalaryPeriod, Seniority } from '@/types';
+import type {
+  Application,
+  ApplicationSource,
+  ApplicationStatus,
+  Company,
+  EmploymentType,
+  Job,
+  LocationType,
+  SalaryPeriod,
+  Seniority,
+} from '@/types';
 
 /** What the server knows about this viewer's relationship to a posting. §1.3(a). */
 export interface JobViewerState {
@@ -328,4 +338,264 @@ export async function searchCompanies(query: string, limit = 10): Promise<Compan
   const { data, error } = await supabase.rpc('search_companies', { p_query: query, p_limit: limit });
   if (error) throw error;
   return ((data ?? []) as CompanyCardRow[]).map(toCompany);
+}
+
+/* ── phase 2: what the viewer did ─────────────────────────────────────────────
+ *
+ * README §3.5, §3.6, §3.7. Everything above this line is the shared corpus; everything
+ * below it belongs to one person.
+ *
+ * The split is the reason `JobEnvelope` has two halves. A feed page is identical for
+ * every reader and can be cached as such; the viewer's relationship to those postings
+ * arrives separately, from `fetchViewerState()`, and is merged client-side. §1.3(a) is
+ * explicit that folding the two together is what makes a feed uncacheable, so `viewer`
+ * on the envelope stays at its default here and the merge in `useJobFeeds` stays where
+ * it is — it just reads server-backed sets now instead of in-memory ones.
+ */
+
+/** §3.5. `hide` and `not_interested` have no UI yet; the enum and the table have both. */
+export type InteractionKind = 'like' | 'save' | 'hide' | 'not_interested';
+
+/** §3.6. Which surface showed a card, for the impression log. */
+export type FeedSurface = 'reels' | 'home' | 'search' | 'company' | 'collection' | 'story';
+
+/**
+ * The viewer's half of the envelope, as sets rather than per-row flags.
+ *
+ * One read per session covering every posting the viewer has touched, instead of three
+ * joins on every feed page. It is the same shape `CareerDeckContext` held in memory
+ * through phase 1, which is why nothing downstream of it changes.
+ */
+export interface ViewerSets {
+  likedJobIds: string[];
+  savedJobIds: string[];
+  hiddenJobIds: string[];
+  /** Database uuids — what `company_follows` keys on. */
+  followedCompanyIds: string[];
+  /** The same follows as slugs, which is what routes and the Following feed filter use. */
+  followedCompanySlugs: string[];
+}
+
+export const EMPTY_VIEWER_SETS: ViewerSets = {
+  likedJobIds: [],
+  savedJobIds: [],
+  hiddenJobIds: [],
+  followedCompanyIds: [],
+  followedCompanySlugs: [],
+};
+
+interface ViewerSetsRow {
+  liked_job_ids: string[] | null;
+  saved_job_ids: string[] | null;
+  hidden_job_ids: string[] | null;
+  followed_company_ids: string[] | null;
+  followed_company_slugs: string[] | null;
+}
+
+export async function fetchViewerState(): Promise<ViewerSets> {
+  const { data, error } = await supabase.rpc('viewer_state');
+  if (error) throw error;
+
+  /*
+   * PostgREST returns a function that yields one composite as a single JSON object, and a
+   * `setof` one as an array. `viewer_state()` is the former — but reading the wrong shape
+   * here fails *silently*: every field comes back undefined, the `?? []` below turns that
+   * into empty sets, and the app renders as though the user has never saved anything.
+   * A wrong-but-plausible empty state is the worst failure mode there is, so both shapes
+   * are accepted.
+   */
+  const row = (Array.isArray(data) ? data[0] : data) as ViewerSetsRow | null | undefined;
+  if (!row) return EMPTY_VIEWER_SETS;
+
+  return {
+    likedJobIds: row.liked_job_ids ?? [],
+    savedJobIds: row.saved_job_ids ?? [],
+    hiddenJobIds: row.hidden_job_ids ?? [],
+    followedCompanyIds: row.followed_company_ids ?? [],
+    followedCompanySlugs: row.followed_company_slugs ?? [],
+  };
+}
+
+/**
+ * Sets a like/save/hide to a state. Never flips what is there.
+ *
+ * §11: toggles are PUT/DELETE rather than POST /toggle so a retry cannot invert the
+ * result. That is not pedantry here — `lib/outbox.ts` replays these after a reconnect,
+ * and a replay is a retry wearing a different hat. Returns the state the database ended
+ * up in, which is what the caller should believe over its own optimistic guess.
+ */
+export async function setJobInteraction(
+  jobId: string,
+  kind: InteractionKind,
+  on: boolean,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_job_interaction', {
+    p_job_id: jobId,
+    p_kind: kind,
+    p_on: on,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+/** The same contract for follows, keyed by slug because that is what every caller holds. */
+export async function setCompanyFollow(companySlug: string, on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_company_follow', {
+    p_company_slug: companySlug,
+    p_on: on,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+interface ApplicationRow {
+  id: string;
+  job_id: string;
+  status: ApplicationStatus;
+  source: ApplicationSource;
+  applied_at: string;
+  status_changed_at: string;
+  self_reported: boolean;
+}
+
+const APPLICATION_SELECT = 'id, job_id, status, source, applied_at, status_changed_at, self_reported';
+
+function toApplication(row: ApplicationRow): Application {
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    status: row.status,
+    source: row.source,
+    appliedAt: row.applied_at,
+    // The UI's "last activity" is the stage change, not the row's last write — a note
+    // edit should not push an application back to the top of the tracker.
+    updatedAt: row.status_changed_at.slice(0, 10),
+    selfReported: row.self_reported,
+  };
+}
+
+/**
+ * The whole tracker, not a page of it.
+ *
+ * §11 says as much — "full list; client sorts and derives the goal" — and the weekly
+ * goal in `useWeeklyGoal` needs every row to count streak weeks backwards. A student
+ * with three hundred applications is having a rough season and is still two pages of
+ * uuids.
+ */
+export async function fetchApplications(): Promise<Application[]> {
+  const { data, error } = await supabase
+    .from('applications')
+    .select(APPLICATION_SELECT)
+    .order('status_changed_at', { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as ApplicationRow[]).map(toApplication);
+}
+
+export interface NewApplication {
+  jobId: string;
+  source: ApplicationSource;
+  /** `YYYY-MM-DD`, in the user's own timezone — the week the goal counts it towards. */
+  appliedAt: string;
+}
+
+/**
+ * Tracks an application.
+ *
+ * `user_id` is not sent: it defaults to `auth.uid()` and the insert grant does not
+ * include the column, so a client cannot author a row for anyone else. Re-tracking a job
+ * that is already in the tracker hits `unique (user_id, job_id)` — the row that comes
+ * back is the existing one, because telling us twice is not applying twice.
+ */
+export async function createApplication(input: NewApplication): Promise<Application> {
+  const { data, error } = await supabase
+    .from('applications')
+    .insert({ job_id: input.jobId, source: input.source, applied_at: input.appliedAt })
+    .select(APPLICATION_SELECT)
+    .maybeSingle();
+
+  // 23505 is the unique violation: the application is already tracked, which is the
+  // state the caller wanted. Read it back rather than surfacing an error for a no-op
+  // the user cannot tell apart from success.
+  if (error && error.code === '23505') {
+    const existing = await supabase
+      .from('applications')
+      .select(APPLICATION_SELECT)
+      .eq('job_id', input.jobId)
+      .maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) return toApplication(existing.data as ApplicationRow);
+  }
+
+  if (error) throw error;
+  if (!data) throw new Error('The application was written but could not be read back.');
+  return toApplication(data as ApplicationRow);
+}
+
+/**
+ * Moves an application to a stage, keyed by **job** rather than by application id.
+ *
+ * `unique (user_id, job_id)` makes the job the natural key for the viewer's application,
+ * and using it here is what lets the outbox queue "track this" and "move it to interview"
+ * back to back while offline: the second operation does not need the id the first one has
+ * not been given yet.
+ */
+export async function setApplicationStatus(
+  jobId: string,
+  status: ApplicationStatus,
+): Promise<Application | null> {
+  const { data, error } = await supabase
+    .from('applications')
+    .update({ status })
+    .eq('job_id', jobId)
+    .select(APPLICATION_SELECT)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? toApplication(data as ApplicationRow) : null;
+}
+
+/** One card, shown once, on one surface. §3.6. */
+export interface ImpressionEvent {
+  jobId: string;
+  surface: FeedSurface;
+  /** One per app launch. Makes "impressions per session" answerable. */
+  sessionId: string;
+  /** Rank within the feed when it was shown. */
+  position: number | null;
+  /** Reels only: how long the card was the active page. */
+  dwellMs: number | null;
+  /** Scrolled past (true) vs. bounced back (false). Null where the surface cannot tell. */
+  completed: boolean | null;
+  /** ISO timestamp of when it was *shown*, not of when the batch was flushed. */
+  shownAt: string;
+}
+
+/**
+ * One insert for a whole batch — §3.6's `POST /v1/events`.
+ *
+ * "At 50k DAU and ~60 cards a session this is ~3M rows/day — entirely fine for
+ * partitioned Postgres, catastrophic as 3M HTTP requests."
+ *
+ * Returns how many rows the database actually wrote, which can be fewer than were sent:
+ * `log_impressions` drops malformed rows and caps a batch at 200 rather than failing the
+ * call, because a bad impression is worth losing and a failing queue is not.
+ */
+export async function logImpressions(events: ImpressionEvent[]): Promise<number> {
+  if (events.length === 0) return 0;
+
+  const { data, error } = await supabase.rpc('log_impressions', {
+    p_rows: events.map((event) => ({
+      job_id: event.jobId,
+      surface: event.surface,
+      session_id: event.sessionId,
+      position: event.position,
+      dwell_ms: event.dwellMs,
+      completed: event.completed,
+      shown_at: event.shownAt,
+    })),
+  });
+
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
 }

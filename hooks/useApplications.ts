@@ -46,10 +46,13 @@ function byRecentActivity(a: Application, b: Application): number {
  * The company is gone from the return type — a `Job` now carries its company's name, logo
  * and brand colour, because the feed query joins them to build the card anyway.
  *
- * **Phase 1 note (PHASE1.md §8.6):** `mockApplications` points at fixture job ids that no
- * longer exist, so this correctly resolves to nothing and the Activity tab reads empty
- * until phase 2 builds the real `applications` table. That is the intended outcome, not a
- * regression — the alternative kept two definitions of what a Job is alive for a phase.
+ * **Phase 2:** the rows are real. `applications` now comes from the table of the same
+ * name by way of `useApplicationRecords`, and the ids it carries are postings that exist,
+ * so the join below resolves. Through phase 1 it correctly resolved to nothing, because
+ * the fixtures pointed at job ids the corpus had replaced (PHASE1.md §8.6).
+ *
+ * Nothing about the derivation changed — §1.2 is right that a small list is worth sorting
+ * on the client, and this hook kept its signature across the migration.
  */
 export function useTrackedApplications(): TrackedApplication[] {
   const { applications } = useCareerDeck();

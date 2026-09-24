@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,11 +11,14 @@ import {
 
 import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { useAuth } from '@/context/AuthContext';
-import { mockApplications } from '@/data/mockApplications';
 import { mockCommentActivity } from '@/data/mockCommentActivity';
 import { mockComments } from '@/data/mockComments';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
+import { useApplicationRecords } from '@/hooks/useApplicationRecords';
 import { useProfile } from '@/hooks/useProfile';
+import { useViewerState } from '@/hooks/useViewerState';
+import { setImpressionsEnabled } from '@/lib/impressions';
+import { setOutboxUser } from '@/lib/outbox';
 import type {
   Application,
   ApplicationStatus,
@@ -29,23 +33,33 @@ import type {
  * Session and viewer state for CareerDeck.
  *
  * Phase 0 moved identity and preferences onto Postgres. Phase 1 took the corpus away
- * entirely: `jobs` and `companies` are gone from this file, because a store that holds
- * every posting cannot hold a few hundred thousand of them. Screens read
- * `hooks/useJobFeeds.ts` and `hooks/useCompanies.ts`, which page through the database.
+ * entirely — `jobs` and `companies` are read a page at a time through `lib/api.ts`.
+ * Phase 2 takes the last of the durable state: likes, saves, follows and the application
+ * tracker are rows now, read by `useViewerState` and `useApplicationRecords`, written
+ * optimistically and queued through `lib/outbox.ts`.
  *
- * What is left is what Appendix A says should be left — "the existing context, slimmed to
- * hold only session/viewer state". Concretely: which postings this viewer has liked or
- * saved, which companies they follow, and the mock application, comment and resume state
- * that phases 2 and 3 will move.
+ * What is left in this file is what Appendix A says should be left — "the existing
+ * context, slimmed to hold only session/viewer state" — plus the three things later
+ * phases own and that therefore still live in memory:
  *
- * Likes, saves and follows stay in memory for one more phase on purpose. `job_interactions`
- * and `company_follows` are phase 2; until they exist the feed hooks merge these sets into
- * each `Job` as `isSaved` / `isLiked`, which is the same merge this file used to do and
- * the same shape the server will fill (§1.3a).
+ *  - **Comments and comment activity** (phase 3's `comments`, `notifications`).
+ *  - **Resumes** (phase 4's storage bucket and `resumes` table).
+ *  - **Auto Apply credits** (phase 6's `credit_transactions` ledger).
+ *
+ * Each of those is a fixture behind a real-looking interface, and each becomes a hook of
+ * its own the way applications just did. Nothing above this file knows the difference,
+ * which is the point of the facade.
  */
 
 interface CareerDeckState {
-  /** True while the signed-in user's profile is in flight. Home's skeletons key off it. */
+  /**
+   * True until the signed-in user's profile, viewer sets and tracker have all landed.
+   *
+   * All three, not just the profile: a toggle tapped before the viewer sets arrive has
+   * nothing to toggle *against*, and the Following feed would render empty for a moment
+   * to someone who follows twenty companies. The app shell waits on this, so the window
+   * never exists.
+   */
   isInitialLoading: boolean;
   /** Null while the profile is loading, or if it failed to load. */
   user: User | null;
@@ -64,8 +78,9 @@ interface CareerDeckState {
   /** The resume currently used to pre-fill the apply sheet. */
   defaultResume: Resume | undefined;
   /**
-   * Company **slugs**, not uuids — see DEFAULT_FOLLOWED_SLUGS. Phase 2 replaces this with
-   * a read of `company_follows` and the identifier becomes the uuid.
+   * Company **slugs**, from `company_follows` by way of `viewer_state()`. The join keys on
+   * the company uuid; the slug is what comes back out, because it is what the Following
+   * feed filters on and what every route segment carries. §1.3(c).
    */
   followedCompanySlugs: string[];
   likedJobIds: string[];
@@ -79,7 +94,7 @@ interface CareerDeckState {
   /** One-way: a story that has been watched stays watched for the session. */
   markNewsSeen: (newsId: string) => void;
   setDefaultResume: (resumeId: string) => void;
-  /** Moves an application to a new stage and stamps `updatedAt`. */
+  /** Moves an application to a new stage. The event row is written by a trigger. */
   setApplicationStatus: (applicationId: string, status: ApplicationStatus) => void;
   /**
    * Records that the user applied to a job. Called after they come back from the
@@ -153,38 +168,35 @@ function toggleInSet(current: Set<string>, id: string): Set<string> {
   return next;
 }
 
-/**
- * Companies followed on a fresh install.
- *
- * Follows are keyed by **slug** in phase 1, not by the database uuid. The slug is what
- * the feed filter takes (`feed_jobs(p_company_slugs)`), what a route segment carries, and
- * what a news item names — and unlike a uuid it is knowable before the directory loads,
- * which is what lets the Following feed have content on first launch. Phase 2's
- * `company_follows` keys on the uuid, and this set goes away with it.
- */
-const DEFAULT_FOLLOWED_SLUGS = ['nvidia', 'stripe'];
-
-function seedFollowedCompanies(): Set<string> {
-  return new Set(DEFAULT_FOLLOWED_SLUGS);
-}
-
 export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const { userId } = useAuth();
   const {
     profile,
-    isLoading: isInitialLoading,
+    isLoading: isProfileLoading,
     error: profileError,
     retry: retryProfile,
     updateIdentity: writeIdentity,
     updatePreferences,
   } = useProfile(userId);
 
-  const [followedIds, setFollowedIds] = useState<Set<string>>(seedFollowedCompanies);
-  const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set<string>());
-  const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set<string>());
+  const viewer = useViewerState(userId);
+  const tracker = useApplicationRecords(userId);
+
+  /*
+   * The two module-level singletons that need to know who is signed in.
+   *
+   * The outbox refuses to send anything under a session that did not queue it, and the
+   * impression buffer refuses to collect at all without one. Both are modules rather than
+   * hooks because they outlive every component — the outbox drains on app foreground, and
+   * impressions flush on backgrounding, neither of which is a render.
+   */
+  useEffect(() => {
+    setOutboxUser(userId);
+    setImpressionsEnabled(userId !== null);
+  }, [userId]);
+
   const [seenNewsIds, setSeenNewsIds] = useState<Set<string>>(() => new Set<string>());
   const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
-  const [applications, setApplications] = useState<Application[]>(mockApplications);
   // Seeded with a single day's grant. Accrual across days, and the balance surviving a
   // restart, both need the credit ledger in §7, which phase 6 builds.
   const [autoApplyCredits, setAutoApplyCredits] = useState<number>(AUTO_APPLY_ECONOMY.dailyGrant);
@@ -200,6 +212,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
   const user = profile?.user ?? null;
   const weeklyGoal = profile?.weeklyGoal ?? DEFAULT_WEEKLY_GOAL;
+  const isInitialLoading = isProfileLoading || viewer.isLoading || tracker.isLoading;
 
   const setCredits = useCallback((next: number) => {
     creditsRef.current = next;
@@ -209,18 +222,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [comments, setComments] = useState<JobComment[]>(mockComments);
   const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(() => new Set<string>());
 
-  const toggleFollow = useCallback((companySlug: string) => {
-    setFollowedIds((current) => toggleInSet(current, companySlug));
-  }, []);
-
-  const toggleLike = useCallback((jobId: string) => {
-    setLikedIds((current) => toggleInSet(current, jobId));
-  }, []);
-
-  const toggleSave = useCallback((jobId: string) => {
-    setSavedIds((current) => toggleInSet(current, jobId));
-  }, []);
-
   // Returning the same Set when nothing changes matters here: this fires from an effect
   // on every story frame, and a fresh Set each time would re-render the whole tree.
   const markNewsSeen = useCallback((newsId: string) => {
@@ -229,36 +230,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
   const setDefaultResume = useCallback((resumeId: string) => {
     setDefaultResumeId(resumeId);
-  }, []);
-
-  const setApplicationStatus = useCallback((applicationId: string, status: ApplicationStatus) => {
-    const today = new Date().toISOString().slice(0, 10);
-    setApplications((current) =>
-      current.map((application) =>
-        application.id === applicationId ? { ...application, status, updatedAt: today } : application,
-      ),
-    );
-  }, []);
-
-  const logApplication = useCallback((jobId: string, source: Application['source']) => {
-    const today = new Date().toISOString().slice(0, 10);
-    setApplications((current) => {
-      // Re-applying to something already tracked shouldn't create a duplicate row —
-      // the user is telling us about the same application again.
-      if (current.some((application) => application.jobId === jobId)) return current;
-      return [
-        {
-          id: `app-${jobId}-${Date.now()}`,
-          jobId,
-          status: 'applied',
-          source,
-          appliedAt: today,
-          updatedAt: today,
-          selfReported: true,
-        },
-        ...current,
-      ];
-    });
   }, []);
 
   const toggleCommentLike = useCallback((commentId: string) => {
@@ -370,27 +341,34 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       resumes: mockResumes,
       defaultResumeId,
       defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
-      applications,
-      // The viewer's own like is folded in here rather than at the component, so a
-      // count is never the raw fixture number plus a separately-tracked flag.
+      applications: tracker.applications,
+      /*
+       * The viewer's own like is folded into the count here rather than at the component.
+       *
+       * §1.3(b) names this as one of the three modelling problems to fix, and it is still
+       * here on purpose: the fix is "store the true count, send `viewerHasLiked`
+       * separately", and there is no stored count to be true until phase 3 builds
+       * `comments`. Folding it in against a fixture is harmless; folding it in against a
+       * real count double-counts, so this line and phase 3 land together.
+       */
       comments: comments.map((comment) =>
         likedCommentIds.has(comment.id) ? { ...comment, likeCount: comment.likeCount + 1 } : comment,
       ),
       commentActivity,
       unreadCommentCount: commentActivity.filter((entry) => !entry.read).length,
-      followedCompanySlugs: [...followedIds],
-      likedJobIds: [...likedIds],
-      savedJobIds: [...savedIds],
+      followedCompanySlugs: viewer.followedCompanySlugs,
+      likedJobIds: viewer.likedJobIds,
+      savedJobIds: viewer.savedJobIds,
       seenNewsIds: [...seenNewsIds],
-      isFollowing: (companySlug: string) => followedIds.has(companySlug),
-      toggleFollow,
-      toggleLike,
-      toggleSave,
+      isFollowing: viewer.isFollowing,
+      toggleFollow: viewer.toggleFollow,
+      toggleLike: viewer.toggleLike,
+      toggleSave: viewer.toggleSave,
       markNewsSeen,
       setDefaultResume,
-      setApplicationStatus,
-      logApplication,
-      hasApplied: (jobId: string) => applications.some((application) => application.jobId === jobId),
+      setApplicationStatus: tracker.setApplicationStatus,
+      logApplication: tracker.logApplication,
+      hasApplied: tracker.hasApplied,
       likedCommentIds: [...likedCommentIds],
       toggleCommentLike,
       addComment,
@@ -413,22 +391,24 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     isInitialLoading,
     profileError,
     retryProfile,
-    followedIds,
-    likedIds,
-    savedIds,
+    viewer.followedCompanySlugs,
+    viewer.likedJobIds,
+    viewer.savedJobIds,
+    viewer.isFollowing,
+    viewer.toggleFollow,
+    viewer.toggleLike,
+    viewer.toggleSave,
     seenNewsIds,
     defaultResumeId,
-    applications,
+    tracker.applications,
+    tracker.setApplicationStatus,
+    tracker.logApplication,
+    tracker.hasApplied,
     comments,
     likedCommentIds,
     commentActivity,
-    toggleFollow,
-    toggleLike,
-    toggleSave,
     markNewsSeen,
     setDefaultResume,
-    setApplicationStatus,
-    logApplication,
     toggleCommentLike,
     addComment,
     deleteComment,

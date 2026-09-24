@@ -20,6 +20,7 @@ import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
+import { useListImpressions } from '@/hooks/useImpressions';
 import { useJobFeed, useSuggestedCompanies, type JobSort } from '@/hooks/useJobFeeds';
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
@@ -47,6 +48,10 @@ export default function HomeScreen() {
   const storyGroups = useStoryGroups();
   const tabBarHeight = useTabBarHeight();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
+  // §3.6. Home has no dwell to measure — the reader scrolls past cards rather than
+  // sitting on one — but which postings were seen, and at what rank, is most of what a
+  // ranker learns from.
+  const impressions = useListImpressions('home', { resetKey: sort });
 
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -158,6 +163,7 @@ export default function HomeScreen() {
         }
         onEndReached={feed.hasNextPage ? feed.fetchNextPage : undefined}
         onEndReachedThreshold={END_REACHED_THRESHOLD}
+        viewabilityConfigCallbackPairs={impressions.viewabilityConfigCallbackPairs}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
