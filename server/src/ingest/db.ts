@@ -322,3 +322,186 @@ export async function closeStaleJobs(client: SupabaseClient, unseenHours = 48): 
   if (error) throw error;
   return (data as number) ?? 0;
 }
+
+// ── aggregator support ───────────────────────────────────────────────────────────
+
+/**
+ * The one `job_sources` row a multi-company feed source needs, created on first use
+ * rather than through the seed script.
+ *
+ * `board-list.ts` is deliberately per-company — one row is one employer's own board —
+ * because that is what §3.4's model assumes. A feed like Simplify's covers over a
+ * thousand employers in a single fetch and has no single company to seed it under, so
+ * `company_id` is left null (the column already allows this) and the source
+ * self-registers the first time it runs, the same way a new board would be a one-line
+ * seed insert if it fit that model.
+ */
+export async function getOrCreateFeedSource(
+  client: SupabaseClient,
+  params: {
+    kind: AtsKind;
+    boardUrl: string;
+    crawlInterval?: string;
+    notes?: string;
+    /**
+     * False for a dry run. Every other write in this pipeline is already conditioned on
+     * `!dryRun` — the CLI's own help text promises `--dry-run` writes "nothing, not even
+     * a run row" — and this function silently violated that the first time it was used,
+     * creating a real `job_sources` row before the caller had decided whether to write
+     * anything at all. Defaults to true so a genuine first-run bootstrap still works.
+     */
+    createIfMissing?: boolean;
+  },
+): Promise<SourceRow | null> {
+  const { data: existing, error: selectError } = await client
+    .from('job_sources')
+    .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures')
+    .eq('kind', params.kind)
+    .eq('board_url', params.boardUrl)
+    .maybeSingle();
+  if (selectError) throw selectError;
+
+  if (!existing && params.createIfMissing === false) return null;
+
+  const row = existing ??
+    (
+      await (async () => {
+        const { data, error } = await client
+          .from('job_sources')
+          .insert({
+            kind: params.kind,
+            board_url: params.boardUrl,
+            crawl_interval: params.crawlInterval ?? '24 hours',
+            notes: params.notes ?? null,
+          })
+          .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures')
+          .single();
+        if (error) throw error;
+        return data;
+      })()
+    );
+
+  return {
+    id: row.id as string,
+    kind: row.kind as AtsKind,
+    boardUrl: row.board_url as string,
+    boardToken: (row.board_token as string | null) ?? null,
+    etag: (row.etag as string | null) ?? null,
+    crawlInterval: (row.crawl_interval as string) ?? params.crawlInterval ?? '24 hours',
+    lastCrawledAt: (row.last_crawled_at as string | null) ?? null,
+    consecutiveFailures: (row.consecutive_failures as number) ?? 0,
+    companyId: null,
+    companyName: null,
+    companyDomain: null,
+  };
+}
+
+/**
+ * "NVIDIA" -> "nvidia", "Two Sigma" -> "two-sigma". Not the curated identifiers
+ * board-list.ts hand-picks — those are worth naming deliberately — but good enough for
+ * companies an aggregator discovers automatically, where deliberateness is not on offer.
+ */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base === '' ? 'company' : base;
+}
+
+/**
+ * Resolves a batch of free-text company names to `companies.id`, creating rows for any
+ * name that doesn't already exist.
+ *
+ * Matching is exact, case-insensitive, on `companies.name`. That is a real limitation —
+ * "Coinbase" and "Coinbase Global, Inc." would create two rows rather than merge — and it
+ * is the honest trade for this being automatic. §3.3's domain-based dedup does not apply
+ * here: an aggregator's own record of a company rarely carries the company's real domain,
+ * only the ATS or aggregator's own landing-page URL, which is not the same thing and
+ * would be actively wrong to store as `companies.domain`. A created row's `domain` is
+ * left null, same as a company with no crawl source at all.
+ *
+ * Fetches every existing company once rather than querying per name: even after this
+ * aggregator runs, the table is a few thousand rows at most, and one query beats however
+ * many hundreds of distinct names a feed contains.
+ */
+export async function resolveCompaniesByName(
+  client: SupabaseClient,
+  names: string[],
+  /**
+   * False for a dry run: matches names against companies that already exist so a
+   * preview can show real resolutions, but never inserts. A name with no existing match
+   * simply comes back unresolved rather than being created — the same shape a genuinely
+   * new, not-yet-seen company has, which is an honest thing for a dry run to show.
+   */
+  options: { createMissing?: boolean } = {},
+): Promise<Map<string, string>> {
+  const createMissing = options.createMissing ?? true;
+  const distinct = [...new Set(names.map((name) => name.trim()).filter((name) => name !== ''))];
+  const byLower = new Map<string, string>(); // lowercased name -> id
+
+  const { data: existing, error: fetchError } = await client.from('companies').select('id, name');
+  if (fetchError) throw fetchError;
+  for (const row of existing ?? []) {
+    byLower.set((row.name as string).toLowerCase(), row.id as string);
+  }
+
+  const missing = distinct.filter((name) => !byLower.has(name.toLowerCase()));
+  if (missing.length > 0 && createMissing) {
+    const usedSlugs = new Set<string>();
+    const rows = missing.map((name) => {
+      let slug = slugify(name);
+      // A collision here means two different company names slugify identically (rare —
+      // punctuation-only differences). Suffixing keeps both rows distinct rather than
+      // silently dropping one of them.
+      let suffix = 2;
+      while (usedSlugs.has(slug)) {
+        slug = `${slugify(name)}-${suffix}`;
+        suffix += 1;
+      }
+      usedSlugs.add(slug);
+      return { slug, name, logo_monogram: monogramOf(name) };
+    });
+
+    for (const batch of chunk(rows, 200)) {
+      // ignoreDuplicates rather than a plain insert: a slug or domain collision against a
+      // row created by a concurrent process (there is only one right now, but the next
+      // aggregator to run this same batch resolver should not crash on one) is skipped,
+      // not fatal — the row already exists under that identity, which is what we wanted.
+      const { error } = await client.from('companies').upsert(batch, { onConflict: 'slug', ignoreDuplicates: true });
+      if (error) throw error;
+    }
+
+    // A second unfiltered fetch rather than `.in('name', missing)`: an aggregator can
+    // easily produce over a thousand distinct new names in one run, and PostgREST puts an
+    // `in` filter's values in the URL — a batch that size is exactly what made two Ashby
+    // boards fail with "URI too long" earlier in this project. The companies table is a
+    // few thousand rows at most, so one more full select is cheap and has no length limit
+    // to hit.
+    const { data: refreshed, error: refetchError } = await client.from('companies').select('id, name');
+    if (refetchError) throw refetchError;
+    for (const row of refreshed ?? []) {
+      byLower.set((row.name as string).toLowerCase(), row.id as string);
+    }
+  }
+
+  const resolved = new Map<string, string>();
+  for (const name of distinct) {
+    const id = byLower.get(name.toLowerCase());
+    if (id) resolved.set(name, id);
+  }
+  return resolved;
+}
+
+/** "NVIDIA" -> "NV" — mirrors board-list.ts's own helper for the same fallback. */
+function monogramOf(name: string): string {
+  const words = name
+    .replace(/[^A-Za-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return (words[0] ?? '').slice(0, 2).toUpperCase();
+  return `${words[0]?.charAt(0) ?? ''}${words[1]?.charAt(0) ?? ''}`.toUpperCase();
+}

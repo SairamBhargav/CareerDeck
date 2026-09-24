@@ -35,6 +35,7 @@ import { scoreQuality } from '../server/src/ingest/normalize/quality.ts';
 import { extractRequirements, htmlToText } from '../server/src/ingest/normalize/html.ts';
 import { contentHash } from '../server/src/ingest/pipeline.ts';
 import { ashby, greenhouse, lever } from '../server/src/ingest/sources/index.ts';
+import { crawlSimplifyFeed } from '../server/src/ingest/aggregators/simplify.ts';
 import { SKILLS } from './skills-dictionary.ts';
 
 const API = 'http://127.0.0.1:54721';
@@ -492,7 +493,18 @@ section('feed');
 
   const byCompany = await anon.rpc('feed_jobs', { p_sort: 'company', p_limit: 20 });
   const names = (byCompany.data ?? []).map((row) => row.company_name);
-  check('company sort is alphabetical', names.every((value, index) => index === 0 || names[index - 1] <= value), names.slice(0, 3).join(' < '));
+  // localeCompare, not raw `<=`: Postgres's default ORDER BY collation is locale-aware
+  // and treats case roughly the way a human alphabetizing a list would ("AArete" before
+  // "AARP" — they agree up to the third letter, then 'e' < 'p'), while JS's `<=` on
+  // strings is a byte-order comparison where every uppercase letter sorts before every
+  // lowercase one. Those disagree on real, oddly-capitalized company names ("AArete",
+  // "1X", "10a Labs") and a byte-order check would fail a sort the database is not
+  // wrong about.
+  check(
+    'company sort is alphabetical',
+    names.every((value, index) => index === 0 || names[index - 1].localeCompare(value) <= 0),
+    names.slice(0, 3).join(' < '),
+  );
 
   const filtered = await anon.rpc('feed_jobs', { p_sort: 'recent', p_limit: 20, p_company_slugs: ['stripe'] });
   check(
@@ -620,6 +632,40 @@ section('staleness');
 
   await admin.from('companies').delete().eq('id', company.id);
   await admin.rpc('refresh_open_job_counts');
+}
+
+// ── aggregators ────────────────────────────────────────────────────────────────
+
+section('aggregators');
+
+{
+  /*
+   * A dry run must not write. This is not a hypothetical: the first version of the
+   * Simplify aggregator called its company-resolution and source-bootstrap helpers
+   * unconditionally, and running `--dry-run` once created roughly 1,100 real company
+   * rows before anyone asked it to write anything. This check exists so that class of
+   * bug fails a test the next time it happens, in this aggregator or the next one.
+   */
+  const dictionary = compileDictionary(SKILLS);
+
+  const before = await admin.from('companies').select('id', { count: 'exact', head: true });
+  const beforeSources = await admin.from('job_sources').select('id', { count: 'exact', head: true }).eq('kind', 'feed');
+
+  await crawlSimplifyFeed(admin, { dictionary, dryRun: true, log: () => {} });
+
+  const after = await admin.from('companies').select('id', { count: 'exact', head: true });
+  const afterSources = await admin.from('job_sources').select('id', { count: 'exact', head: true }).eq('kind', 'feed');
+
+  check(
+    'a dry run of the Simplify aggregator creates no companies',
+    before.count === after.count,
+    `${before.count} → ${after.count}`,
+  );
+  check(
+    'a dry run of the Simplify aggregator creates no job_sources row',
+    beforeSources.count === afterSources.count,
+    `${beforeSources.count} → ${afterSources.count}`,
+  );
 }
 
 // ── the exit condition ─────────────────────────────────────────────────────────

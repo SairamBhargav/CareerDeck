@@ -1,11 +1,13 @@
 /**
  * The ingestion CLI — PHASE1.md §9.
  *
- *   npm run ingest                      every enabled source that is due
+ *   npm run ingest                      every enabled source that is due, plus aggregators
  *   npm run ingest -- --all --force     every enabled source, ignoring crawl_interval
  *   npm run ingest -- --source=stripe   one company, by slug or board token
  *   npm run ingest -- --source=stripe --dry-run
  *                                       parse and print; writes nothing, not even a run row
+ *   npm run ingest -- --source=simplify one aggregator only, skipping every company board
+ *   npm run ingest -- --no-aggregators  company boards only, skip Simplify
  *   npm run ingest -- --sweep           the staleness pass on its own
  *   npm run ingest -- --limit=10        the ten most overdue sources
  *   npm run ingest -- --replay          re-normalize every stored raw_postings row, no network
@@ -27,7 +29,15 @@ import {
   sourcesWithRawData,
 } from './db.ts';
 import { crawlSource, replaySource, type CrawlOutcome, type ReplayOutcome } from './pipeline.ts';
+import { crawlSimplifyFeed, type AggregatorOutcome } from './aggregators/simplify.ts';
 import { sweep } from './staleness.ts';
+
+/**
+ * Names an `--source=` value has to match to mean "an aggregator, not a company board".
+ * A company slug or board token never collides with these — board-list.ts's slugs are
+ * all real company identifiers — so a plain string match is enough.
+ */
+const AGGREGATOR_NAMES = new Set(['simplify', 'simplify-internships']);
 
 interface Args {
   all: boolean;
@@ -36,6 +46,7 @@ interface Args {
   sweepOnly: boolean;
   replayOnly: boolean;
   withSweep: boolean;
+  withAggregators: boolean;
   ignoreEtag: boolean;
   source?: string;
   limit?: number;
@@ -61,6 +72,7 @@ function parseArgs(argv: string[]): Args {
     // The sweep runs after a full crawl by default: closing postings is only meaningful
     // once the evidence for them still being open has just been refreshed.
     withSweep: !flag('no-sweep'),
+    withAggregators: !flag('no-aggregators'),
     ignoreEtag: flag('ignore-etag') || flag('force'),
     ...(value('source') ? { source: value('source') } : {}),
     ...(limit ? { limit: Number.parseInt(limit, 10) } : {}),
@@ -148,6 +160,22 @@ function summarizeReplay(outcomes: ReplayOutcome[]): void {
   if (errors > 0) console.log(`errors      ${errors} raw posting(s) failed to re-parse — see the log above`);
 }
 
+function summarizeAggregators(outcomes: AggregatorOutcome[]): void {
+  if (outcomes.length === 0) return;
+  const total = (pick: (outcome: AggregatorOutcome) => number) => outcomes.reduce((sum, o) => sum + pick(o), 0);
+  const failed = outcomes.filter((o) => o.status === 'failed');
+
+  console.log('');
+  console.log(`aggregators ${outcomes.length} (${failed.length} failed)`);
+  console.log(`listings    ${total((o) => o.listingsSeen)} seen, ${total((o) => o.rawInserted)} changed`);
+  console.log(
+    `jobs        +${total((o) => o.jobsCreated)} created, ~${total((o) => o.jobsUpdated)} updated, ` +
+      `${total((o) => o.collapsed)} collapsed, ${total((o) => o.duplicates)} dup`,
+  );
+  console.log(`companies   ${total((o) => o.companiesCreated)} created`);
+  for (const outcome of failed) console.log(`  failed: ${outcome.source} — ${outcome.error}`);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const client = serviceClient();
@@ -190,23 +218,33 @@ async function main(): Promise<void> {
     return;
   }
 
-  const sources = await dueSources(client, {
-    ...(args.source ? { slug: args.source } : {}),
-    force: args.force || args.source !== undefined,
-    ...(args.limit ? { limit: args.limit } : {}),
-  });
+  // `--source=simplify` means "only the aggregator" — it has no company slug or board
+  // token for dueSources to match against, so it is handled as its own branch rather
+  // than folded into the per-company lookup.
+  const targetsAggregatorOnly = args.source !== undefined && AGGREGATOR_NAMES.has(args.source);
+
+  const sources = targetsAggregatorOnly
+    ? []
+    : await dueSources(client, {
+        ...(args.source ? { slug: args.source } : {}),
+        force: args.force || args.source !== undefined,
+        ...(args.limit ? { limit: args.limit } : {}),
+      });
 
   const selected = args.limit ? sources.slice(0, args.limit) : sources;
+  const runAggregators = args.withAggregators && (args.source === undefined || targetsAggregatorOnly);
 
-  if (selected.length === 0) {
+  if (selected.length === 0 && !runAggregators) {
     console.log('Nothing due. Pass --force to crawl anyway, or --source=<slug> for one board.');
     return;
   }
 
-  console.log(
-    `${args.dryRun ? 'Dry run over' : 'Crawling'} ${selected.length} source(s)` +
-      `${args.dryRun ? ' — nothing will be written' : ''}\n`,
-  );
+  if (selected.length > 0) {
+    console.log(
+      `${args.dryRun ? 'Dry run over' : 'Crawling'} ${selected.length} source(s)` +
+        `${args.dryRun ? ' — nothing will be written' : ''}\n`,
+    );
+  }
 
   const dictionary = compileDictionary(await loadSkillDictionary(client));
   if (dictionary.unigrams.size === 0 && dictionary.phrases.length === 0) {
@@ -216,21 +254,30 @@ async function main(): Promise<void> {
   }
 
   const started = Date.now();
-  const outcomes = await pooled(selected, args.concurrency, (source) =>
-    crawlSource(client, source, {
-      dictionary,
-      dryRun: args.dryRun,
-      ignoreEtag: args.ignoreEtag,
-      log: (message) => console.log(message),
-    }),
-  );
+
+  const outcomes =
+    selected.length > 0
+      ? await pooled(selected, args.concurrency, (source) =>
+          crawlSource(client, source, {
+            dictionary,
+            dryRun: args.dryRun,
+            ignoreEtag: args.ignoreEtag,
+            log: (message) => console.log(message),
+          }),
+        )
+      : [];
+
+  const aggregatorOutcomes: AggregatorOutcome[] = runAggregators
+    ? [await crawlSimplifyFeed(client, { dictionary, dryRun: args.dryRun, log: (message) => console.log(message) })]
+    : [];
 
   if (!args.dryRun) {
     const corrected = await refreshOpenJobCounts(client);
     if (corrected > 0) console.log(`\ncounts      ${corrected} company open-role count(s) corrected`);
   }
 
-  summarize(outcomes);
+  if (outcomes.length > 0) summarize(outcomes);
+  summarizeAggregators(aggregatorOutcomes);
   console.log(`elapsed     ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
   if (!args.dryRun && args.withSweep && !args.source) {
@@ -240,8 +287,9 @@ async function main(): Promise<void> {
 
   // A run where every source failed is a failed run, and CI should see that. A run where
   // one board 404s is not — boards get renamed and the source's failure counter handles it.
-  const failures = outcomes.filter((outcome) => outcome.status === 'failed').length;
-  if (failures === outcomes.length && outcomes.length > 0) {
+  const allOutcomes = [...outcomes.map((o) => o.status), ...aggregatorOutcomes.map((o) => o.status)];
+  const failures = allOutcomes.filter((status) => status === 'failed').length;
+  if (failures === allOutcomes.length && allOutcomes.length > 0) {
     process.exitCode = 1;
   }
 }

@@ -58,6 +58,7 @@ const VOLATILE_KEYS = new Set([
   'updatedAt',
   'last_updated',
   'lastUpdatedAt',
+  'date_updated',
   'fetched_at',
   'fetchedAt',
   'requisition_id',
@@ -417,8 +418,12 @@ export async function crawlSource(
  * Lands every posting and returns only the ones that were not already stored byte for
  * byte. `ignoreDuplicates` makes PostgREST return just the inserted rows, which is
  * exactly the set that needs normalizing.
+ *
+ * Exported for the aggregator sources (server/src/ingest/aggregators/), which use the
+ * exact same landing and content-hash dedup as the per-company crawlers — a feed source
+ * is a different shape of adapter, not a different shape of raw-postings table.
  */
-async function landRawPostings(
+export async function landRawPostings(
   client: SupabaseClient,
   sourceId: string,
   runId: string | null,

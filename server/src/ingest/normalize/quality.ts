@@ -24,6 +24,18 @@ export interface QualityInput {
   companyOpenPostings: number;
   seniority: SeniorityLevel | null;
   hasCompanyDomain: boolean;
+  /**
+   * False for a source that structurally never provides a full description — an
+   * aggregator feed that only ever gives title, company and a link, for instance.
+   *
+   * The length penalty below is a spam signal: it exists because a *thin* description
+   * from an ATS that normally carries a full one is suspicious. It says nothing about a
+   * source that was never going to carry one in the first place, and applying it there
+   * would push every posting from that source under the feed floor regardless of how
+   * legitimate the posting is. Defaults to true so every existing ATS caller — which does
+   * have a real description to judge — is unaffected.
+   */
+  hasFullDescription?: boolean;
 }
 
 /** Staffing-agency and reseller markers. These are near-perfectly precise in this corpus. */
@@ -42,9 +54,11 @@ const SHOUTY_PUNCTUATION = /[!$*]/g;
 export function scoreQuality(input: QualityInput): number {
   let score = 0.5;
 
-  const length = input.descriptionText.length;
-  if (length < 400) score -= 0.25;
-  if (length < 150) score -= 0.2;
+  if (input.hasFullDescription ?? true) {
+    const length = input.descriptionText.length;
+    if (length < 400) score -= 0.25;
+    if (length < 150) score -= 0.2;
+  }
 
   if (AGENCY.test(input.title) || AGENCY.test(input.descriptionText.slice(0, 600))) score -= 0.3;
 

@@ -142,6 +142,11 @@ function titleCase(value: string): string {
 function stripModality(segment: string): string {
   return segment
     .replace(/\b(fully|100%|primarily|mostly)\s+/gi, '')
+    // "Remote in Canada" / "Remote from the UK" name a real place after the preposition,
+    // and stripping only the bare word "remote" left "in Canada" behind to be read as a
+    // literal (and fictional) city called "In Canada". Strip the preposition with it, so
+    // what remains is the same plain place name any other segment would resolve.
+    .replace(/\bremote\s+(in|from)\s+(the\s+)?/gi, '')
     .replace(REMOTE, '')
     .replace(HYBRID, '')
     .replace(/\b(optional|friendly|first|only|eligible|based)\b/gi, '')
