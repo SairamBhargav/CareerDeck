@@ -852,10 +852,15 @@ is how the client migration was found rather than looked for.
 
 | Exit metric (§15) | Target | Actual |
 |---|---|---|
-| Real postings | 10,000+ | **30,800+** |
+| Real postings | 10,000+ | **28,394** |
 | Companies with open roles | 100+ | **140** |
-| Cross-source dedup rate | < 2% | **0.00%** (1 of 34,574 reconcile attempts) |
-| Feed and search | work | 130+ checks in `verify:phase1` |
+| Cross-source dedup rate | < 2% | **0.00%** (1 of ~32,000 reconcile attempts) |
+| Feed and search | work | 111 checks in `verify:phase1` |
+
+Field coverage across that corpus: 98% have extracted skills, 90% resolve to a city, 63%
+carry an extracted seniority, and 54% state pay — the last being a fact about employers
+rather than about the parser, and the reason §16's salary-estimation question is worth
+answering.
 
 Also true of that run: 124 of 124 sources succeeded, a full crawl took **100 seconds**, and
 a second crawl immediately after did nothing at all — every board answered `304 Not
@@ -884,6 +889,9 @@ cases someone thought of.
 | Two Ashby boards failed with "URI too long" | 80 ids per `in` filter, not 300 — Ashby's are uuids |
 | Two failures logged as `[object Object]` | A PostgrestError is not an `Error`; stringify it properly |
 | The near-miss queue filled with 2,217 non-misses | Match seniority there too (§2.8) |
+| 1,069 postings in a city called `CA OC 00` — Anduril's internal office code | A city contains no digits |
+| A city called `Gemini North America` | A location named after the employer is an office label; strip trailing super-regions |
+| `New York City` and `New York` counted as two cities | The alias table runs on the city part, not just the whole segment |
 
 ---
 

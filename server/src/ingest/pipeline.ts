@@ -195,7 +195,28 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
    * the second is counted as a duplicate of the first, which inflated the run's dedup
    * rate with collisions the pipeline created itself.
    */
-  const locations = parseLocations(posting.locationRaw, posting.extraLocations, posting.workplaceHint);
+  const parsed = parseLocations(posting.locationRaw, posting.extraLocations, posting.workplaceHint);
+
+  /*
+   * A "city" named after the employer is an office label, not a place.
+   *
+   * Greenhouse lets a company name its offices anything, and several use the company name:
+   * Gemini's board lists "Gemini North America", which the parser has no way to know is
+   * not a town. Dropping these here rather than in the parser is deliberate — it is the
+   * only place that knows whose board this is.
+   */
+  const companyToken = context.companyName.toLowerCase().split(/\s+/)[0] ?? '';
+  const usable = parsed.filter(
+    (location) =>
+      location.city === null ||
+      companyToken.length < 3 ||
+      !location.city.toLowerCase().includes(companyToken),
+  );
+
+  // Falling back to the unfiltered set rather than to nothing: a posting whose only
+  // location happens to share a word with the employer's name is still a posting.
+  const locations = usable.length > 0 ? usable : parsed;
+
   const distinct = new Map<string, (typeof locations)[number]>();
   for (const location of locations) {
     const key = location.city ?? '*';

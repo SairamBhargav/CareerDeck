@@ -148,6 +148,8 @@ function stripModality(segment: string): string {
     // "Ireland Locations", "Bengaluru Office" — boards append a noise word to the place.
     // Trailing only, so "Bay Area" and "Greater Boston Area" survive via ALIASES.
     .replace(/\s+(locations?|offices?|hub)\s*$/i, '')
+    // A trailing super-region: "Gemini North America" is an office label, not a place.
+    .replace(/\s+(north america|south america|americas|emea|apac|latam|global)\s*$/i, '')
     .replace(/[-–—()]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -211,11 +213,14 @@ function splitOnMetroCodes(segment: string): string[] | null {
 /**
  * Rejects a "city" that cannot be one.
  *
- * Real city names are one to four words. A longer run is an unparsed list, a department
- * name, or a sentence, and title-casing it into `location_city` puts a fiction into the
- * column the location filter reads.
+ * Real city names are one to four words and contain no digits. Anything else is an
+ * unparsed list, a department, or — the case that put 1,069 rows into the corpus before
+ * this existed — an employer's internal office code: Anduril's Greenhouse board calls one
+ * of its offices `CA OC 00`, and title-casing that into `location_city` puts a fiction
+ * into the column the location filter reads.
  */
 function isPlausibleCity(value: string): boolean {
+  if (/\d/.test(value)) return false;
   const words = value.split(/\s+/).filter(Boolean);
   return words.length >= 1 && words.length <= 4;
 }
@@ -286,6 +291,22 @@ function placeFromSegment(segment: string): Pick<ParsedLocation, 'city' | 'regio
       // (ON, BC, NSW). Keeping it is better than discarding the only region signal.
       region = upper;
     }
+  }
+
+  /*
+   * The alias table again, on the city part alone.
+   *
+   * Checking only the whole segment left "New York City, NY" and "New York, NY" as two
+   * different cities — 506 rows against 2,306, for one place. A qualifier after the comma
+   * does not make the city a different city, so the same lookup has to run here.
+   */
+  const firstAlias = ALIASES[first.toLowerCase()];
+  if (firstAlias) {
+    return {
+      city: firstAlias.city,
+      region: region ?? firstAlias.region,
+      country: country ?? firstAlias.country,
+    };
   }
 
   if (!isPlausibleCity(first)) {
