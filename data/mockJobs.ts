@@ -1,4 +1,34 @@
-import type { Job } from '@/types';
+import type { EmploymentType, LocationType, SalaryPeriod } from '@/types';
+
+/**
+ * The shape of a fixture posting — seed input, not a `Job`.
+ *
+ * Phase 1 made `Job` a database row: it carries a uuid, a company slug, a
+ * `lastSeenAt` stamp and a viewer state, none of which a hand-written fixture can
+ * honestly supply. These are the fields scripts/generate-seed.ts reads; everything
+ * else about a seeded posting is derived by the same normalizers the crawler uses.
+ */
+export interface FixtureJob {
+  id: string;
+  companyId: string;
+  companyName: string;
+  companyLogo: string;
+  title: string;
+  location: string;
+  locationType: LocationType;
+  employmentType: EmploymentType;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryPeriod: SalaryPeriod;
+  description: string;
+  requirements: string[];
+  skills: string[];
+  /** ISO date string. */
+  postedAt: string;
+  applicationUrl: string;
+  isSaved: boolean;
+  isLiked: boolean;
+}
 
 /**
  * Fictional but realistic postings used everywhere in the app.
@@ -6,7 +36,7 @@ import type { Job } from '@/types';
  * Descriptions run long on purpose: the Reels card lets a description grow to fill all
  * the way down to the action rail, so short copy leaves a noticeable gap under it.
  */
-export const mockJobs: Job[] = [
+export const mockJobs: FixtureJob[] = [
   {
     id: 'job-nvidia-swe-intern',
     companyId: 'nvidia',

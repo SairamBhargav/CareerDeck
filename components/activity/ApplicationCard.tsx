@@ -44,7 +44,7 @@ interface ApplicationCardProps {
 export function ApplicationCard({ entry, onPress, onAdvance, onOpenStatusPicker }: ApplicationCardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const { application, job, company } = entry;
+  const { application, job } = entry;
 
   const next = NEXT_STAGE[application.status];
 
@@ -56,9 +56,9 @@ export function ApplicationCard({ entry, onPress, onAdvance, onOpenStatusPicker 
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.head}>
         <CompanyLogo
-          logo={company?.logo ?? job.companyLogo}
+          logo={job.companyLogoUrl ?? job.companyLogo}
           name={job.companyName}
-          color={company?.logoColor}
+          color={job.companyLogoColor ?? undefined}
           size="sm"
         />
 

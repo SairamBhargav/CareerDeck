@@ -14,10 +14,12 @@ function byNewest(a: NewsItem, b: NewsItem): number {
  * news from companies they don't follow yet trails behind. Newest first within each group.
  */
 export function useNewsFeed(): NewsItem[] {
-  const { followedCompanyIds } = useCareerDeck();
+  // Follows are keyed by company slug in phase 1, and a news item names its company
+  // the same way — so the two line up without a lookup. See CareerDeckContext.
+  const { followedCompanySlugs } = useCareerDeck();
 
   return useMemo(() => {
-    const followed = new Set(followedCompanyIds);
+    const followed = new Set(followedCompanySlugs);
     const isRelevant = (item: NewsItem) =>
       item.category === 'industry' || (item.companyId !== undefined && followed.has(item.companyId));
 
@@ -25,5 +27,5 @@ export function useNewsFeed(): NewsItem[] {
     const other = mockNews.filter((item) => !isRelevant(item)).sort(byNewest);
 
     return [...relevant, ...other];
-  }, [followedCompanyIds]);
+  }, [followedCompanySlugs]);
 }

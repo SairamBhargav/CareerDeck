@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, FlatList, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -27,7 +27,7 @@ import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCommentCounts } from '@/hooks/useComments';
-import { useJobFeeds, type ReelFeed } from '@/hooks/useJobFeeds';
+import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
 import { resumeMatchScore } from '@/utils/resumeMatch';
@@ -42,14 +42,24 @@ const MATCH_RING_DROP = 12;
 
 /** How far past the top edge the user has to drag before a release triggers a refresh. */
 const PULL_THRESHOLD = 88;
-/** Stand-in for a real network round trip — see handleRefresh. */
-const REFRESH_DURATION = 1100;
+/**
+ * Minimum time the refresh indicator stays up.
+ *
+ * The refetch itself is usually faster than this, and an indicator that vanishes in 80ms
+ * reads as the gesture having failed rather than having worked. This is a floor on the
+ * animation, not a stand-in for the request — that part is real now.
+ */
+const REFRESH_DURATION = 900;
+
+/** Cards left below the viewport when the next page starts loading. */
+const END_REACHED_THRESHOLD = 2;
 
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { companies, defaultResume, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
-  const { forYouJobs, followingJobs } = useJobFeeds();
+  const { defaultResume, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
+  const forYouFeed = useJobFeed('recent');
+  const followingFeed = useFollowingFeed();
   const commentCounts = useCommentCounts();
   const tabBarHeight = useTabBarHeight();
 
@@ -58,7 +68,6 @@ export default function ReelsScreen() {
   const [applyJob, setApplyJob] = useState<Job | null>(null);
   const [detailsJob, setDetailsJob] = useState<Job | null>(null);
   const [commentsJob, setCommentsJob] = useState<Job | null>(null);
-  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const listRef = useRef<FlatList<Job>>(null);
 
@@ -82,18 +91,11 @@ export default function ReelsScreen() {
     [],
   );
 
-  const baseJobs = feed === 'forYou' ? forYouJobs : followingJobs;
+  const activeFeed = feed === 'forYou' ? forYouFeed : followingFeed;
+  const jobs = activeFeed.jobs;
 
-  // There's no backend yet, so a "refresh" rotates the feed instead of fetching: enough
-  // for a different role to land on top, so the gesture visibly does something. Replace
-  // this whole memo with the refetched list once the API exists.
-  const jobs = useMemo(() => {
-    if (refreshNonce === 0 || baseJobs.length < 2) return baseJobs;
-    const offset = refreshNonce % baseJobs.length;
-    return [...baseJobs.slice(offset), ...baseJobs.slice(0, offset)];
-  }, [baseJobs, refreshNonce]);
-
-  const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
+  // No company lookup any more: the feed payload carries the logo and brand colour on
+  // each posting, because the query already joins `companies` to build the card.
 
   // How well the default resume matches each job on screen, in the same order as
   // `jobs` so the scroll-position math below can index straight into it.
@@ -137,6 +139,11 @@ export default function ReelsScreen() {
     Haptics.selectionAsync();
   }, []);
 
+  // A real refetch now, where this used to rotate the array to fake one. The indicator
+  // is still held open for REFRESH_DURATION regardless of how fast the request comes
+  // back, because the gesture needs to be felt to have worked.
+  const refetchActive = activeFeed.refetch;
+
   const handleRefresh = useCallback(() => {
     if (isRefreshing.current) return;
     isRefreshing.current = true;
@@ -146,8 +153,9 @@ export default function ReelsScreen() {
     spin.value = withRepeat(withTiming(360, { duration: 850, easing: Easing.linear }), -1, false);
     pulse.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }), -1, false);
 
+    refetchActive();
+
     refreshTimer.current = setTimeout(() => {
-      setRefreshNonce((current) => current + 1);
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -161,7 +169,7 @@ export default function ReelsScreen() {
 
       isRefreshing.current = false;
     }, REFRESH_DURATION);
-  }, [active, pulse, spin]);
+  }, [active, pulse, spin, refetchActive]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -238,14 +246,16 @@ export default function ReelsScreen() {
               maxToRenderPerBatch={3}
               windowSize={5}
               removeClippedSubviews
+              onEndReached={activeFeed.hasNextPage ? activeFeed.fetchNextPage : undefined}
+              onEndReachedThreshold={END_REACHED_THRESHOLD}
               renderItem={({ item }) => (
                 <JobReelCard
                   job={item}
                   height={pageHeight}
                   paddingTop={cardPaddingTop}
                   paddingBottom={cardPaddingBottom}
-                  logoColor={companyById.get(item.companyId)?.logoColor}
-                  logoUrl={companyById.get(item.companyId)?.logo}
+                  logoColor={item.companyLogoColor ?? undefined}
+                  logoUrl={item.companyLogoUrl ?? undefined}
                   commentCount={commentCounts.get(item.id) ?? 0}
                   onLike={() => toggleLike(item.id)}
                   onComment={() => setCommentsJob(item)}
@@ -258,11 +268,21 @@ export default function ReelsScreen() {
           </Animated.View>
         ) : (
           <View style={[styles.empty, { paddingTop: cardPaddingTop }]}>
-            <EmptyState
-              icon="people-outline"
-              title="No jobs from your companies yet"
-              message="Follow companies on Home and their newest roles will show up here."
-            />
+            {activeFeed.isLoading ? (
+              <ActivityIndicator />
+            ) : (
+              <EmptyState
+                icon={feed === 'following' ? 'people-outline' : 'briefcase-outline'}
+                title={
+                  feed === 'following' ? 'No jobs from your companies yet' : 'Nothing to show yet'
+                }
+                message={
+                  feed === 'following'
+                    ? 'Follow companies on Home and their newest roles will show up here.'
+                    : 'No postings matched. Pull down to try again.'
+                }
+              />
+            )}
           </View>
         )
       ) : null}
@@ -285,8 +305,8 @@ export default function ReelsScreen() {
 
       <JobDetailsModal
         job={detailsJob}
-        logoColor={detailsJob ? companyById.get(detailsJob.companyId)?.logoColor : undefined}
-        logoUrl={detailsJob ? companyById.get(detailsJob.companyId)?.logo : undefined}
+        logoColor={detailsJob?.companyLogoColor ?? undefined}
+        logoUrl={detailsJob?.companyLogoUrl ?? undefined}
         visible={detailsJob !== null}
         onClose={() => setDetailsJob(null)}
         onApply={() => {

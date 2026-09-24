@@ -64,14 +64,13 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
-  const { companies, toggleFollow, toggleSave } = useCareerDeck();
+  const { toggleFollow, toggleSave } = useCareerDeck();
 
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<SearchScope>('jobs');
   const [recents, setRecents] = useState<string[]>([]);
 
   const results = useSearch(query);
-  const companyById = new Map(companies.map((company) => [company.id, company]));
 
   const progress = useSharedValue(0);
 
@@ -203,8 +202,8 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
                 {showingJobs ? (
                   <JobFeedCard
                     job={item as Job}
-                    logoColor={companyById.get((item as Job).companyId)?.logoColor}
-                    logoUrl={companyById.get((item as Job).companyId)?.logo}
+                    logoColor={(item as Job).companyLogoColor ?? undefined}
+                    logoUrl={(item as Job).companyLogoUrl ?? undefined}
                     onPress={() => openJob(item as Job)}
                     onToggleSave={() => toggleSave(item.id)}
                   />
@@ -212,7 +211,7 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
                   <CompanyResultRow
                     company={item as Company}
                     onPress={() => openCompany(item as Company)}
-                    onToggleFollow={() => toggleFollow(item.id)}
+                    onToggleFollow={() => toggleFollow((item as Company).slug)}
                   />
                 )}
               </Animated.View>

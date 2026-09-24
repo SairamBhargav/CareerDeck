@@ -1,6 +1,21 @@
-import type { Company } from '@/types';
+/**
+ * The shape of a fixture company — seed input, not a `Company`.
+ *
+ * Same reasoning as FixtureJob: a real `Company` has a uuid, a slug and an
+ * `openJobCount` that only the database knows. `id` here is what becomes the slug.
+ */
+export interface FixtureCompany {
+  /** Becomes `companies.slug`, and stays the /company/[id] route segment. */
+  id: string;
+  name: string;
+  logo: string;
+  logoColor: string;
+  industry: string;
+  followerCount: number;
+  isFollowing: boolean;
+}
 
-export const mockCompanies: Company[] = [
+export const mockCompanies: FixtureCompany[] = [
   {
     id: 'nvidia',
     name: 'NVIDIA',
@@ -264,19 +279,11 @@ export const mockCompanies: Company[] = [
   },
 ];
 
-/** Companies shown in the "Suggested for you" rail on Home. */
-export const suggestedCompanyIds = [
-  'nvidia',
-  'openai',
-  'coinbase',
-  'citadel',
-  'datadog',
-  'doordash',
-  'meta',
-  'snowflake',
-  'anduril',
-  'crowdstrike',
-  'blueorigin',
-  'lockheed',
-  'tesla',
-];
+/*
+ * `suggestedCompanyIds` lived here and is gone.
+ *
+ * The "Suggested for you" rail is served by `suggested_companies()` in the phase 1
+ * migration, which ranks on companies that are actually hiring right now. A hardcoded list
+ * of thirteen slugs could recommend an employer with nothing open, which is the one thing
+ * a suggestion rail must not do.
+ */
