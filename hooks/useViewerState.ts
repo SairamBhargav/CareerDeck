@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { EMPTY_VIEWER_SETS, fetchViewerState, type InteractionKind, type ViewerSets } from '@/lib/api';
+import { SKIP_AUTH } from '@/lib/env';
 import { enqueue, subscribeToOutbox } from '@/lib/outbox';
 
 /**
@@ -27,6 +28,12 @@ import { enqueue, subscribeToOutbox } from '@/lib/outbox';
  * flickers feels broken"), hands the operation to `lib/outbox.ts`, and returns. The outbox
  * gets it to Postgres whenever it can, in order, and this hook refetches once it lands so
  * the cache ends up holding what the database holds rather than what the device guessed.
+ *
+ * SKIP_AUTH (lib/env.ts) skips only the last of those three steps: the optimistic write
+ * still lands in the cache — which is what the UI reads from — but nothing is handed
+ * to the outbox, so there is no persistence and no real userId anything is attributed
+ * to. The query itself is a no-op that seeds empty sets rather than attempting a real
+ * read a session-less client has no grant to make.
  */
 
 export function viewerStateKey(userId: string | null) {
@@ -58,7 +65,7 @@ export function useViewerState(userId: string | null): ViewerState {
 
   const query = useQuery({
     queryKey: key,
-    queryFn: fetchViewerState,
+    queryFn: SKIP_AUTH ? () => Promise.resolve(EMPTY_VIEWER_SETS) : fetchViewerState,
     enabled: userId !== null,
     // These sets only change because of something this device did, and every one of those
     // changes is written into the cache as it happens. Re-reading them on every mount
@@ -106,7 +113,9 @@ export function useViewerState(userId: string | null): ViewerState {
         hiddenJobIds: kind === 'hide' ? withId(current.hiddenJobIds, jobId, on) : current.hiddenJobIds,
       }));
 
-      void enqueue({ kind: 'interaction', jobId, interaction: kind, on });
+      // The cache write above is the whole of what SKIP_AUTH does with this — there is
+      // no session to persist it under.
+      if (!SKIP_AUTH) void enqueue({ kind: 'interaction', jobId, interaction: kind, on });
     },
     [apply],
   );
@@ -137,7 +146,7 @@ export function useViewerState(userId: string | null): ViewerState {
         followedCompanySlugs: withId(current.followedCompanySlugs, companySlug, on),
       }));
 
-      void enqueue({ kind: 'follow', companySlug, on });
+      if (!SKIP_AUTH) void enqueue({ kind: 'follow', companySlug, on });
     },
     [apply, sets.followedCompanySlugs],
   );

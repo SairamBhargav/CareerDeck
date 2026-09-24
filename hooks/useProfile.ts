@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import { DEFAULT_WEEKLY_GOAL } from '@/constants/goal';
+import { mockUser } from '@/data/mockUser';
+import { SKIP_AUTH } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
 import type { User, UserIdentityEdit } from '@/types';
 
@@ -16,6 +18,12 @@ import type { User, UserIdentityEdit } from '@/types';
  * split in §3.1 precisely because they have different read patterns, and asking
  * PostgREST to infer the one-to-one relationship back out of the foreign key is a
  * fragile way to undo that.
+ *
+ * SKIP_AUTH (lib/env.ts) replaces both reads and both mutations' writes with a `mockRef`
+ * held for the life of the hook — unlike useViewerState and useApplicationRecords, this
+ * one has to persist across a refetch: both mutations call `settle()` unconditionally on
+ * success, and a queryFn returning a fixed constant would silently revert whatever an
+ * edit had just written, the moment the sheet that made it closed.
  */
 
 export interface Profile {
@@ -94,9 +102,14 @@ export function useProfile(userId: string | null) {
     [userId],
   );
 
+  // SKIP_AUTH's whole store. A ref rather than state: nothing here is ever rendered
+  // directly, only read back by queryFn and written by the two mutations below — the
+  // query cache is what the rest of the app actually reads.
+  const mockRef = useRef<Profile>({ user: mockUser, weeklyGoal: DEFAULT_WEEKLY_GOAL });
+
   const query = useQuery({
     queryKey: key,
-    queryFn: () => fetchProfile(userId as string),
+    queryFn: SKIP_AUTH ? () => mockRef.current : () => fetchProfile(userId as string),
     enabled: userId !== null,
   });
 
@@ -128,6 +141,16 @@ export function useProfile(userId: string | null) {
 
   const identityMutation = useMutation({
     mutationFn: async (edit: UserIdentityEdit) => {
+      if (SKIP_AUTH) {
+        // Written to the ref, not just the optimistic cache entry — the mutation's own
+        // onSettled invalidates and refetches, and queryFn reads this back.
+        mockRef.current = {
+          ...mockRef.current,
+          user: { ...mockRef.current.user, ...edit, displayName: `${edit.firstName} ${edit.lastName}`.trim() },
+        };
+        return;
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -156,6 +179,18 @@ export function useProfile(userId: string | null) {
 
   const preferencesMutation = useMutation({
     mutationFn: async (patch: PreferencesPatch) => {
+      if (SKIP_AUTH) {
+        mockRef.current = {
+          weeklyGoal: patch.weeklyGoal ?? mockRef.current.weeklyGoal,
+          user: {
+            ...mockRef.current.user,
+            preferredRoles: patch.preferredRoles ?? mockRef.current.user.preferredRoles,
+            preferredLocations: patch.preferredLocations ?? mockRef.current.user.preferredLocations,
+          },
+        };
+        return;
+      }
+
       const { error } = await supabase
         .from('user_preferences')
         .update({

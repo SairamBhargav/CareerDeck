@@ -14,6 +14,8 @@ import {
 import { Platform } from 'react-native';
 
 import { DEV_TEST_EMAIL, DEV_TEST_PASSWORD } from '@/lib/env';
+import { SKIP_AUTH } from '@/lib/env';
+import { MOCK_SESSION } from '@/lib/mockSession';
 import { identifyUser, reportError } from '@/lib/observability';
 import { queryClient } from '@/lib/query-client';
 import { supabase } from '@/lib/supabase';
@@ -79,11 +81,14 @@ export class SignInCancelled extends Error {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [isResolved, setIsResolved] = useState(false);
+  // SKIP_AUTH starts already "signed in", so nothing above this waits on a session read
+  // that would never resolve to one — see lib/mockSession.ts.
+  const [session, setSession] = useState<Session | null>(SKIP_AUTH ? MOCK_SESSION : null);
+  const [isResolved, setIsResolved] = useState(SKIP_AUTH);
   const [isAppleAvailable, setIsAppleAvailable] = useState(false);
 
   useEffect(() => {
+    if (SKIP_AUTH) return;
     let active = true;
 
     supabase.auth
@@ -223,6 +228,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (SKIP_AUTH) {
+      // The real client was never signed in — there is nothing for supabase.auth to
+      // sign out of. Dropping the fabricated session is the whole of it.
+      setSession(null);
+      queryClient.clear();
+      return;
+    }
+
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     // Everything cached is scoped to the account that just left. Clearing after the

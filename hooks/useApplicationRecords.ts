@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { fetchApplications } from '@/lib/api';
+import { SKIP_AUTH } from '@/lib/env';
 import { enqueue, subscribeToOutbox } from '@/lib/outbox';
 import type { Application, ApplicationSource, ApplicationStatus } from '@/types';
 
@@ -62,7 +63,10 @@ export function useApplicationRecords(userId: string | null): ApplicationRecords
 
   const query = useQuery({
     queryKey: key,
-    queryFn: fetchApplications,
+    // SKIP_AUTH (lib/env.ts): the cache is the whole store, seeded empty rather than
+    // attempting a read a session-less client has no grant to make. logApplication and
+    // setApplicationStatus below still write into it — there is just nothing beyond it.
+    queryFn: SKIP_AUTH ? () => Promise.resolve(EMPTY) : fetchApplications,
     enabled: userId !== null,
     // Longer than the default because nothing changes this list except this device. The
     // refetch that matters is the one after an outbox flush, below.
@@ -113,7 +117,7 @@ export function useApplicationRecords(userId: string | null): ApplicationRecords
         ];
       });
 
-      void enqueue({ kind: 'application.create', jobId, source, appliedAt: today });
+      if (!SKIP_AUTH) void enqueue({ kind: 'application.create', jobId, source, appliedAt: today });
     },
     [apply],
   );
@@ -130,7 +134,7 @@ export function useApplicationRecords(userId: string | null): ApplicationRecords
         ),
       );
 
-      void enqueue({ kind: 'application.status', jobId: target.jobId, status });
+      if (!SKIP_AUTH) void enqueue({ kind: 'application.status', jobId: target.jobId, status });
     },
     [apply, applications],
   );

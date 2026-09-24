@@ -44,3 +44,19 @@ export const SUPABASE_ANON_KEY: string = required(supabaseAnonKey, 'EXPO_PUBLIC_
  */
 export const DEV_TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL;
 export const DEV_TEST_PASSWORD = process.env.EXPO_PUBLIC_DEV_TEST_PASSWORD;
+
+/**
+ * Skips sign-in entirely and runs the app against local, in-memory data for everything
+ * that would otherwise need a real session — profile, likes/saves/follows, and the
+ * application tracker. Jobs, companies and search still hit the real database and read
+ * live data, because those tables are world-readable and need no session at all.
+ *
+ * For working on UI without a way to authenticate yet — SMTP unset up, or nobody
+ * around with the service-role key to provision a dev test account. `__DEV__` gated the
+ * same way EXPO_PUBLIC_DEV_TEST_EMAIL is: false in every release build no matter what
+ * this holds, so there is nothing to remember to turn off before shipping.
+ *
+ * See lib/mockSession.ts, and the SKIP_AUTH branch in hooks/useProfile.ts,
+ * hooks/useViewerState.ts and hooks/useApplicationRecords.ts.
+ */
+export const SKIP_AUTH = __DEV__ && process.env.EXPO_PUBLIC_SKIP_AUTH === 'true';

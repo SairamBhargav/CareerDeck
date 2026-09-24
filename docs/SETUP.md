@@ -221,6 +221,26 @@ The button only renders when `__DEV__` is true, which is false in every release 
 regardless of what ends up in the bundle, so there's nothing to remember to strip out
 before shipping. Leaving the env vars unset is equivalent to not having this feature.
 
+### H. Skipping sign-in entirely — optional, for when nobody has a way in yet
+
+`EXPO_PUBLIC_SKIP_AUTH=true` in `.env.local` goes one step further than G: it removes
+the sign-in screen from the navigation stack altogether (`app/_layout.tsx`'s
+`isSignedIn` guard) and runs on local, in-memory data for everything that would
+otherwise need a real session — profile, likes/saves/follows, and the application
+tracker. `Home`, `Deck` and search still read the live database exactly as they do
+signed in: `jobs` and `companies` are world-readable (phase 1 §2.10) and never needed a
+session to begin with.
+
+There's nothing to run first, unlike G — no account to provision, no service-role key
+needed. `hooks/useProfile.ts` seeds a fixed identity from `data/mockUser.ts`;
+`hooks/useViewerState.ts` and `hooks/useApplicationRecords.ts` start empty and fill in
+from whatever you tap during the session. None of it persists past a reload, and none of
+it is real — liking a job here writes to nobody's `job_interactions` row.
+
+Reach for G over this once a test account exists; this one is for the gap before that,
+when SMTP isn't configured and nobody with the service-role key is around to run
+`npm run dev:create-test-user`. Same `__DEV__` gate as everything else in this section.
+
 ---
 
 ## 3. Expo Go vs a development build
