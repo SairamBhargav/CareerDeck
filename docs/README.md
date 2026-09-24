@@ -124,7 +124,7 @@ for `company.id` to become a UUID **with** a stable `slug` column for URLs.
         │ ─ Greenhouse  │ ─ resume parse│ ─ daily grant│
         │ ─ Lever       │ ─ embeddings  │ ─ streak pay │
         │ ─ Ashby       │ ─ moderation  │ ─ staleness  │
-        │ ─ Workday(HL) │ ─ autoapply   │ ─ taste vec  │
+        │ ─ Workday     │ ─ autoapply   │ ─ taste vec  │
         │ ─ RSS/news    │ ─ news summarize│ ─ digest   │
         └───────────────┴──────────────┴───────────────┘
                           │
@@ -145,8 +145,10 @@ for `company.id` to become a UUID **with** a stable `slug` column for URLs.
   *reads that RLS can express → Supabase client directly; everything else → your service.*
 - **Inngest (or Trigger.dev) for background work.** At "small team, 50k users" the ops cost
   of self-managed workers is the thing that eats the team. Durable steps, automatic retries,
-  backoff, and a visible run history matter more than the per-invocation price. Crawlers that
-  need a real browser (Workday) run as containers on Fly, triggered by the same runner.
+  backoff, and a visible run history matter more than the per-invocation price. No crawler
+  needs a real browser yet — Workday, the reason this sentence originally named one, is
+  plain JSON (§4.2). If a bespoke career site ever does, it runs as a container on Fly,
+  triggered by the same runner.
 - **Redis from the start**, for two things only: the per-user feed candidate pool and rate
   limiting. Not as a general cache — that's how caches become correctness bugs.
 
@@ -847,12 +849,29 @@ lose the raw payload — that's the entire reason `raw_postings` exists.
 | Lever | Public JSON | Easy | `api.lever.co/v0/postings/{company}?mode=json`. |
 | Ashby | Public JSON / GraphQL | Easy–medium | Well structured, less documented. |
 | SmartRecruiters | Public API | Easy | Good coverage in mid-market. |
-| Workday | Rendered SPA | **Hard** | Undocumented internal JSON endpoints, per-tenant URLs, aggressive rate limits. Needs headless Chromium + per-tenant config. Do this last and budget real time for it. |
+| Workday | Public JSON per tenant | Medium — **built** | `{tenant}.wd{n}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs`, the endpoint the tenant's own public career page calls. No headless browser: a POST for each page of 20, then one GET per posting for the description the list withholds. Per-tenant URLs and per-tenant robots.txt are real, the "aggressive rate limits" were not — at our pacing nothing pushed back. `server/src/ingest/sources/workday.ts`. |
 | Company career sites | Bespoke | Hard, low yield | Only worth it for a specific high-value employer. |
 
 **Sequencing recommendation:** Greenhouse + Lever + Ashby gets you a large majority of
 startup/tech internship and new-grad postings — precisely your market — for a fraction of
-the effort. Ship on those three. Workday is where a quarter disappears.
+the effort. Ship on those three first — which is what happened.
+
+**Workday, in hindsight, was not the quarter this document budgeted for.** The
+prediction above assumed a rendered SPA behind a headless browser. It is in fact plain
+JSON on the tenant's own host, and the adapter is one file. What it did cost was two
+things this document did not predict:
+
+- the adapter contract had to grow. §4.2 claimed a new ATS "implements this interface and
+  touches nothing else, which is the only real test of whether the abstraction is right";
+  Workday paginates and withholds descriptions, and neither is expressible as a pure
+  body → postings function, so `SourceAdapter` gained three optional hooks;
+- its data shape broke two normalizer assumptions that the first three ATSs never
+  exercised — display-text posting dates ("Posted Today", which made every posting look
+  changed on every crawl until it joined `VOLATILE_KEYS`) and broadest-first location
+  strings ("US, CA, Santa Clara", which fanned out into a city called "US").
+
+The lesson worth keeping is that the cost of a new source is in what its data does to the
+normalizer, not in how hard the endpoint is to reach.
 
 ### 4.3 Crawl hygiene (this is the legal posture, not politeness)
 
@@ -1470,7 +1489,7 @@ decision 1, 2, or 5 reshapes several phases.
 | An employer objects to being crawled | Strict hygiene (§4.3), fast takedown path, kill-switch per source, drive traffic to their ATS |
 | Anonymous defamation of a named company | Pre-screen, 24h report SLA, notice-and-takedown, strikes tied to verification |
 | Resume data breach | Encrypt P0, signed URLs only, audit every access, never store ID documents, minimize retention |
-| Workday coverage eats a quarter | Ship on Greenhouse/Lever/Ashby; treat Workday as a separate, time-boxed project |
+| ~~Workday coverage eats a quarter~~ — **did not happen** | Shipped on Greenhouse/Lever/Ashby first; Workday then turned out to be public per-tenant JSON, not an SPA. Residual cost is one detail request per posting per crawl (§4.2) |
 | Auto Apply LLM cost outruns subscription revenue | Log `cost_usd` per run from run #1; entitlement quotas; price only after real data |
 | Cold-start feed feels random | Onboarding preferences + school-cohort signal + a deliberately generous exploration rate |
 | Stale postings destroy trust | Aggressive staleness detection; show `last_seen_at` as "verified 2h ago" |
