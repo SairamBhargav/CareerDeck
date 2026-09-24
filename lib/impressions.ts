@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { AppState, Platform } from 'react-native';
 
 import { logImpressions, type FeedSurface, type ImpressionEvent } from '@/lib/api';
+import { SKIP_AUTH } from '@/lib/env';
 import { reportError } from '@/lib/observability';
 
 /**
@@ -150,12 +151,20 @@ export async function flushImpressions(): Promise<void> {
  * `log_impressions` derives `user_id` from the session, so there is no such thing as a
  * signed-out impression. Anything buffered when the session ends belonged to the person
  * who just left, and goes with them.
+ *
+ * SKIP_AUTH (lib/env.ts) is refused here rather than left to the caller: the fake
+ * session it runs on has a userId, so `userId !== null` reads true, but there is no
+ * real JWT behind it and `log_impressions` has no grant for an unauthenticated caller
+ * — every flush would fail on a 42501 and log a reportError for nothing anyone can act
+ * on. Unlike likes and applications, telemetry has no local-only story worth building;
+ * not collecting it is the correct behaviour, not a degraded one.
  */
 export function setImpressionsEnabled(next: boolean): void {
-  if (enabled === next) return;
-  enabled = next;
+  const resolved = next && !SKIP_AUTH;
+  if (enabled === resolved) return;
+  enabled = resolved;
 
-  if (!next) {
+  if (!resolved) {
     stopTimer();
     buffer = [];
   }
