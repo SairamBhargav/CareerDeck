@@ -8,10 +8,14 @@ import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FollowButton } from '@/components/common/FollowButton';
 import { IconButton } from '@/components/common/IconButton';
+import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useCompanyDirectory } from '@/hooks/useCompanies';
+import { useJobsByIds } from '@/hooks/useJobFeeds';
+import type { Company } from '@/types';
 import { formatFollowerCount } from '@/utils/format';
 
 /** Per-row stagger, capped so a long list's tail isn't left waiting. */
@@ -63,21 +67,35 @@ export default function CollectionScreen() {
   const styles = useStyles();
   const { type } = useLocalSearchParams<{ type: string }>();
 
-  const { jobs, companies, toggleSave, toggleFollow } = useCareerDeck();
+  const { savedJobIds, likedJobIds, followedCompanySlugs, toggleSave, toggleFollow } = useCareerDeck();
+  const directory = useCompanyDirectory();
 
   const collection: CollectionType = isCollectionType(type) ? type : 'saved';
   const copy = COPY[collection];
 
-  const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
-
-  const followed = useMemo(() => companies.filter((company) => company.isFollowing), [companies]);
-  const shownJobs = useMemo(
-    () => jobs.filter((job) => (collection === 'saved' ? job.isSaved : job.isLiked)),
-    [jobs, collection],
+  /*
+   * Resolved from the viewer's own id sets, not filtered out of a loaded feed.
+   *
+   * These lists are exactly the case a paginated corpus breaks: a job saved last
+   * week is not in the page currently loaded, so filtering would show an empty
+   * Saved screen to someone with fifty saved jobs.
+   */
+  const wantedIds = collection === 'saved' ? savedJobIds : likedJobIds;
+  const { jobs: shownJobs, isLoading: jobsLoading } = useJobsByIds(
+    collection === 'following' ? [] : wantedIds,
   );
 
+  const followed = useMemo(
+    () =>
+      followedCompanySlugs
+        .map((slug) => directory.bySlug.get(slug))
+        .filter((company): company is Company => company !== undefined),
+    [followedCompanySlugs, directory],
+  );
+
+  const isLoading = collection === 'following' ? directory.isLoading : jobsLoading;
   const count = collection === 'following' ? followed.length : shownJobs.length;
-  const isEmpty = count === 0;
+  const isEmpty = count === 0 && !isLoading;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -93,7 +111,9 @@ export default function CollectionScreen() {
           <View style={styles.spacer} />
         </View>
 
-        {isEmpty ? (
+        {isLoading ? (
+          <FeedSkeleton />
+        ) : isEmpty ? (
           <EmptyState icon={copy.empty.icon} title={copy.empty.title} message={copy.empty.message} />
         ) : collection === 'following' ? (
           <View style={styles.list}>
@@ -102,7 +122,7 @@ export default function CollectionScreen() {
                 key={company.id}
                 entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
                 <Pressable
-                  onPress={() => router.push({ pathname: '/company/[id]', params: { id: company.id } })}
+                  onPress={() => router.push({ pathname: '/company/[id]', params: { id: company.slug } })}
                   accessibilityRole="button"
                   accessibilityLabel={`Open ${company.name}`}
                   style={({ pressed }) => [styles.companyRow, pressed ? styles.pressed : null]}>
@@ -125,7 +145,7 @@ export default function CollectionScreen() {
                   <FollowButton
                     isFollowing={company.isFollowing}
                     companyName={company.name}
-                    onToggle={() => toggleFollow(company.id)}
+                    onToggle={() => toggleFollow(company.slug)}
                     size="sm"
                   />
                 </Pressable>
@@ -140,8 +160,8 @@ export default function CollectionScreen() {
                 entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
                 <JobFeedCard
                   job={job}
-                  logoColor={companyById.get(job.companyId)?.logoColor}
-                  logoUrl={companyById.get(job.companyId)?.logo}
+                  logoColor={job.companyLogoColor ?? undefined}
+                  logoUrl={job.companyLogoUrl ?? undefined}
                   onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })}
                   onToggleSave={() => toggleSave(job.id)}
                 />

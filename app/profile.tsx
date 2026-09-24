@@ -34,7 +34,7 @@ export default function ProfileScreen() {
     resumes,
     defaultResume,
     applications,
-    followedCompanyIds,
+    followedCompanySlugs,
     savedJobIds,
     likedJobIds,
     preferredRoles,
@@ -94,7 +94,7 @@ export default function ProfileScreen() {
       key: 'following',
       icon: 'business-outline',
       label: 'Following companies',
-      hint: countLabel(followedCompanyIds.length, 'company', 'companies'),
+      hint: countLabel(followedCompanySlugs.length, 'company', 'companies'),
       onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'following' } }),
     },
     {

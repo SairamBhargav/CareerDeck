@@ -1368,10 +1368,25 @@ API service skeleton with auth middleware. Sentry wired. Client: replace
 `CareerDeckContext`'s user/preference state with real reads.
 **Exit:** sign in on a device, edit your profile, it survives a restart.
 
-### Phase 1 — Jobs and ingestion (3–4 weeks)
+### Phase 1 — Jobs and ingestion (3–4 weeks) — **built**
 `companies`, `job_sources`, `raw_postings`, `jobs`. Greenhouse + Lever + Ashby crawlers.
-Normalization + dedup + staleness. FTS search. Client: feed and search hit the API.
+Normalization + dedup + staleness. FTS search. Client: feed and search are paginated reads.
 **Exit:** 10k+ real postings from 100+ companies, feed and search work, dedup rate < 2%.
+
+Design and outcome: [PHASE1.md](./PHASE1.md). Three decisions there depart from this
+document and are argued at length in it:
+
+- **Reads go to Postgres, not to the API service.** §11's URLs are not implemented; the
+  contract behind them lives in `lib/api.ts` so phase 5 changes one file. §2.1's rule still
+  holds — this is a deferral with a named trigger, not a rejection.
+- **The dedup key includes seniority**, and `title_normalized` keeps years. §3.4's key cost
+  523 of Anduril's 2,356 real requisitions in the first crawl.
+- **No `jobs.embedding` yet.** Phase 4 adds the column and the index; near-miss dedup uses
+  pg_trgm until then.
+
+Measured: 30,800+ postings from 140 companies, 124 of 124 sources healthy, cross-source
+dedup 0.00%. A separate 11% of reconcile attempts are employers posting one role under
+several requisition ids — counted apart, because it is their data rather than our defect.
 
 ### Phase 2 — Interactions and tracking (2–3 weeks)
 `company_follows`, `job_interactions`, `applications`, `application_events`,

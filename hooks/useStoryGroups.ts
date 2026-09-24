@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useNewsFeed } from '@/hooks/useNewsFeed';
 import type { NewsItem, StoryGroup } from '@/types';
 
@@ -16,10 +17,12 @@ const INDUSTRY_GROUP_NAME = 'Industry Pulse';
  */
 export function useStoryGroups(): StoryGroup[] {
   const newsFeed = useNewsFeed();
-  const { companies, seenNewsIds } = useCareerDeck();
+  const { seenNewsIds } = useCareerDeck();
+  const directory = useCompanyDirectory();
 
   return useMemo(() => {
-    const companyById = new Map(companies.map((company) => [company.id, company]));
+    // News items name a company by slug, which is what the directory is keyed on.
+    const companyById = directory.bySlug;
     const seen = new Set(seenNewsIds);
 
     // Insertion order of `order` is what preserves the feed's own ranking.
@@ -54,7 +57,7 @@ export function useStoryGroups(): StoryGroup[] {
     });
 
     return [...groups.filter((group) => group.hasUnseen), ...groups.filter((group) => !group.hasUnseen)];
-  }, [newsFeed, companies, seenNewsIds]);
+  }, [newsFeed, directory, seenNewsIds]);
 }
 
 /** Where a ring should open: its first unwatched story, or the start if it's all been seen. */

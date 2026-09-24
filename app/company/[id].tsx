@@ -1,15 +1,17 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
 import { FollowButton } from '@/components/common/FollowButton';
 import { SectionHeader } from '@/components/common/SectionHeader';
+import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useCompany } from '@/hooks/useCompanies';
 import { useCompanyJobs } from '@/hooks/useJobFeeds';
 import { hexToRgba } from '@/utils/color';
 import { formatFollowerCount } from '@/utils/format';
@@ -32,10 +34,19 @@ export default function CompanyDetailScreen() {
   const router = useRouter();
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companies, toggleFollow, toggleSave } = useCareerDeck();
+  const { toggleFollow, toggleSave } = useCareerDeck();
+  // `id` is the slug — §1.3(c) keeps company slugs as the URL, and they survived
+  // the move to uuid primary keys precisely so these links keep resolving.
+  const { company, isLoading } = useCompany(id);
   const openings = useCompanyJobs(id);
 
-  const company = companies.find((entry) => entry.id === id);
+  if (isLoading) {
+    return (
+      <View style={styles.missing}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   if (!company) {
     return (
@@ -65,16 +76,24 @@ export default function CompanyDetailScreen() {
           <FollowButton
             isFollowing={company.isFollowing}
             companyName={company.name}
-            onToggle={() => toggleFollow(company.id)}
+            onToggle={() => toggleFollow(company.slug)}
             size="md"
           />
         </View>
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title={`Open roles (${openings.length})`} />
+        {/*
+          * No total any more: the openings list is paginated, so a count would be
+          * "how many we have fetched so far", which is worse than no number at all.
+          * A real total needs a count query per company, which phase 2 can add to
+          * `companies.open_job_count` — where the suggestion rail already reads one.
+          */}
+        <SectionHeader title={company.openJobCount > 0 ? `Open roles (${company.openJobCount})` : 'Open roles'} />
 
-        {openings.length === 0 ? (
+        {openings.isLoading ? (
+          <FeedSkeleton />
+        ) : openings.jobs.length === 0 ? (
           <EmptyState
             icon="briefcase-outline"
             title="No open roles"
@@ -82,7 +101,7 @@ export default function CompanyDetailScreen() {
           />
         ) : (
           <View style={styles.list}>
-            {openings.map((job, index) => (
+            {openings.jobs.map((job, index) => (
               <Animated.View
                 key={job.id}
                 entering={FadeInDown.duration(240).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
@@ -95,6 +114,21 @@ export default function CompanyDetailScreen() {
                 />
               </Animated.View>
             ))}
+
+            {openings.hasNextPage ? (
+              <Pressable
+                onPress={openings.fetchNextPage}
+                disabled={openings.isFetchingNextPage}
+                accessibilityRole="button"
+                accessibilityLabel="Load more roles"
+                style={styles.more}>
+                {openings.isFetchingNextPage ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.moreLabel}>Load more</Text>
+                )}
+              </Pressable>
+            ) : null}
           </View>
         )}
       </View>
@@ -143,5 +177,17 @@ const useStyles = makeStyles((colors) => ({
   },
   list: {
     gap: spacing.md,
+  },
+  // A button rather than an onEndReached hook: this list lives inside a ScrollView
+  // that also carries the company header, and nesting a FlatList in it to get scroll
+  // callbacks would fight the outer scroll for one paginated section.
+  more: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  moreLabel: {
+    fontSize: fontSize.small,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
 }));

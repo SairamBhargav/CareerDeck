@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
-import type { Application, ApplicationStatus, Company, Job } from '@/types';
+import { useJobsByIds } from '@/hooks/useJobFeeds';
+import type { Application, ApplicationStatus, Job } from '@/types';
 
-/** An application with the job and company it points at already resolved. */
+/** An application with the job it points at already resolved. */
 export interface TrackedApplication {
   application: Application;
   job: Job;
-  company: Company | undefined;
 }
 
 export interface PipelineCounts {
@@ -36,22 +36,34 @@ function byRecentActivity(a: Application, b: Application): number {
 }
 
 /**
- * The tracker's list, joined to jobs and companies and ordered the way a student
+ * The tracker's list, joined to the postings it points at and ordered the way a student
  * actually reads it: whatever is furthest along first, then most recently touched.
- * Applications whose job has fallen out of the feed are dropped rather than rendered
- * as an empty card.
+ *
+ * Jobs are fetched by id rather than looked up in a loaded feed. The old version searched
+ * the whole in-memory corpus; with a paginated one, "the page currently loaded" is not a
+ * place an application's job can be assumed to be.
+ *
+ * The company is gone from the return type — a `Job` now carries its company's name, logo
+ * and brand colour, because the feed query joins them to build the card anyway.
+ *
+ * **Phase 1 note (PHASE1.md §8.6):** `mockApplications` points at fixture job ids that no
+ * longer exist, so this correctly resolves to nothing and the Activity tab reads empty
+ * until phase 2 builds the real `applications` table. That is the intended outcome, not a
+ * regression — the alternative kept two definitions of what a Job is alive for a phase.
  */
 export function useTrackedApplications(): TrackedApplication[] {
-  const { applications, jobs, companies } = useCareerDeck();
+  const { applications } = useCareerDeck();
+
+  const jobIds = useMemo(() => applications.map((application) => application.jobId), [applications]);
+  const { jobs } = useJobsByIds(jobIds);
 
   return useMemo(() => {
     const jobById = new Map(jobs.map((job) => [job.id, job]));
-    const companyById = new Map(companies.map((company) => [company.id, company]));
 
     return applications
       .map((application) => {
         const job = jobById.get(application.jobId);
-        return job ? { application, job, company: companyById.get(job.companyId) } : null;
+        return job ? { application, job } : null;
       })
       .filter((entry): entry is TrackedApplication => entry !== null)
       .sort(
@@ -59,7 +71,7 @@ export function useTrackedApplications(): TrackedApplication[] {
           STATUS_RANK[a.application.status] - STATUS_RANK[b.application.status] ||
           byRecentActivity(a.application, b.application),
       );
-  }, [applications, jobs, companies]);
+  }, [applications, jobs]);
 }
 
 /** Stage tallies for the summary strip at the top of Activity. */

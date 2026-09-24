@@ -3,6 +3,7 @@ export type {
   LocationType,
   EmploymentType,
   SalaryPeriod,
+  Seniority,
 } from './job';
 export type { Company } from './company';
 export type { User, UserIdentityEdit } from './user';

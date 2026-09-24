@@ -13,16 +13,12 @@ import { useAuth } from '@/context/AuthContext';
 import { mockApplications } from '@/data/mockApplications';
 import { mockCommentActivity } from '@/data/mockCommentActivity';
 import { mockComments } from '@/data/mockComments';
-import { mockCompanies } from '@/data/mockCompanies';
-import { mockJobs } from '@/data/mockJobs';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
 import { useProfile } from '@/hooks/useProfile';
 import type {
   Application,
   ApplicationStatus,
   CommentActivity,
-  Company,
-  Job,
   JobComment,
   Resume,
   User,
@@ -30,15 +26,22 @@ import type {
 } from '@/types';
 
 /**
- * Single store for CareerDeck.
+ * Session and viewer state for CareerDeck.
  *
- * Phase 0 moved identity and preferences onto Postgres — `user`, `preferredRoles`,
- * `preferredLocations` and `weeklyGoal` are now reads and writes against Supabase, and
- * they survive a restart. Everything else below is still in-memory mock state and resets
- * on reload; phases 1 and 2 move jobs, interactions and applications the same way.
+ * Phase 0 moved identity and preferences onto Postgres. Phase 1 took the corpus away
+ * entirely: `jobs` and `companies` are gone from this file, because a store that holds
+ * every posting cannot hold a few hundred thousand of them. Screens read
+ * `hooks/useJobFeeds.ts` and `hooks/useCompanies.ts`, which page through the database.
  *
- * Screens read from the hooks below, so a field graduating from mock to server changes
- * this file and nothing else.
+ * What is left is what Appendix A says should be left — "the existing context, slimmed to
+ * hold only session/viewer state". Concretely: which postings this viewer has liked or
+ * saved, which companies they follow, and the mock application, comment and resume state
+ * that phases 2 and 3 will move.
+ *
+ * Likes, saves and follows stay in memory for one more phase on purpose. `job_interactions`
+ * and `company_follows` are phase 2; until they exist the feed hooks merge these sets into
+ * each `Job` as `isSaved` / `isLiked`, which is the same merge this file used to do and
+ * the same shape the server will fill (§1.3a).
  */
 
 interface CareerDeckState {
@@ -49,8 +52,6 @@ interface CareerDeckState {
   /** Set when the profile could not be read — the app shell can't be trusted until it is. */
   profileError: Error | null;
   retryProfile: () => void;
-  jobs: Job[];
-  companies: Company[];
   resumes: Resume[];
   defaultResumeId: string;
   /** The user's tracked applications, newest activity first. */
@@ -62,13 +63,17 @@ interface CareerDeckState {
   unreadCommentCount: number;
   /** The resume currently used to pre-fill the apply sheet. */
   defaultResume: Resume | undefined;
-  followedCompanyIds: string[];
+  /**
+   * Company **slugs**, not uuids — see DEFAULT_FOLLOWED_SLUGS. Phase 2 replaces this with
+   * a read of `company_follows` and the identifier becomes the uuid.
+   */
+  followedCompanySlugs: string[];
   likedJobIds: string[];
   savedJobIds: string[];
   /** News items the user has already watched in the stories row. */
   seenNewsIds: string[];
-  isFollowing: (companyId: string) => boolean;
-  toggleFollow: (companyId: string) => void;
+  isFollowing: (companySlug: string) => boolean;
+  toggleFollow: (companySlug: string) => void;
   toggleLike: (jobId: string) => void;
   toggleSave: (jobId: string) => void;
   /** One-way: a story that has been watched stays watched for the session. */
@@ -148,8 +153,19 @@ function toggleInSet(current: Set<string>, id: string): Set<string> {
   return next;
 }
 
+/**
+ * Companies followed on a fresh install.
+ *
+ * Follows are keyed by **slug** in phase 1, not by the database uuid. The slug is what
+ * the feed filter takes (`feed_jobs(p_company_slugs)`), what a route segment carries, and
+ * what a news item names — and unlike a uuid it is knowable before the directory loads,
+ * which is what lets the Following feed have content on first launch. Phase 2's
+ * `company_follows` keys on the uuid, and this set goes away with it.
+ */
+const DEFAULT_FOLLOWED_SLUGS = ['nvidia', 'stripe'];
+
 function seedFollowedCompanies(): Set<string> {
-  return new Set(mockCompanies.filter((company) => company.isFollowing).map((company) => company.id));
+  return new Set(DEFAULT_FOLLOWED_SLUGS);
 }
 
 export function CareerDeckProvider({ children }: { children: ReactNode }) {
@@ -193,8 +209,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const [comments, setComments] = useState<JobComment[]>(mockComments);
   const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(() => new Set<string>());
 
-  const toggleFollow = useCallback((companyId: string) => {
-    setFollowedIds((current) => toggleInSet(current, companyId));
+  const toggleFollow = useCallback((companySlug: string) => {
+    setFollowedIds((current) => toggleInSet(current, companySlug));
   }, []);
 
   const toggleLike = useCallback((jobId: string) => {
@@ -346,24 +362,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<CareerDeckState>(() => {
-    const companies = mockCompanies.map((company) => ({
-      ...company,
-      isFollowing: followedIds.has(company.id),
-    }));
-
-    const jobs = mockJobs.map((job) => ({
-      ...job,
-      isLiked: likedIds.has(job.id),
-      isSaved: savedIds.has(job.id),
-    }));
-
     return {
       isInitialLoading,
       user,
       profileError,
       retryProfile,
-      jobs,
-      companies,
       resumes: mockResumes,
       defaultResumeId,
       defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
@@ -375,11 +378,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       ),
       commentActivity,
       unreadCommentCount: commentActivity.filter((entry) => !entry.read).length,
-      followedCompanyIds: [...followedIds],
+      followedCompanySlugs: [...followedIds],
       likedJobIds: [...likedIds],
       savedJobIds: [...savedIds],
       seenNewsIds: [...seenNewsIds],
-      isFollowing: (companyId: string) => followedIds.has(companyId),
+      isFollowing: (companySlug: string) => followedIds.has(companySlug),
       toggleFollow,
       toggleLike,
       toggleSave,

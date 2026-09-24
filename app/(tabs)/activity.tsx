@@ -20,6 +20,7 @@ import { makeStyles } from '@/context/ThemeContext';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
+import { useJobsByIds } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { ApplicationStatus, Job } from '@/types';
 
@@ -41,8 +42,7 @@ export default function ActivityScreen() {
   const styles = useStyles();
   const {
     isInitialLoading,
-    companies,
-    jobs,
+    likedJobIds,
     resumes,
     defaultResumeId,
     commentActivity,
@@ -70,9 +70,22 @@ export default function ActivityScreen() {
   const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
   const pickerEntry = applications.find((entry) => entry.application.id === pickerFor) ?? null;
 
-  const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
-  const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
-  const likedJobs = useMemo(() => jobs.filter((job) => job.isLiked), [jobs]);
+  /*
+   * Liked postings are resolved by id rather than filtered out of a loaded feed.
+   *
+   * The old version searched `jobs` — the whole corpus, in memory. With a paginated
+   * feed that array is one page, so a job liked yesterday and scrolled past would
+   * silently vanish from this tab. Phase 2 replaces the id set with a read of
+   * `job_interactions`; the shape of this call does not change.
+   */
+  const { jobs: likedJobs } = useJobsByIds(likedJobIds);
+
+  /*
+   * Comment activity points at mock job ids, and those postings no longer exist —
+   * PHASE1.md §8.6. The card falls back to "A posting" rather than rendering blank,
+   * and phase 3's real `comments` table gives it something to resolve again.
+   */
+  const jobById = useMemo(() => new Map(likedJobs.map((job) => [job.id, job])), [likedJobs]);
 
   // The unread badge clears a beat after the list is opened, rather than the instant
   // the tab is pressed — long enough that the user sees which rows were new.
@@ -163,8 +176,8 @@ export default function ActivityScreen() {
                   entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
                   <JobFeedCard
                     job={job}
-                    logoColor={companyById.get(job.companyId)?.logoColor}
-                    logoUrl={companyById.get(job.companyId)?.logo}
+                    logoColor={job.companyLogoColor ?? undefined}
+                    logoUrl={job.companyLogoUrl ?? undefined}
                     onPress={() => handlePressJob(job)}
                     onToggleSave={() => toggleSave(job.id)}
                   />

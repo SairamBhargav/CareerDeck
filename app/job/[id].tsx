@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -16,32 +16,44 @@ import { useJobById } from '@/hooks/useJobFeeds';
 export default function JobDetailScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { companies, defaultResume, toggleSave, toggleLike } = useCareerDeck();
-  const job = useJobById(id);
+  const { defaultResume, toggleSave, toggleLike } = useCareerDeck();
+  const { job, isLoading } = useJobById(id);
   const [applyVisible, setApplyVisible] = useState(false);
 
-  if (!job) {
+  if (isLoading) {
     return (
       <View style={styles.missing}>
-        <EmptyState
-          icon="alert-circle-outline"
-          title="Job not found"
-          message="This posting is no longer part of the current feed."
-        />
+        <ActivityIndicator />
       </View>
     );
   }
 
-  const company = companies.find((c) => c.id === job.companyId);
+  if (!job) {
+    /*
+     * "Not found" now means something specific: RLS only exposes `status = 'open'`, so a
+     * posting the employer has closed since it was last crawled 404s here rather than
+     * rendering a dead Apply button. §16 lists stale postings as a top-tier trust risk,
+     * and this is the last line of that defence.
+     */
+    return (
+      <View style={styles.missing}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="This posting has closed"
+          message="The employer has taken it down, or it is no longer listed on their board."
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.companyRow}>
           <CompanyLogo
-            logo={company?.logo ?? job.companyLogo}
+            logo={job.companyLogoUrl ?? job.companyLogo}
             name={job.companyName}
-            color={company?.logoColor}
+            color={job.companyLogoColor ?? undefined}
             size="lg"
           />
           <Text style={styles.company}>{job.companyName}</Text>

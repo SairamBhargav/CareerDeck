@@ -1,12 +1,17 @@
-# Phase 0 — running it, and what still needs an account
+# Running CareerDeck — phases 0 and 1
 
-Companion to [README.md](./README.md), which is the plan. This is the part you operate.
+Companion to [README.md](./README.md), which is the plan, and
+[PHASE1.md](./PHASE1.md), which is phase 1's design. This is the part you operate.
 
-Phase 0 is §15's first milestone: Supabase, migration tooling, auth, `profiles` /
+**Phase 0** is §15's first milestone: Supabase, migration tooling, auth, `profiles` /
 `user_preferences` / `schools`, a seed script, the API service skeleton, Sentry wiring,
 and the client reading identity and preferences from Postgres instead of a fixture.
+*Exit condition: sign in on a device, edit your profile, it survives a restart.*
 
-**Exit condition:** sign in on a device, edit your profile, it survives a restart.
+**Phase 1** is the corpus: `companies`, `job_sources`, `raw_postings`, `jobs`, the
+Greenhouse / Lever / Ashby crawlers, dedup, staleness, full-text search, and a paginated
+feed. *Exit condition: 10k+ real postings from 100+ companies, feed and search work,
+dedup rate < 2%.*
 
 ---
 
@@ -16,9 +21,21 @@ Nothing below needs an account. Docker Desktop has to be running.
 
 ```bash
 npm install
+npm --prefix server install
 npm run db:start          # first run pulls ~2GB of images
-npm run verify:phase0     # 34 checks against the live local stack
+npm run db:reset          # migrations + seed: 156 skills, 143 companies, 53 postings
+npm run verify:phase0
+npm run verify:phase1
 npx expo start
+```
+
+The app is usable at this point without ever running a crawler — the fixtures are seeded
+as real rows (§2.2: *"keep them working so local dev never needs a crawler"*). For the
+real corpus:
+
+```bash
+npm run ingest            # ~2 minutes, 124 public boards, no API keys, $0
+npm run verify:phase1     # the corpus checks now pass too
 ```
 
 `.env.local` already points at the local stack. `npm run db:status` prints the URLs —
@@ -35,10 +52,33 @@ top of `supabase/config.toml`.
 | `npm run db:start` / `db:stop` | The local Supabase stack |
 | `npm run db:reset` | Drops it, re-applies migrations, re-seeds |
 | `npm run db:push` | Applies migrations to the linked hosted project |
-| `npm run seed:generate` | Rewrites `supabase/seed.sql` from `data/mock*.ts` |
+| `npm run seed:generate` | Rewrites `supabase/seed.sql` from the fixtures and the board list |
 | `npm run types:generate` | Rewrites `types/database.ts` — **run after every migration** |
-| `npm run verify:phase0` | End-to-end check of the exit condition, plus the authz rules |
-| `npm run server:dev` | The API service on :8787 |
+| `npm run verify:phase0` | Identity, preferences and the phase 0 authz rules |
+| `npm run verify:phase1` | The pipeline, the read API, the authz rules, and the corpus metrics |
+| `npm run ingest` | Crawls every enabled source that is due, then sweeps |
+| `npm run ingest:sweep` | The staleness pass on its own |
+| `npm run server:dev` | The API service on :8787 — **not needed by the app in phase 1** |
+
+### Crawling
+
+| Command | Does |
+|---|---|
+| `npm run ingest` | Every source whose `crawl_interval` has elapsed |
+| `npm run ingest -- --force` | Every enabled source, ignoring the interval and stored ETags |
+| `npm run ingest -- --source=stripe` | One board, by company slug or board token |
+| `npm run ingest -- --source=stripe --dry-run` | Parses and prints. Writes nothing, not even a run row |
+| `npm run ingest -- --limit=10` | The ten most overdue sources |
+| `npm run ingest -- --sweep` | Close postings nobody has seen for 48h |
+
+A second run right after the first does almost nothing, and that is the system working:
+boards answer `304 Not Modified` against the stored ETag, and any posting that did change
+is compared by content hash before anything downstream fires.
+
+**The service does not serve the app.** Phase 1 reads jobs straight from Postgres through
+SQL functions, so `npm run server:dev` is not part of the loop — see PHASE1.md decision B.
+What `server/` holds now is the whole ingestion pipeline, which runs under the service role
+and is the half of the work that genuinely cannot live on a client.
 
 ### The one local caveat
 
@@ -131,14 +171,35 @@ falls back to `console.error`).
    ["@sentry/react-native/expo", { "url": "https://sentry.io/", "organization": "...", "project": "..." }]
    ```
 
-### E. Fly.io — not yet
+### E. Scheduled crawling — optional, $0
 
-`server/` runs locally with `npm run server:dev` and the app does not call it: every read
-phase 0 makes is expressible in RLS, which §2.1 says belongs on the Supabase client.
-It earns a deployment in phase 1, when the ranked feed needs somewhere to live.
+`.github/workflows/ingest.yml` runs the crawl and the sweep nightly against a hosted
+project. It ships inert: without two repository secrets it exits with a notice instead of
+failing every night.
 
-When that day comes, `server/fly.toml` has the commands in its header comment. Secrets go
-through `fly secrets`, never into the file.
+1. **Settings → Secrets and variables → Actions.** Add:
+   - `SUPABASE_URL` — `https://<ref>.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` — Project Settings → API → **service_role**
+
+**Read the workflow's header before you add the second one.** That key bypasses every RLS
+policy in the project; storing it in a GitHub secret means trusting Actions, the workflow
+file, and everyone who can push to it. It is a normal thing to do and it is also a real
+decision, which is why nothing enables it for you.
+
+Cost: about 150 of a private repository's 2,000 free Actions minutes per month, nothing on
+a public one. Nightly rather than four-hourly because there are no users waiting on a
+posting yet — `crawl_interval` is still honoured within a run, so tightening the cadence
+later is one line of cron.
+
+### F. Fly.io — still not yet
+
+`server/` holds the ingestion pipeline, which runs as a command. The app reads jobs
+directly from Postgres (PHASE1.md decision B), so there is still nothing for a deployed
+service to serve.
+
+It comes due when phase 2 needs idempotency keys on writes and an impression batch
+endpoint, or when phase 5's ranker needs a process. `server/fly.toml` has the commands in
+its header comment. Secrets go through `fly secrets`, never into the file.
 
 ---
 
@@ -190,6 +251,66 @@ AsyncStorage, because a Supabase session is several times SecureStore's practica
 
 ---
 
+## 5. What phase 1 actually built
+
+Design and reasoning: [PHASE1.md](./PHASE1.md). The operational summary:
+
+### Database
+
+`supabase/migrations/20260922000000_phase1_jobs.sql` — §3.3's `companies`, §3.4's
+`job_sources` / `raw_postings` / `jobs`, plus `skills`, `job_dedup_review` and
+`crawl_runs`. Worth knowing:
+
+- **`raw_postings` is immutable.** Insert only. It is the audit trail and the reprocessing
+  input: when the normalizer has a bug, the fix replays from here instead of re-crawling
+  every board. `unique (source_id, external_id, content_hash)` is the whole re-crawl
+  strategy — an unchanged posting conflicts and no downstream work fires.
+- **Jobs and companies are world-readable; the operational tables are not.** A `select` on
+  `raw_postings` is a select on every payload ever fetched, so it carries no grant at all.
+  RLS filters `jobs` to `status = 'open'`, which is why a closed posting 404s rather than
+  rendering a dead Apply button.
+- **The dedup key is a generated column.** The pipeline computes everything else, but two
+  writers that disagreed about this formula would produce two rows for one posting and the
+  unique index would never fire.
+
+### Crawling
+
+Three adapters behind one interface, one pipeline, and hygiene enforced in `http.ts` rather
+than left to each adapter: a `User-Agent` with a contact URL, robots.txt honoured per host,
+a per-host concurrency cap and minimum gap, conditional GETs, backoff on 429/5xx, and
+auto-disable after five consecutive failures. There is no credential anywhere in
+`server/src/ingest` — §4.3's "only public, unauthenticated endpoints" is enforced by there
+being nothing to log in with.
+
+To stop crawling someone, one statement:
+
+```sql
+update job_sources set enabled = false, notes = 'Takedown request 2026-09-23'
+ where board_url = 'https://boards.greenhouse.io/<token>';
+```
+
+Re-seeding never re-enables it — `generate-seed.ts` deliberately leaves `enabled` and
+`notes` alone on conflict.
+
+### Client
+
+`jobs` and `companies` are gone from `CareerDeckContext`. Screens read
+`hooks/useJobFeeds.ts` and `hooks/useCompanies.ts`, which page through the database via
+`lib/api.ts` — the one file that knows how a job is fetched, and therefore the only file
+phase 5 has to change. Home is a real `FlatList` now rather than a mapped array inside a
+`ScrollView`, and Reels' pull-to-refresh performs an actual refetch instead of rotating
+the array.
+
+Likes, saves and follows stay in memory for one more phase. The feed hooks merge them onto
+each posting as `isSaved` / `isLiked`, which is the same merge the context used to do and
+the same shape the server will fill in phase 2 (§1.3a).
+
+**The Activity tab reads empty, and that is expected.** `mockApplications` points at
+fixture job ids that no longer exist — PHASE1.md §8.6. Phase 2's real `applications` table
+is what fills it.
+
+---
+
 ## 5. Troubleshooting
 
 | Symptom | Cause |
@@ -201,3 +322,8 @@ AsyncStorage, because a Supabase session is several times SecureStore's practica
 | `supabase start` fails to bind a port | Another reserved range moved. `netsh interface ipv4 show excludedportrange protocol=tcp`, then pick free ports in `config.toml`. |
 | `verify:phase0` fails at sign-in after passing a moment ago | Each run creates two accounts and GoTrue rate-limits sign-ups per five minutes. Wait a minute. |
 | Types disagree with the database | `npm run types:generate` after every migration. |
+| The feed is empty after `db:reset` | The 53 fixture postings are seeded; if even those are missing, `npm run seed:generate` then reset again. |
+| `verify:phase1` reports `MISS` on the corpus checks | Expected on a fresh database. Run `npm run ingest`. |
+| A board 404s in the crawl output | The company renamed or retired that board. Fix or remove its row in `scripts/board-list.ts`, then `npm run seed:generate`. |
+| A crawl says "Nothing due" | Sources are only crawled once per `crawl_interval`. `--force`, or `--source=<slug>`. |
+| Every source fails at once | Usually no network, or `server/.env` pointing somewhere unreachable. A single run where *all* sources fail exits non-zero on purpose. |

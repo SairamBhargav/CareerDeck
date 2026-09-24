@@ -1,0 +1,105 @@
+# Nightly job ingestion — docs/PHASE1.md §9, decision C.
+#
+# Crawls every enabled source that is due and runs the staleness sweep, against a hosted
+# Supabase project. This is the runner phase 1 chose: $0, visible, and a thin wrapper over
+# `npm run ingest`, so swapping it for Inngest or a Fly cron later changes this file and
+# nothing in server/src/ingest.
+#
+# ── Before it does anything, you need to set two repository secrets ───────────────
+#
+#   Settings → Secrets and variables → Actions → New repository secret
+#
+#     SUPABASE_URL                https://<project-ref>.supabase.co
+#     SUPABASE_SERVICE_ROLE_KEY   Project Settings → API → service_role
+#
+# **Read this before you set the second one.** The service-role key bypasses every RLS
+# policy in the project: anything holding it can read every user's profile and write every
+# table. Putting it in a GitHub secret means trusting Actions, this workflow file, and
+# everyone who can push to it. That is a normal thing to do and it is also a real decision
+# — which is why the workflow ships inert rather than quietly requiring it.
+#
+# Without the secrets the job exits cleanly with an explanation instead of failing red
+# every night.
+#
+# ── Cost ──────────────────────────────────────────────────────────────────────────
+#
+# A full pass is ~2 minutes of crawling plus install, so call it 5 minutes a night: about
+# 150 of a private repository's 2,000 free Actions minutes per month, and nothing at all
+# on a public one. Four-hourly would cost 600, which is why this is nightly — §4.1's
+# per-source `crawl_interval` is still honoured *within* a run, so a source that is not
+# due is skipped and tightening the cadence later is one line of cron.
+
+name: Ingest jobs
+
+on:
+  schedule:
+    # 07:00 UTC — the small hours in US timezones, so a crawl never competes with the
+    # traffic spike from people actually using the app.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Ignore crawl_interval and ETags, and re-crawl every source'
+        type: boolean
+        default: false
+
+# One crawl at a time. Two overlapping runs would both try to reconcile the same boards,
+# and while the upsert is atomic per row, the wasted work is pure cost.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Check the secrets are set
+        id: guard
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Ingestion is not configured. Set the SUPABASE_URL and \
+            SUPABASE_SERVICE_ROLE_KEY repository secrets to enable it — see the header of \
+            .github/workflows/ingest.yml first, the service-role key bypasses RLS."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only the crawler's dependencies. The app's are irrelevant here and are the bulk of
+      # the install.
+      - name: Install
+        if: steps.guard.outputs.configured == 'true'
+        run: npm ci --prefix server
+
+      - name: Crawl
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # §4.3: identify yourself with a contact URL. Points at this repository so an
+          # employer who wants to be left alone has somewhere to say so.
+          CRAWLER_CONTACT_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          node server/src/ingest/run.ts ${{ inputs.force && '--force' || '' }}
+
+      # Runs even when the crawl step failed part-way: `close_stale_jobs()` is guarded on
+      # each source having succeeded recently, so a partial crawl closes only the postings
+      # it has evidence for and a total failure closes nothing.
+      - name: Sweep
+        if: steps.guard.outputs.configured == 'true' && !cancelled()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node server/src/ingest/run.ts --sweep
