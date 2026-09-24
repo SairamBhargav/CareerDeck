@@ -18,8 +18,19 @@ export type EmploymentTypeValue = 'Internship' | 'Full-time' | 'Part-time' | 'Co
  * overrides everything else in a title.
  */
 const TITLE_RULES: { level: SeniorityLevel; pattern: RegExp }[] = [
-  // `intern` before everything: an internship on a senior team is still an internship.
-  { level: 'intern', pattern: /\b(intern|internship|co-?op|coop|summer\s+(analyst|associate|20\d\d)|industrial placement|placement (student|year)|apprentice(ship)?|trainee|student (worker|assistant)|práctic)/i },
+  /*
+   * `intern` before everything: an internship on a senior team is still an internship.
+   *
+   * The trailing \b is load-bearing and was missing for a while: without it, `\bintern`
+   * matches the first six letters of "Internal", "International" and "Internet", which
+   * mislabeled full-time comms, tax and product roles as internships. `práctic\w*` keeps
+   * matching "prácticas"/"práctica" as a prefix while still stopping at a real word
+   * boundary rather than matching into whatever follows.
+   *
+   * `working student` / `werkstudent` covers the German-market equivalent, which several
+   * European boards (Anduril's among them) use instead of "intern".
+   */
+  { level: 'intern', pattern: /\b(intern|internship|co-?op|coop|summer\s+(analyst|associate|20\d\d)|industrial placement|placement (student|year)|apprentice(ship)?|trainee|student (worker|assistant)|working student|werkstudent\w*|práctic\w*)\b/i },
   { level: 'staff_plus', pattern: /\b(staff|principal|distinguished|fellow|architect|director|vp|vice president|head of|chief|cto|svp|manager,? (engineering|software))\b/i },
   { level: 'senior', pattern: /\b(senior|sr\.?|lead|staff\s|iii|iv|expert|specialist ii)\b/i },
   { level: 'new_grad', pattern: /\b(new ?grad(uate)?s?|university (grad|graduate|hire)|campus hire|entry[- ]level|early career(s)?|graduate (program|scheme|engineer|analyst|developer)|associate (software )?(engineer|developer)|junior|jr\.?|rotational)\b/i },

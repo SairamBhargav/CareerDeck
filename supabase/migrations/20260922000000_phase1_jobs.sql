@@ -984,10 +984,40 @@ declare
   v_near_id      uuid;
   v_near_score   real;
 begin
-  select * into v_existing
-    from public.jobs
-   where dedup_key = v_key and status = 'open'
-   limit 1;
+  /*
+   * Identity lookup, two tiers.
+   *
+   * (source_id, external_id, city) FIRST — the ATS's own identifier for this exact
+   * fanned-out row, which does not move just because a normalizer got smarter.
+   * `dedup_key` is derived from title_normalized/city/seniority, all three of which are
+   * classifier output, not ATS fact. When a normalizer fix changes a posting's derived
+   * seniority — exactly what happened when the intern/"Internal" word-boundary bug was
+   * fixed — its dedup_key changes too, and a dedup_key-only lookup would find nothing,
+   * insert a fresh row, and leave the old, wrongly-classified one sitting open next to
+   * it. That is not hypothetical: it is what the first version of this function did,
+   * confirmed by duplicate open rows sharing one external_id after a replay.
+   *
+   * dedup_key is still consulted, but only as the fallback for a posting this exact
+   * source has genuinely never sent before — which is where it belongs: catching a
+   * different source's posting that resolves to a job already stored (`duplicate`), or
+   * the same source re-posting a role under a new requisition id (`collapsed`).
+   */
+  if v_source_id is not null and v_external_id is not null then
+    select * into v_existing
+      from public.jobs
+     where source_id = v_source_id
+       and external_id = v_external_id
+       and coalesce(location_city, '*') = coalesce(v_city, '*')
+       and status = 'open'
+     limit 1;
+  end if;
+
+  if not found then
+    select * into v_existing
+      from public.jobs
+     where dedup_key = v_key and status = 'open'
+     limit 1;
+  end if;
 
   if found then
     update public.jobs j

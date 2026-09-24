@@ -457,4 +457,155 @@ async function landRawPostings(
   return changed;
 }
 
+// ── replay ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Re-normalizes stored postings without touching the network — the path the module
+ * comment at the top of this file promises and that a normalizer bugfix actually needs.
+ *
+ * `landRawPostings` deliberately skips re-normalizing a payload it has already stored
+ * byte-for-byte (that's the whole point of the content-hash dedup: an unchanged posting
+ * does no downstream work). That means a normalizer fix does not propagate just by
+ * re-running `crawlSource` — the ATS payload hasn't changed, so nothing is ever marked
+ * `changed`, and every already-landed row is silently skipped forever. Replay is the
+ * other half of that design: it reads `raw_postings` directly and reprocesses every row
+ * through the *current* adapter.parse + normalize, regardless of whether the payload
+ * changed.
+ *
+ * Each row's `processed_at` is stamped once replay has reconciled it, so
+ * `raw_postings_unprocessed_idx` reflects rows this pass has actually touched rather than
+ * being permanently empty (nothing else in the pipeline writes this column).
+ */
+export interface ReplayOptions {
+  dictionary: SkillDictionary;
+  log?: (message: string) => void;
+}
+
+export interface ReplayOutcome {
+  source: string;
+  rawSeen: number;
+  jobsCreated: number;
+  jobsUpdated: number;
+  collapsed: number;
+  duplicates: number;
+  errors: number;
+}
+
+export async function replaySource(
+  client: SupabaseClient,
+  source: SourceRow,
+  options: ReplayOptions,
+): Promise<ReplayOutcome> {
+  const log = options.log ?? (() => {});
+  const label = `${source.kind}:${source.boardToken ?? source.boardUrl}`;
+
+  const adapter = adapterFor(source.kind);
+  const outcome: ReplayOutcome = {
+    source: label,
+    rawSeen: 0,
+    jobsCreated: 0,
+    jobsUpdated: 0,
+    collapsed: 0,
+    duplicates: 0,
+    errors: 0,
+  };
+
+  if (!adapter || !source.companyId || !source.companyName) {
+    log(`skip  ${label} — no adapter or no company`);
+    return outcome;
+  }
+
+  const context: NormalizeContext = {
+    companyId: source.companyId,
+    companyName: source.companyName,
+    companyDomain: source.companyDomain,
+    sourceId: source.id,
+    runId: null,
+    applyHost: adapter.applyHost,
+    dictionary: options.dictionary,
+    // The board's current size is unknown without a fresh crawl; the count of raw rows
+    // already stored for this source is the closest honest stand-in for quality.ts's
+    // "a real board, not a one-off" signal.
+    boardSize: 0,
+  };
+
+  // Paged rather than selected in one shot: a busy board can have tens of thousands of
+  // landed rows, and PostgREST caps a single response at max_rows regardless.
+  const PAGE = 500;
+  let offset = 0;
+  let pending: NormalizedJob[] = [];
+  let processedIds: number[] = [];
+
+  const flush = async () => {
+    if (pending.length === 0) return;
+    for (const batch of chunk(pending, UPSERT_BATCH)) {
+      const { data, error } = await client.rpc('ingest_upsert_jobs', { p_rows: batch });
+      if (error) throw error;
+      const counts = (data ?? {}) as {
+        created?: number;
+        updated?: number;
+        collapsed?: number;
+        duplicate?: number;
+      };
+      outcome.jobsCreated += counts.created ?? 0;
+      outcome.jobsUpdated += counts.updated ?? 0;
+      outcome.collapsed += counts.collapsed ?? 0;
+      outcome.duplicates += counts.duplicate ?? 0;
+    }
+    pending = [];
+
+    if (processedIds.length > 0) {
+      const { error } = await client
+        .from('raw_postings')
+        .update({ processed_at: new Date().toISOString() })
+        .in('id', processedIds);
+      if (error) throw error;
+      processedIds = [];
+    }
+  };
+
+  for (;;) {
+    const { data, error } = await client
+      .from('raw_postings')
+      .select('id, external_id, payload')
+      .eq('source_id', source.id)
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      outcome.rawSeen += 1;
+      try {
+        const posting = { externalId: row.external_id as string, payload: row.payload as Record<string, unknown> };
+        const rows = normalize(adapter.parse(posting), context);
+        pending.push(...rows);
+        processedIds.push(row.id as number);
+      } catch (error) {
+        outcome.errors += 1;
+        log(`      ${label} — failed to replay raw_postings.id=${row.id}: ${describeError(error)}`);
+      }
+
+      // Flushed inside the page, not just at the end: a board with 30k raw rows would
+      // otherwise hold 30k NormalizedJob objects (each with a full description) in
+      // memory at once.
+      if (pending.length >= UPSERT_BATCH * 4) await flush();
+    }
+
+    offset += PAGE;
+    if (data.length < PAGE) break;
+  }
+
+  await flush();
+
+  log(
+    `ok    ${label} — replayed ${outcome.rawSeen} raw posting(s), ` +
+      `+${outcome.jobsCreated} new, ~${outcome.jobsUpdated} updated, ` +
+      `${outcome.collapsed} collapsed, ${outcome.duplicates} dup` +
+      (outcome.errors > 0 ? `, ${outcome.errors} error(s)` : ''),
+  );
+
+  return outcome;
+}
+
 export type { SourceAdapter };

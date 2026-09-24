@@ -8,6 +8,9 @@
  *                                       parse and print; writes nothing, not even a run row
  *   npm run ingest -- --sweep           the staleness pass on its own
  *   npm run ingest -- --limit=10        the ten most overdue sources
+ *   npm run ingest -- --replay          re-normalize every stored raw_postings row, no network
+ *   npm run ingest -- --replay --source=stripe
+ *                                       replay one source only
  *
  * Deliberately a command rather than a scheduler. The pipeline is plain functions, so
  * GitHub Actions (see .github/workflows/ingest.yml), a Fly cron or Inngest are
@@ -16,8 +19,14 @@
  */
 
 import { compileDictionary } from './normalize/skills.ts';
-import { dueSources, loadSkillDictionary, refreshOpenJobCounts, serviceClient } from './db.ts';
-import { crawlSource, type CrawlOutcome } from './pipeline.ts';
+import {
+  dueSources,
+  loadSkillDictionary,
+  refreshOpenJobCounts,
+  serviceClient,
+  sourcesWithRawData,
+} from './db.ts';
+import { crawlSource, replaySource, type CrawlOutcome, type ReplayOutcome } from './pipeline.ts';
 import { sweep } from './staleness.ts';
 
 interface Args {
@@ -25,6 +34,7 @@ interface Args {
   force: boolean;
   dryRun: boolean;
   sweepOnly: boolean;
+  replayOnly: boolean;
   withSweep: boolean;
   ignoreEtag: boolean;
   source?: string;
@@ -47,6 +57,7 @@ function parseArgs(argv: string[]): Args {
     force: flag('force'),
     dryRun: flag('dry-run'),
     sweepOnly: flag('sweep'),
+    replayOnly: flag('replay'),
     // The sweep runs after a full crawl by default: closing postings is only meaningful
     // once the evidence for them still being open has just been refreshed.
     withSweep: !flag('no-sweep'),
@@ -125,12 +136,57 @@ function summarize(outcomes: CrawlOutcome[]): void {
   }
 }
 
+function summarizeReplay(outcomes: ReplayOutcome[]): void {
+  const total = (pick: (outcome: ReplayOutcome) => number) => outcomes.reduce((sum, o) => sum + pick(o), 0);
+  const errors = total((o) => o.errors);
+
+  console.log('');
+  console.log(`sources     ${outcomes.length}`);
+  console.log(`raw rows    ${total((o) => o.rawSeen)} replayed`);
+  console.log(`jobs        +${total((o) => o.jobsCreated)} created, ~${total((o) => o.jobsUpdated)} updated`);
+  console.log(`collapsed   ${total((o) => o.collapsed)}  duplicates  ${total((o) => o.duplicates)}`);
+  if (errors > 0) console.log(`errors      ${errors} raw posting(s) failed to re-parse — see the log above`);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const client = serviceClient();
 
   if (args.sweepOnly) {
     await sweep(client, { log: (message) => console.log(message) });
+    return;
+  }
+
+  if (args.replayOnly) {
+    /*
+     * No network, no `dueSources` filtering — every source with landed raw data,
+     * including ones auto-disabled after repeated crawl failures. Disabling a source
+     * stops fetching it; it does not make the rows it already produced not worth fixing,
+     * and this is exactly the path a normalizer bugfix needs (see pipeline.ts).
+     */
+    const sources = await sourcesWithRawData(client, args.source ? { slug: args.source } : {});
+    if (sources.length === 0) {
+      console.log(`No source matches "${args.source}".`);
+      return;
+    }
+
+    console.log(`Replaying ${sources.length} source(s) from stored raw_postings — no network\n`);
+
+    const dictionary = compileDictionary(await loadSkillDictionary(client));
+    if (dictionary.unigrams.size === 0 && dictionary.phrases.length === 0) {
+      throw new Error('The skills dictionary is empty. Run `npm run db:reset` (or `npm run seed:generate`) first.');
+    }
+
+    const started = Date.now();
+    const outcomes = await pooled(sources, args.concurrency, (source) =>
+      replaySource(client, source, { dictionary, log: (message) => console.log(message) }),
+    );
+
+    const corrected = await refreshOpenJobCounts(client);
+    if (corrected > 0) console.log(`\ncounts      ${corrected} company open-role count(s) corrected`);
+
+    summarizeReplay(outcomes);
+    console.log(`elapsed     ${((Date.now() - started) / 1000).toFixed(1)}s`);
     return;
   }
 

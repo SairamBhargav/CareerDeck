@@ -102,6 +102,55 @@ export async function dueSources(
 }
 
 /**
+ * Every source that has landed raw data, regardless of `enabled`.
+ *
+ * Deliberately not `dueSources` with a flag bolted on: that function always filters to
+ * `enabled = true`, which is correct for crawling (an auto-disabled board should not be
+ * fetched again) and wrong for replay. A source disabled after five failures can still
+ * have thousands of stored `raw_postings` and open `jobs` from before it broke, and a
+ * normalizer bugfix needs to reach those rows too — disabling a source stops crawling it,
+ * it does not retroactively make its data not worth fixing.
+ */
+export async function sourcesWithRawData(
+  client: SupabaseClient,
+  options: { slug?: string } = {},
+): Promise<SourceRow[]> {
+  const { data, error } = await client
+    .from('job_sources')
+    .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures, companies(id, name, domain, slug)')
+    .order('id', { ascending: true });
+  if (error) throw error;
+
+  return (data ?? [])
+    .map((row): SourceRow => {
+      const company = (Array.isArray(row.companies) ? row.companies[0] : row.companies) as
+        | { id: string; name: string; domain: string | null; slug: string }
+        | null
+        | undefined;
+
+      return {
+        id: row.id as string,
+        kind: row.kind as AtsKind,
+        boardUrl: row.board_url as string,
+        boardToken: (row.board_token as string | null) ?? null,
+        etag: (row.etag as string | null) ?? null,
+        crawlInterval: (row.crawl_interval as string) ?? '6 hours',
+        lastCrawledAt: (row.last_crawled_at as string | null) ?? null,
+        consecutiveFailures: (row.consecutive_failures as number) ?? 0,
+        companyId: company?.id ?? null,
+        companyName: company?.name ?? null,
+        companyDomain: company?.domain ?? null,
+        ...(company ? { companySlug: company.slug } : {}),
+      } as SourceRow & { companySlug?: string };
+    })
+    .filter((source) => {
+      if (!options.slug) return true;
+      const slug = (source as SourceRow & { companySlug?: string }).companySlug;
+      return slug === options.slug || source.boardToken === options.slug;
+    });
+}
+
+/**
  * Postgres prints an interval as `06:00:00` or `1 day 06:00:00`. Only the shapes our own
  * `crawl_interval` values produce are handled; anything unrecognised is treated as due,
  * because a source that never gets crawled is a worse failure than one crawled early.
