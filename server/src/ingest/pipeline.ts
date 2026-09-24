@@ -37,7 +37,7 @@ import {
 import { extractSkills, type SkillDictionary } from './normalize/skills.ts';
 import { scoreQuality } from './normalize/quality.ts';
 import { adapterFor } from './sources/index.ts';
-import type { ParsedPosting, RawPosting, SourceAdapter } from './sources/types.ts';
+import type { ParsedPosting, RawPosting, SourceAdapter, SourceRequest } from './sources/types.ts';
 
 /**
  * Rows per `ingest_upsert_jobs` call. Large enough to amortise the round trip, small
@@ -62,6 +62,15 @@ const VOLATILE_KEYS = new Set([
   'fetched_at',
   'fetchedAt',
   'requisition_id',
+  /*
+   * Workday states a posting's age as display text — "Posted 3 Days Ago" — which changes
+   * on its own every single day while the posting does not. Hashed, it would mark every
+   * Workday posting as changed on every crawl: full re-normalization of every tenant
+   * daily, and a `raw_postings` row per posting per day forever. It is still stored and
+   * still parsed (sources/workday.ts reads it for `posted_at`); it just cannot be part of
+   * the identity of the content.
+   */
+  'postedOn',
 ]);
 
 /** Deterministic JSON: keys sorted at every level, volatile keys removed. */
@@ -275,6 +284,98 @@ export interface CrawlOutcome extends RunTotals {
   disabled?: boolean;
 }
 
+/**
+ * Hard cap on pages for one board.
+ *
+ * A tenant that reports a `total` larger than it can actually serve — or that ignores our
+ * offset — would otherwise page until the process died. At Workday's 20 per page this is
+ * 20,000 postings, which is an order of magnitude more than the largest real career site.
+ */
+const MAX_PAGES = 1_000;
+
+/**
+ * Every posting on a board, following pagination where the adapter implements it.
+ *
+ * Adapters that return a whole board in one response (Greenhouse, Lever, Ashby) do not
+ * implement `extractPage` and take the first branch, which is byte-for-byte the behaviour
+ * they had before pagination existed.
+ *
+ * Only the first request carries the stored ETag; a page-2 request is a different body to
+ * a different offset and has no ETag of its own to send. A 304 mid-pagination is treated
+ * as the end of the board rather than an error.
+ */
+async function readBoard(
+  adapter: SourceAdapter,
+  first: SourceRequest,
+  firstBody: string,
+): Promise<RawPosting[]> {
+  if (!adapter.extractPage) return adapter.extract(firstBody);
+
+  const postings: RawPosting[] = [];
+  let page = adapter.extractPage(firstBody, first);
+  postings.push(...page.postings);
+
+  for (let fetched = 1; fetched < MAX_PAGES && page.next !== null; fetched += 1) {
+    const request: SourceRequest = page.next;
+    const response = await politeFetch(request);
+    if (response.body === null) break;
+    page = adapter.extractPage(response.body, request);
+    postings.push(...page.postings);
+  }
+
+  return postings;
+}
+
+/**
+ * Fills in postings whose list endpoint withheld the description.
+ *
+ * A detail request that fails does not fail the crawl: the posting lands with whatever the
+ * list gave us, and quality.ts scores a descriptionless posting near the feed's floor on
+ * its own. One 404 in a 600-posting tenant should cost that one posting, not the tenant.
+ *
+ * Sequential on purpose. http.ts already caps a host at 2 in flight and holds a 700ms gap
+ * between requests to it, so the gap — not our parallelism — sets the pace; issuing these
+ * concurrently would buy nothing and only make the pacing queue longer.
+ */
+async function hydrate(
+  adapter: SourceAdapter,
+  postings: RawPosting[],
+  log: (message: string) => void,
+): Promise<RawPosting[]> {
+  const { detailRequest, mergeDetail } = adapter;
+  if (!detailRequest || !mergeDetail) return postings;
+
+  const hydrated: RawPosting[] = [];
+  let failures = 0;
+
+  for (const posting of postings) {
+    const request = detailRequest.call(adapter, posting);
+    if (request === null) {
+      hydrated.push(posting);
+      continue;
+    }
+
+    try {
+      const response = await politeFetch(request);
+      hydrated.push(
+        response.body === null ? posting : mergeDetail.call(adapter, posting, response.body),
+      );
+    } catch (error) {
+      failures += 1;
+      // Logged once in aggregate below rather than per posting: a tenant having a bad
+      // minute should not write 600 lines into the run log.
+      if (failures === 1) log(`first detail fetch failure: ${describeError(error)}`);
+      hydrated.push(posting);
+    }
+  }
+
+  if (failures > 0) {
+    log(`${failures}/${postings.length} detail fetch(es) failed; those postings have no description`);
+  }
+
+  return hydrated;
+}
+
 export async function crawlSource(
   client: SupabaseClient,
   source: SourceRow,
@@ -312,7 +413,8 @@ export async function crawlSource(
       return { source: label, status: 'not_modified', ...totals };
     }
 
-    const postings = adapter.extract(response.body);
+    const listed = await readBoard(adapter, request, response.body);
+    const postings = await hydrate(adapter, listed, (message) => log(`      ${label} — ${message}`));
     totals.postingsSeen = postings.length;
 
     const changed = options.dryRun

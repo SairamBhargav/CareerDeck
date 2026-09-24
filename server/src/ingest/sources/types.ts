@@ -67,6 +67,13 @@ export interface ParsedPosting {
   department: string | null;
 }
 
+/** One page of a board that takes more than one request to read. */
+export interface SourcePage {
+  postings: RawPosting[];
+  /** The request for the next page, or null when the board is exhausted. */
+  next: SourceRequest | null;
+}
+
 export interface SourceAdapter {
   kind: AtsKind;
   /** The host used for `jobs.apply_host`, and what ApplicationSource reads in phase 2. */
@@ -77,6 +84,39 @@ export interface SourceAdapter {
   extract(body: string): RawPosting[];
   /** One stored payload → the neutral view above. Never touches the network. */
   parse(posting: RawPosting): ParsedPosting;
+
+  /**
+   * Optional, for a board that cannot be read in one request.
+   *
+   * Greenhouse, Lever and Ashby each return a whole board in one response, which is why
+   * `extract` above takes a body and nothing else. Workday does not: its list endpoint is
+   * offset-paginated and caps a page at 20. An adapter that implements this is handed each
+   * page with the request that produced it, and names the next one — or null when done.
+   *
+   * This is the one place §4.2's claim that a new ATS "implements this interface and
+   * touches nothing else" turned out to be wrong. Pagination is not expressible as a pure
+   * body → postings function, so the contract grew rather than Workday faking it.
+   */
+  extractPage?(body: string, request: SourceRequest): SourcePage;
+
+  /**
+   * Optional second request per posting, for a list endpoint that omits the description.
+   *
+   * Returning null means the posting is already complete — which is also how a replay over
+   * stored payloads avoids re-fetching what it already has.
+   *
+   * This runs *before* the content-hash dedup in landRawPostings, not after, because the
+   * description has to be inside the payload for the hash to cover it and for
+   * replaySource() to see it at all. The cost is one request per posting seen per crawl,
+   * which is the price of a board that will not hand over its own descriptions. The fix,
+   * if it ever bites, is a `raw_postings.list_hash` column to dedup against before
+   * hydrating — not moving this after the landing, which would store descriptionless
+   * payloads and quietly break replay.
+   */
+  detailRequest?(posting: RawPosting): SourceRequest | null;
+
+  /** Fold a `detailRequest` response into the posting. Pure; required if that is set. */
+  mergeDetail?(posting: RawPosting, body: string): RawPosting;
 }
 
 // ── helpers shared by the adapters ─────────────────────────────────────────────
