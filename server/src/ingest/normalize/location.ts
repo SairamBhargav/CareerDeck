@@ -117,6 +117,25 @@ const COUNTRIES: Record<string, string> = {
   chile: 'CL', 'costa rica': 'CR', philippines: 'PH', 'united arab emirates': 'AE',
 };
 
+/**
+ * Whether a single comma segment names a country, or a US state, rather than a place
+ * inside one.
+ *
+ * Exported for adapters that have to fix the *ordering* of a location string before this
+ * module can read it — Workday writes "US, CA, Santa Clara", country first, and every
+ * heuristic below assumes the city comes first. The tables are the only thing that can
+ * answer "is this segment a country", and duplicating them in an adapter is how they
+ * drift apart.
+ */
+export function isCountryName(value: string): boolean {
+  return COUNTRIES[value.trim().toLowerCase()] !== undefined;
+}
+
+export function isRegionName(value: string): boolean {
+  const segment = value.trim();
+  return US_STATES[segment.toLowerCase()] !== undefined || STATE_CODES.has(segment.toUpperCase());
+}
+
 /** Cities whose names include a comma-free country we would otherwise miss. */
 const CITY_COUNTRY: Record<string, string> = {
   london: 'GB', dublin: 'IE', berlin: 'DE', munich: 'DE', paris: 'FR', amsterdam: 'NL',
@@ -273,10 +292,27 @@ function placeFromSegment(segment: string): Pick<ParsedLocation, 'city' | 'regio
   const first = parts[0];
   if (!first) return { city: null, region: null, country: null };
 
+  /*
+   * A segment whose first part is a bare state *code* or a country has no city left in it.
+   *
+   * stripModality has already run, so "Remote, CA, US" — which is how Workday states
+   * remote-within-a-state once sources/workday.ts has reordered it city-first — arrives
+   * here as "CA, US". Read as the city it superficially looks like, it puts a city called
+   * "CA" into the corpus and the city filter starts disagreeing with the state filter.
+   *
+   * State *names* are deliberately excluded from this test: "Washington, DC" means the
+   * city, which is the whole reason CITY_OVER_STATE above exists. Only a two-or-three
+   * letter code, which no city in this corpus is called, counts.
+   */
+  const firstBare = first.replace(/\./g, '').trim();
+  const firstIsQualifier =
+    (firstBare.length <= 3 && STATE_CODES.has(firstBare.toUpperCase())) ||
+    COUNTRIES[firstBare.toLowerCase()] !== undefined;
+
   let region: string | null = null;
   let country: string | null = null;
 
-  for (const rawPart of parts.slice(1)) {
+  for (const rawPart of firstIsQualifier ? parts : parts.slice(1)) {
     // Same dot-stripping as splitOnCommas: "D.C." is DC, "U.S." is US.
     const part = rawPart.replace(/\./g, '').trim();
     if (part === '') continue;
@@ -297,6 +333,9 @@ function placeFromSegment(segment: string): Pick<ParsedLocation, 'city' | 'regio
       region = upper;
     }
   }
+
+  // Every part was a qualifier, so the honest answer is the geography without a city.
+  if (firstIsQualifier) return { city: null, region, country };
 
   /*
    * The alias table again, on the city part alone.
