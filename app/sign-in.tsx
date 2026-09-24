@@ -35,13 +35,19 @@ const CODE_LENGTH = 6;
 export default function SignInScreen() {
   const styles = useStyles();
   const { colors, scheme } = useTheme();
-  const { sendEmailCode, verifyEmailCode, signInWithApple, signInWithGoogle, isAppleAvailable } =
-    useAuth();
+  const {
+    sendEmailCode,
+    verifyEmailCode,
+    signInWithApple,
+    signInWithGoogle,
+    signInDev,
+    isAppleAvailable,
+  } = useAuth();
 
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState<'email' | 'code' | 'apple' | 'google' | null>(null);
+  const [busy, setBusy] = useState<'email' | 'code' | 'apple' | 'google' | 'dev' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const codeInput = useRef<TextInput>(null);
 
@@ -224,6 +230,22 @@ export default function SignInScreen() {
             </Pressable>
           </Animated.View>
 
+          {signInDev ? (
+            <Animated.View entering={FadeInDown.duration(220)} style={styles.devBox}>
+              <Text style={styles.devLabel}>Dev only</Text>
+              <Text style={styles.devHint}>
+                Signs in as the EXPO_PUBLIC_DEV_TEST_EMAIL account, no email round trip.
+                Never shows up in a release build.
+              </Text>
+              <PrimaryButton
+                label="Sign in as test user"
+                variant="ghost"
+                onPress={() => run('dev', signInDev)}
+                loading={busy === 'dev'}
+              />
+            </Animated.View>
+          ) : null}
+
           <Text style={styles.legal}>
             By continuing you agree to CareerDeck&rsquo;s Terms and Privacy Policy.
           </Text>
@@ -398,5 +420,28 @@ const useStyles = makeStyles((colors) => ({
     color: colors.textTertiary,
     textAlign: 'center',
     lineHeight: 17,
+  },
+  // Dashed border and the same red as the error text: unmistakable as scaffolding
+  // rather than a shipped feature, for anyone glancing at a screenshot or the code.
+  devBox: {
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+    borderColor: colors.like,
+    backgroundColor: colors.backgroundMuted,
+  },
+  devLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.like,
+  },
+  devHint: {
+    fontSize: fontSize.small,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 }));

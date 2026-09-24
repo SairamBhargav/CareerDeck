@@ -30,3 +30,17 @@ function required(value: string | undefined, name: string): string {
 
 export const SUPABASE_URL: string = required(supabaseUrl, 'EXPO_PUBLIC_SUPABASE_URL');
 export const SUPABASE_ANON_KEY: string = required(supabaseAnonKey, 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+/**
+ * A password-auth test account for local development, entirely bypassing email
+ * delivery — the shortcut on app/sign-in.tsx and scripts/create-dev-user.mjs, which
+ * provisions the account these sign in as.
+ *
+ * Optional and non-throwing, unlike the pair above: most developers won't have this
+ * set, and the app should run normally without it. `context/AuthContext.tsx` only
+ * exposes the shortcut when both are present *and* `__DEV__` is true, so a value left
+ * in a teammate's .env.local by accident can still never reach a release build —
+ * `__DEV__` is false there regardless of what these hold.
+ */
+export const DEV_TEST_EMAIL = process.env.EXPO_PUBLIC_DEV_TEST_EMAIL;
+export const DEV_TEST_PASSWORD = process.env.EXPO_PUBLIC_DEV_TEST_PASSWORD;

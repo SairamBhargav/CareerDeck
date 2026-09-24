@@ -194,12 +194,32 @@ later is one line of cron.
 ### F. Fly.io — still not yet
 
 `server/` holds the ingestion pipeline, which runs as a command. The app reads jobs
-directly from Postgres (PHASE1.md decision B), so there is still nothing for a deployed
-service to serve.
+directly from Postgres (PHASE1.md decision B), and phase 2's interactions and impression
+batch went through a Postgres RPC for the same reason (PHASE2.md decision A) rather than
+a service endpoint, so there is still nothing for a deployed service to serve.
 
-It comes due when phase 2 needs idempotency keys on writes and an impression batch
-endpoint, or when phase 5's ranker needs a process. `server/fly.toml` has the commands in
-its header comment. Secrets go through `fly secrets`, never into the file.
+It comes due when phase 5's ranker needs a process Postgres can't be. `server/fly.toml`
+has the commands in its header comment. Secrets go through `fly secrets`, never into the
+file.
+
+### G. Dev-only test sign-in — optional, skips email entirely
+
+`app/sign-in.tsx` has a second, dashed-border block below Google sign-in: "Sign in as
+test user." It exists for one situation — SMTP isn't configured on the hosted project
+yet, or you just don't want to fetch a code from your inbox on every reload — and it
+signs in with a plain password instead of email, against a real account that goes
+through the same `handle_auth_user_change()` provisioning as any other sign-up.
+
+1. In `.env.local`, set `EXPO_PUBLIC_DEV_TEST_EMAIL` and `EXPO_PUBLIC_DEV_TEST_PASSWORD`
+   to anything — they only need to exist, and nothing is ever mailed to that address.
+2. `npm run dev:create-test-user`. Reads those two plus `SUPABASE_URL` /
+   `SUPABASE_SERVICE_ROLE_KEY` from `server/.env`, and creates (or re-confirms, if it
+   already exists) the account against whichever project `SUPABASE_URL` names.
+3. `npx expo start --clear` — same reason as everywhere else in this file.
+
+The button only renders when `__DEV__` is true, which is false in every release build
+regardless of what ends up in the bundle, so there's nothing to remember to strip out
+before shipping. Leaving the env vars unset is equivalent to not having this feature.
 
 ---
 

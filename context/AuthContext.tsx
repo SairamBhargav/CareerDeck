@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { Platform } from 'react-native';
 
+import { DEV_TEST_EMAIL, DEV_TEST_PASSWORD } from '@/lib/env';
 import { identifyUser, reportError } from '@/lib/observability';
 import { queryClient } from '@/lib/query-client';
 import { supabase } from '@/lib/supabase';
@@ -47,6 +48,20 @@ interface AuthState {
   verifyEmailCode: (email: string, code: string) => Promise<void>;
   signInWithApple: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  /**
+   * Signs in as a fixed password-auth test account, entirely bypassing email delivery.
+   *
+   * Null except when `__DEV__` is true *and* EXPO_PUBLIC_DEV_TEST_EMAIL /
+   * EXPO_PUBLIC_DEV_TEST_PASSWORD are both set — app/sign-in.tsx renders its shortcut
+   * button only when this is non-null, so there is one gate to reason about rather than
+   * the screen and the context each deciding separately. `__DEV__` is false in every
+   * release build no matter what the env vars hold, which is what makes this safe to
+   * leave wired rather than something to remember to strip out before shipping.
+   *
+   * The account itself has to exist first — scripts/create-dev-user.mjs provisions it
+   * against whichever project SUPABASE_URL points at.
+   */
+  signInDev: (() => Promise<void>) | null;
   signOut: () => Promise<void>;
 }
 
@@ -192,6 +207,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await completeOAuthRedirect(result.url);
   }, []);
 
+  const signInDev = useCallback(async () => {
+    // Guarded again here, not just at the call site: `run()` in the sign-in screen
+    // reads this straight off the button's onPress, and a stale closure from a hot
+    // reload is not a case worth trusting the outer null-check alone to cover.
+    if (!DEV_TEST_EMAIL || !DEV_TEST_PASSWORD) {
+      throw new Error('EXPO_PUBLIC_DEV_TEST_EMAIL / EXPO_PUBLIC_DEV_TEST_PASSWORD are not set.');
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: DEV_TEST_EMAIL,
+      password: DEV_TEST_PASSWORD,
+    });
+    if (error) throw error;
+  }, []);
+
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
@@ -210,6 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyEmailCode,
       signInWithApple,
       signInWithGoogle,
+      // The null-vs-function decision lives here, once, rather than being re-checked by
+      // every caller: __DEV__ is a constant per bundle, so this never toggles mid-session.
+      signInDev: __DEV__ && DEV_TEST_EMAIL && DEV_TEST_PASSWORD ? signInDev : null,
       signOut,
     }),
     [
@@ -221,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyEmailCode,
       signInWithApple,
       signInWithGoogle,
+      signInDev,
       signOut,
     ],
   );
