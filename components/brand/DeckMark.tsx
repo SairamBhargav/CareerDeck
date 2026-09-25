@@ -44,6 +44,14 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
  *
  * The stagger is longer than a third of the travel, so the three landings are three
  * separate events. Shorter and they blur into one indistinct movement.
+ *
+ * ── Going away ────────────────────────────────────────────────────────────────
+ *
+ * `dismissed` swipes the deck off to the left, front card first, because the top of a
+ * stack is what a hand reaches. It runs faster and tighter than the deal: arriving is
+ * worth watching, leaving is worth getting on with. The exit is a second value per card
+ * summed with the first, not a reversal of it, so a dismissal that starts mid-deal picks
+ * each card up wherever it actually is instead of snapping it somewhere first.
  */
 
 /** The box every other measurement is a fraction of. */
@@ -68,6 +76,16 @@ const CARD_MS = 420;
 /** Where a card begins its slide, in base-box points relative to where it lands. */
 const DEAL = { x: 62, y: 16, rotate: 9 };
 
+/**
+ * How far a card travels when the deck is dismissed, in base-box points. Leftward,
+ * against the deal, and far enough to clear any phone the mark is centred on.
+ */
+const SWIPE = { x: 320, y: 44, rotate: 20 };
+
+/** Quicker than the deal and tighter between cards: leaving, not arriving. */
+const SWIPE_STAGGER_MS = 80;
+const SWIPE_MS = 300;
+
 export interface DeckMarkProps {
   /** Width of the mark's box in points. Height follows at 126/132 of it. */
   size?: number;
@@ -79,6 +97,17 @@ export interface DeckMarkProps {
   /** Fires when the last card lands, so a caller can sequence a wordmark after it. */
   onSettled?: () => void;
   /**
+   * Swipes the deck away, front card first — the top of a stack is what a hand reaches.
+   * Set it back to false and the cards are restored without animating, which is what a
+   * screen wants when it is navigated back to.
+   */
+  dismissed?: boolean;
+  /**
+   * Fires when the last card is gone. A caller navigating away should do it here rather
+   * than on the tap, so the swipe is seen instead of cut off by the screen transition.
+   */
+  onDismissed?: () => void;
+  /**
    * Renders the front card light-on-dark regardless of scheme — for a dark plate, like
    * the app icon, where the mark sits on its own background rather than the page's.
    */
@@ -89,6 +118,8 @@ export function DeckMark({
   size = BASE,
   animated = false,
   onSettled,
+  dismissed = false,
+  onDismissed,
   inverted = false,
 }: DeckMarkProps) {
   const { colors } = useTheme();
@@ -106,15 +137,26 @@ export function DeckMark({
   const mid = useSharedValue(play ? 0 : 1);
   const front = useSharedValue(play ? 0 : 1);
 
+  // A second value per card for the way out, kept separate from the first so a dismissal
+  // does not have to unwind the entrance to describe itself. 0 = in place, 1 = gone.
+  const backOut = useSharedValue(0);
+  const midOut = useSharedValue(0);
+  const frontOut = useSharedValue(0);
+
   // Held in a ref so the worklet below closes over one stable function rather than
   // re-running the whole entrance every time the caller re-renders. Assigned in an
   // effect, not during render — a ref written while rendering is read back stale on the
   // pass that matters.
   const settled = useRef(onSettled);
+  const gone = useRef(onDismissed);
 
   useEffect(() => {
     settled.current = onSettled;
   }, [onSettled]);
+
+  useEffect(() => {
+    gone.current = onDismissed;
+  }, [onDismissed]);
 
   useEffect(() => {
     const announce = () => settled.current?.();
@@ -142,14 +184,62 @@ export function DeckMark({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [play]);
 
+  useEffect(() => {
+    const announce = () => gone.current?.();
+
+    if (!dismissed) {
+      // Snapped rather than animated: this runs when a screen is returned to, under a
+      // stack transition that is already covering the change.
+      backOut.value = 0;
+      midOut.value = 0;
+      frontOut.value = 0;
+      return;
+    }
+
+    if (reducedMotion) {
+      // Still hand back control, or a caller waiting on this to navigate never moves.
+      announce();
+      return;
+    }
+
+    // Accelerating away, the mirror of the deal's hard stop: a card that is leaving picks
+    // up speed rather than easing out of the frame.
+    const ease = { duration: SWIPE_MS, easing: Easing.bezier(0.4, 0, 1, 1) };
+    frontOut.value = withDelay(0, withTiming(1, ease));
+    midOut.value = withDelay(SWIPE_STAGGER_MS, withTiming(1, ease));
+    backOut.value = withDelay(
+      SWIPE_STAGGER_MS * 2,
+      withTiming(1, ease, (finished) => {
+        'worklet';
+        if (finished) runOnJS(announce)();
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dismissed, reducedMotion]);
+
   return (
     <View style={[styles.box, { width: size, height: size * (126 / BASE) }]}>
       {showThird ? (
-        <Card progress={back} index={0} scale={scale} fill={colors.border} inverted={inverted} />
+        <Card
+          progress={back}
+          away={backOut}
+          index={0}
+          scale={scale}
+          fill={colors.border}
+          inverted={inverted}
+        />
       ) : null}
-      <Card progress={mid} index={1} scale={scale} fill={colors.borderStrong} inverted={inverted} />
+      <Card
+        progress={mid}
+        away={midOut}
+        index={1}
+        scale={scale}
+        fill={colors.borderStrong}
+        inverted={inverted}
+      />
       <Card
         progress={front}
+        away={frontOut}
         index={2}
         scale={scale}
         fill={inverted ? '#FFFFFF' : colors.accent}
@@ -162,6 +252,8 @@ export function DeckMark({
 
 interface CardProps {
   progress: SharedValue<number>;
+  /** The dismissal, 0 = in place, 1 = off to the left. */
+  away: SharedValue<number>;
   index: 0 | 1 | 2;
   scale: number;
   fill: string;
@@ -169,7 +261,7 @@ interface CardProps {
   front?: boolean;
 }
 
-function Card({ progress, index, scale, fill, inverted, front = false }: CardProps) {
+function Card({ progress, away, index, scale, fill, inverted, front = false }: CardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const spot = LAYOUT[index] ?? LAYOUT[2];
@@ -177,17 +269,23 @@ function Card({ progress, index, scale, fill, inverted, front = false }: CardPro
   const animatedStyle = useAnimatedStyle(() => {
     const p = progress.value;
     const left = 1 - p;
+    const out = away.value;
+
+    // The two movements are summed rather than sequenced, so a dismissal that begins
+    // before the deal has finished carries the card on from wherever it actually is.
     return {
-      // Opaque by a third of the way in, so the rest of the travel is a solid card
+      // Arriving: opaque by a third of the way in, so most of the travel is a solid card
       // moving — that is what makes it read as being placed rather than appearing.
-      opacity: Math.min(1, p * 3),
+      // Leaving: holds full opacity past halfway, so the card is seen going rather than
+      // dissolving where it stands.
+      opacity: Math.min(1, p * 3) * (1 - Math.max(0, (out - 0.5) * 2)),
       transform: [
-        { translateX: left * DEAL.x * scale },
-        { translateY: left * DEAL.y * scale },
-        // Ends *more* turned than it starts: the fan opens under the card as it sets
-        // down, instead of the card unwinding onto a fan that was already there.
-        { rotate: `${spot.rotate + left * DEAL.rotate}deg` },
-        { scale: 1 + left * 0.03 },
+        { translateX: left * DEAL.x * scale - out * SWIPE.x * scale },
+        { translateY: left * DEAL.y * scale + out * SWIPE.y * scale },
+        // Arriving, it ends *more* turned than it starts, so the fan opens under the card
+        // as it sets down. Leaving, it turns on the same way, as a flicked card does.
+        { rotate: `${spot.rotate + left * DEAL.rotate - out * SWIPE.rotate}deg` },
+        { scale: 1 + left * 0.03 - out * 0.06 },
       ],
     };
   });

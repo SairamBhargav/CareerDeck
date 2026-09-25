@@ -1,7 +1,13 @@
-import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DeckMark } from '@/components/brand/DeckMark';
@@ -21,6 +27,11 @@ import { makeStyles } from '@/context/ThemeContext';
  * being skipped, and this is the one screen in the app whose entire job is to be looked
  * at for a second before anything is asked.
  *
+ * Getting started swipes the deck off card by card and only then navigates, so the mark
+ * hands the screen over instead of being cut off by the stack transition. The wordmark
+ * and the button fade out underneath it — if they held still while the cards left, the
+ * cards would read as falling off the screen rather than the screen moving on.
+ *
  * Signed-out users land here, not on sign-in — see app/_layout.tsx. The way back to
  * sign-in is the link at the bottom, for people who already have an account.
  */
@@ -33,16 +44,51 @@ export default function WelcomeScreen() {
   const [settled, setSettled] = useState(false);
   const handleSettled = useCallback(() => setSettled(true), []);
 
+  const [leaving, setLeaving] = useState(false);
+  const fade = useSharedValue(0);
+
+  const leave = useCallback(() => setLeaving(true), []);
+
+  // Navigating from here rather than from the tap is the whole point: the deck gets its
+  // three hundred milliseconds before the stack takes the screen.
+  const handleDismissed = useCallback(() => router.push('/onboarding/role'), [router]);
+
+  // Coming back — the hardware back button, or the swipe gesture — finds this screen
+  // still mounted and still mid-exit. Reset it, and let the deck restore itself.
+  useFocusEffect(useCallback(() => setLeaving(false), []));
+
+  // The fade follows `leaving` rather than being started by the tap, so both directions
+  // come from one place: out on the way to step one, and straight back on a return, where
+  // there is nothing to animate because the stack transition is already covering it.
+  useEffect(() => {
+    fade.value = leaving ? withTiming(1, { duration: 240 }) : 0;
+    // Writing the shared value is the effect's whole job; it is stable by identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaving]);
+
+  const leavingStyle = useAnimatedStyle(() => ({
+    opacity: 1 - fade.value,
+    transform: [{ translateY: fade.value * 10 }],
+  }));
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.content}>
         <View style={styles.spacer} />
 
         <View style={styles.hero}>
-          <DeckMark size={124} animated onSettled={handleSettled} />
+          <DeckMark
+            size={124}
+            animated
+            onSettled={handleSettled}
+            dismissed={leaving}
+            onDismissed={handleDismissed}
+          />
 
           {settled ? (
-            <Animated.View entering={FadeInDown.duration(420)} style={styles.words}>
+            <Animated.View
+              entering={FadeInDown.duration(420)}
+              style={[styles.words, leavingStyle]}>
               <Text style={styles.wordmark} accessibilityRole="header">
                 CareerDeck
               </Text>
@@ -55,14 +101,18 @@ export default function WelcomeScreen() {
         </View>
 
         {settled ? (
-          <Animated.View entering={FadeIn.duration(360).delay(160)} style={styles.actions}>
+          <Animated.View
+            entering={FadeIn.duration(360).delay(160)}
+            style={[styles.actions, leavingStyle]}>
             <PrimaryButton
               label="Get started"
-              onPress={() => router.push('/onboarding/role')}
+              onPress={leave}
+              disabled={leaving}
               accessibilityHint="Sets up your feed in three quick steps."
             />
             <Pressable
               onPress={() => router.push('/sign-in')}
+              disabled={leaving}
               hitSlop={10}
               accessibilityRole="button"
               style={styles.linkTap}>
