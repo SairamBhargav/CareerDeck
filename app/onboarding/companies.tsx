@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
+import { ScrollPane } from '@/components/common/ScrollPane';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { companiesForSectors } from '@/constants/industries';
 import { fontSize, radius, spacing } from '@/constants/theme';
@@ -62,52 +63,54 @@ export default function CompaniesStep() {
       continueLabel={count > 0 ? `Continue with ${count}` : 'Continue'}
       onContinue={() => router.push('/sign-up')}
       onSkip={() => router.push('/sign-up')}
-      scrolls>
+      fills>
       {directory.isLoading ? (
         <View style={styles.loading}>
           <ActivityIndicator />
         </View>
       ) : (
-        <View style={styles.list}>
-          {suggestions.map((company) => {
-            const following = followedCompanySlugs.includes(company.slug);
-            return (
-              <Pressable
-                key={company.id}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  toggleCompany(company.slug);
-                }}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: following }}
-                accessibilityLabel={`${following ? 'Unfollow' : 'Follow'} ${company.name}`}
-                style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
-                <CompanyLogo
-                  logo={company.logo}
-                  name={company.name}
-                  color={company.logoColor}
-                  size="sm"
-                />
+        <ScrollPane>
+          <View style={styles.list}>
+            {suggestions.map((company) => {
+              const following = followedCompanySlugs.includes(company.slug);
+              return (
+                <Pressable
+                  key={company.id}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    toggleCompany(company.slug);
+                  }}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: following }}
+                  accessibilityLabel={`${following ? 'Unfollow' : 'Follow'} ${company.name}`}
+                  style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
+                  <CompanyLogo
+                    logo={company.logo}
+                    name={company.name}
+                    color={company.logoColor}
+                    size="sm"
+                  />
 
-                <View style={styles.text}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {company.name}
-                  </Text>
-                  <Text style={styles.meta} numberOfLines={1}>
-                    {company.industry}
-                    {company.openJobCount > 0 ? ` · ${company.openJobCount} open` : ''}
-                  </Text>
-                </View>
+                  <View style={styles.text}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {company.name}
+                    </Text>
+                    <Text style={styles.meta} numberOfLines={1}>
+                      {company.industry}
+                      {company.openJobCount > 0 ? ` · ${company.openJobCount} open` : ''}
+                    </Text>
+                  </View>
 
-                <View style={[styles.pill, following ? styles.pillOn : null]}>
-                  <Text style={[styles.pillLabel, following ? styles.pillLabelOn : null]}>
-                    {following ? 'Following' : 'Follow'}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+                  <View style={[styles.pill, following ? styles.pillOn : null]}>
+                    <Text style={[styles.pillLabel, following ? styles.pillLabelOn : null]}>
+                      {following ? 'Following' : 'Follow'}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollPane>
       )}
     </OnboardingStep>
   );

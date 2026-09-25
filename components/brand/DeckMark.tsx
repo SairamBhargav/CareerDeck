@@ -85,7 +85,12 @@ export interface DeckMarkProps {
   inverted?: boolean;
 }
 
-export function DeckMark({ size = BASE, animated = false, onSettled, inverted = false }: DeckMarkProps) {
+export function DeckMark({
+  size = BASE,
+  animated = false,
+  onSettled,
+  inverted = false,
+}: DeckMarkProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const reducedMotion = useReducedMotion();
@@ -143,7 +148,14 @@ export function DeckMark({ size = BASE, animated = false, onSettled, inverted = 
         <Card progress={back} index={0} scale={scale} fill={colors.border} inverted={inverted} />
       ) : null}
       <Card progress={mid} index={1} scale={scale} fill={colors.borderStrong} inverted={inverted} />
-      <Card progress={front} index={2} scale={scale} fill={inverted ? '#FFFFFF' : colors.accent} inverted={inverted} front />
+      <Card
+        progress={front}
+        index={2}
+        scale={scale}
+        fill={inverted ? '#FFFFFF' : colors.accent}
+        inverted={inverted}
+        front
+      />
     </View>
   );
 }

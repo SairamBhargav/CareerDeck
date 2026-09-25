@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,6 +15,10 @@ import { makeStyles } from '@/context/ThemeContext';
  * It exists so the three steps cannot drift apart. They are the highest-stakes screens
  * in the app for conversion and they have to read as one sequence — a headline two points
  * larger on step two is the kind of thing nobody can name but everybody feels.
+ *
+ * The screen never scrolls. Steps with more content than fits pass `fills` and put a
+ * ScrollPane inside, so the headline, the step counter and the button stay exactly where
+ * they are on all three and only the part with more in it moves.
  */
 
 export const TOTAL_STEPS = 3;
@@ -32,8 +36,13 @@ interface OnboardingStepProps {
   /** Rendered under the button when a step is genuinely optional. */
   onSkip?: () => void;
   skipLabel?: string;
-  /** Steps whose content is long enough to need it scroll; the rest do not. */
-  scrolls?: boolean;
+  /**
+   * Lets the body take all the height left between the headline and the button, so a
+   * step whose content overflows can scroll it internally with a ScrollPane. The screen
+   * itself never scrolls: the headline and the button hold still on every step, which is
+   * what makes the three read as one sequence.
+   */
+  fills?: boolean;
 }
 
 export function OnboardingStep({
@@ -46,7 +55,7 @@ export function OnboardingStep({
   continueLabel = 'Continue',
   onSkip,
   skipLabel = 'Skip for now',
-  scrolls = false,
+  fills = false,
 }: OnboardingStepProps) {
   const router = useRouter();
   const styles = useStyles();
@@ -70,7 +79,11 @@ export function OnboardingStep({
     </View>
   );
 
-  const body = <Animated.View entering={FadeIn.duration(260)}>{children}</Animated.View>;
+  const body = (
+    <Animated.View entering={FadeIn.duration(260)} style={fills ? styles.bodyFills : undefined}>
+      {children}
+    </Animated.View>
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
@@ -85,25 +98,19 @@ export function OnboardingStep({
         </Pressable>
       ) : null}
 
-      {scrolls ? (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
-          {header}
-          {body}
-        </ScrollView>
-      ) : (
-        <View style={styles.content}>
-          {header}
-          {body}
-        </View>
-      )}
+      <View style={styles.content}>
+        {header}
+        {body}
+      </View>
 
       <View style={styles.footer}>
         <PrimaryButton label={continueLabel} onPress={onContinue} disabled={!canContinue} />
         {onSkip ? (
-          <Pressable onPress={onSkip} hitSlop={10} accessibilityRole="button" style={styles.skipTap}>
+          <Pressable
+            onPress={onSkip}
+            hitSlop={10}
+            accessibilityRole="button"
+            style={styles.skipTap}>
             <Text style={styles.skip}>{skipLabel}</Text>
           </Pressable>
         ) : null}
@@ -132,10 +139,11 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: screenPadding + spacing.md,
     paddingTop: spacing.xl,
   },
-  scrollContent: {
-    paddingHorizontal: screenPadding + spacing.md,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
+  bodyFills: {
+    flex: 1,
+    // Lets the ScrollPane inside shrink to the space available rather than to its own
+    // content, which is the difference between a pane that scrolls and one that overflows.
+    minHeight: 0,
   },
   header: {
     gap: spacing.sm,
