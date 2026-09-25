@@ -785,6 +785,7 @@ export type Database = {
           notification_prefs: Json
           open_to_remote: boolean
           preferred_employment_types: Database["public"]["Enums"]["employment_type"][]
+          preferred_industries: string[]
           preferred_locations: string[]
           preferred_roles: string[]
           updated_at: string
@@ -796,6 +797,7 @@ export type Database = {
           notification_prefs?: Json
           open_to_remote?: boolean
           preferred_employment_types?: Database["public"]["Enums"]["employment_type"][]
+          preferred_industries?: string[]
           preferred_locations?: string[]
           preferred_roles?: string[]
           updated_at?: string
@@ -807,6 +809,7 @@ export type Database = {
           notification_prefs?: Json
           open_to_remote?: boolean
           preferred_employment_types?: Database["public"]["Enums"]["employment_type"][]
+          preferred_industries?: string[]
           preferred_locations?: string[]
           preferred_roles?: string[]
           updated_at?: string

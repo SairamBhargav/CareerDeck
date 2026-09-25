@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StartupError } from '@/components/common/StartupError';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { CareerDeckProvider, useCareerDeck } from '@/context/CareerDeckContext';
+import { OnboardingProvider } from '@/context/OnboardingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { initObservability, withObservability } from '@/lib/observability';
 import { queryClient } from '@/lib/query-client';
@@ -27,9 +28,13 @@ function RootLayout() {
             <ThemeProvider>
               {/* Inside AuthProvider: the store's identity and preferences are reads
                   against the signed-in user, so it needs to know who that is. */}
-              <CareerDeckProvider>
-                <RootNavigator />
-              </CareerDeckProvider>
+              {/* Outside CareerDeckProvider: the draft it holds belongs to someone who
+                  does not have an account yet, so it cannot live anywhere that reads one. */}
+              <OnboardingProvider>
+                <CareerDeckProvider>
+                  <RootNavigator />
+                </CareerDeckProvider>
+              </OnboardingProvider>
             </ThemeProvider>
           </AuthProvider>
         </QueryClientProvider>
@@ -95,6 +100,13 @@ function RootNavigator() {
         </Stack.Protected>
 
         <Stack.Protected guard={!isSignedIn}>
+          {/* `welcome` is first, so it is what a signed-out launch lands on. Sign-in is
+              still reachable from it, for people who already have an account. */}
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding/role" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding/industries" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding/companies" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-up" options={{ headerShown: false }} />
           <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         </Stack.Protected>
       </Stack>

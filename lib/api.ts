@@ -23,7 +23,9 @@
  *    implementation detail of the SQL, and phase 5 gets to change it.
  */
 
+import { reportError } from '@/lib/observability';
 import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 import type {
   Application,
   ApplicationSource,
@@ -598,4 +600,72 @@ export async function logImpressions(events: ImpressionEvent[]): Promise<number>
 
   if (error) throw error;
   return typeof data === 'number' ? data : 0;
+}
+
+/* ── onboarding ───────────────────────────────────────────────────────────────
+ *
+ * The one write that happens *because* an account just came into existence, rather than
+ * because the user did something in the app.
+ */
+
+export interface OnboardingFlush {
+  /** Identity, from the sign-up form. Empty strings are skipped, not written as blanks. */
+  firstName: string;
+  lastName: string;
+  school: string;
+  graduationYear: number | null;
+  /** Sector keys — see constants/industries.ts. */
+  industries: string[];
+  employmentTypes: EmploymentType[];
+  followedCompanySlugs: string[];
+}
+
+/**
+ * Writes everything onboarding collected, in one go, right after the session exists.
+ *
+ * Order matters and failure does not stop the flow. `profiles` and `user_preferences`
+ * are written first because they are what the app reads on its very next render;
+ * follows go last because an empty Following tab is a disappointment and a missing
+ * graduation year is a broken profile screen.
+ *
+ * Nothing here throws. A user who has just signed up should land in the app, not on an
+ * error about a preference that can be set again from Profile in ten seconds. Whatever
+ * fails is reported and the rest still lands.
+ */
+export async function flushOnboarding(userId: string, draft: OnboardingFlush): Promise<void> {
+  const identity: Database['public']['Tables']['profiles']['Update'] = {
+    // Marks the flow finished. §3.1 put this column on `profiles` in phase 0 for exactly
+    // this, long before there was an onboarding flow to set it.
+    onboarding_completed_at: new Date().toISOString(),
+    // Trimmed-and-dropped rather than written blank: an untouched Last name field should
+    // leave the column null, not overwrite a provider-supplied name with an empty string.
+    ...(draft.firstName.trim() ? { first_name: draft.firstName.trim() } : {}),
+    ...(draft.lastName.trim() ? { last_name: draft.lastName.trim() } : {}),
+    ...(draft.school.trim() ? { school_name_raw: draft.school.trim() } : {}),
+    ...(draft.graduationYear !== null ? { graduation_year: draft.graduationYear } : {}),
+  };
+
+  const { error: profileError } = await supabase.from('profiles').update(identity).eq('id', userId);
+  if (profileError) reportError(profileError, { where: 'flushOnboarding.profile' });
+
+  const { error: preferencesError } = await supabase
+    .from('user_preferences')
+    .update({
+      preferred_industries: draft.industries,
+      preferred_employment_types: draft.employmentTypes,
+    })
+    .eq('user_id', userId);
+  if (preferencesError) reportError(preferencesError, { where: 'flushOnboarding.preferences' });
+
+  // Sequential, not Promise.all: `set_company_follow` moves `companies.follower_count`
+  // through a trigger, and five concurrent updates to five different rows is fine, but
+  // five to the *same* row — two companies a user picked twice through a double tap —
+  // would contend. Five calls is nothing; correctness is worth more than the millisecond.
+  for (const slug of draft.followedCompanySlugs) {
+    try {
+      await setCompanyFollow(slug, true);
+    } catch (error) {
+      reportError(error, { where: 'flushOnboarding.follow', slug });
+    }
+  }
 }
