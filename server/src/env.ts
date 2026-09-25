@@ -91,6 +91,36 @@ export const env = {
    * not a config change.
    */
   verificationPepper: process.env.VERIFICATION_PEPPER ?? 'careerdeck-verification',
+
+  // ── resumes (§3.9) ───────────────────────────────────────────────────────────
+
+  /**
+   * The extractor's model. Overridable for the same reason `moderationModel` is, but the
+   * trade runs the other way: the classifier is in front of a user staring at a composer and
+   * has a 2.5s budget, while a parse happens once per uploaded document behind a progress
+   * state. Accuracy is worth more than latency here, so the default is the capable model and
+   * there is no cheaper one recommended. PHASE4.md §5.
+   */
+  resumeParserModel: process.env.RESUME_PARSER_MODEL ?? 'claude-opus-5',
+  /**
+   * Generous compared to the classifier's 2.5s. Reading several rendered pages of a
+   * two-column layout is a different task from reading one sentence, and the user is not
+   * blocked on it in the same way.
+   */
+  resumeParseTimeoutMs: integer('RESUME_PARSE_TIMEOUT_MS', 90_000),
+  /**
+   * 32 bytes, base64. Seals `resume_profiles.full_name_enc` and its two siblings.
+   *
+   * **Rotating this destroys data.** Every field sealed under the old key becomes permanently
+   * unreadable and nothing detects it — the rows are still there and still the right length.
+   * Same class of hazard as `verificationPepper` above and strictly worse, because a lost
+   * pepper un-bans people while a lost key loses the plaintext for good.
+   *
+   * Optional: without it a resume still parses and still matches, and the three contact
+   * fields are dropped rather than stored in the clear. `server/src/resumes/crypto.ts` has
+   * the layout and the rotation path it leaves room for.
+   */
+  resumeEncryptionKey: optional('RESUME_ENCRYPTION_KEY'),
 } as const;
 
 /**
@@ -105,4 +135,17 @@ export const capabilities = {
   classifier: env.anthropicApiKey !== undefined,
   eduVerification: env.resendApiKey !== undefined || !env.isProduction,
   identityVerification: env.personaTemplateId !== undefined && env.personaWebhookSecret !== undefined,
+
+  /**
+   * Phase 4. The same credential the classifier uses — one key, two features — so a
+   * deployment that can moderate can also parse.
+   */
+  resumeParsing: env.anthropicApiKey !== undefined,
+  /**
+   * Reported separately from `resumeParsing` because they fail differently and the client
+   * shows different things: without parsing there is no profile at all and no upload button;
+   * without encryption there is a full profile and a match score, and only the three contact
+   * fields phase 6 will want are missing.
+   */
+  resumeEncryption: env.resumeEncryptionKey !== undefined,
 } as const;

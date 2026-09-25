@@ -5,6 +5,7 @@ import Animated, {
   cancelAnimation,
   Easing,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useDerivedValue,
@@ -27,11 +28,11 @@ import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCommentCounts } from '@/hooks/useComments';
+import { useMatchScores, useResumes } from '@/hooks/useResumes';
 import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
-import { resumeMatchScore } from '@/utils/resumeMatch';
 
 const TOGGLE_HEIGHT = 44;
 /**
@@ -58,7 +59,8 @@ const END_REACHED_THRESHOLD = 2;
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { defaultResume, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
+  const { user, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
+  const { defaultResume } = useResumes(user?.id ?? null);
   const forYouFeed = useJobFeed('recent');
   const followingFeed = useFollowingFeed();
   const tabBarHeight = useTabBarHeight();
@@ -114,12 +116,26 @@ export default function ReelsScreen() {
   // No company lookup any more: the feed payload carries the logo and brand colour on
   // each posting, because the query already joins `companies` to build the card.
 
-  // How well the default resume matches each job on screen, in the same order as
-  // `jobs` so the scroll-position math below can index straight into it.
+  /*
+   * How well the default resume matches each job on screen — §3.10, read from
+   * `job_match_scores` instead of hashed out of the two ids.
+   *
+   * Read separately from the feed for the reason the comment counts above are: a score is
+   * per-reader and changes when the resume changes, so folding it into `job_card` would make
+   * every feed page uncacheable. Same decision, one phase later.
+   *
+   * The map is empty for a user with no parsed resume, and `hasScores` below turns that into a
+   * hidden ring rather than a row of zeros — 0% reads as a judgement, and the truth is that
+   * nothing has been read yet.
+   */
+  const matchMap = useMatchScores(useMemo(() => jobs.map((job) => job.id), [jobs]));
+
+  // In the same order as `jobs`, so the scroll-position math below can index straight into it.
   const matchScores = useMemo(
-    () => jobs.map((job) => resumeMatchScore(job, defaultResume)),
-    [jobs, defaultResume],
+    () => jobs.map((job) => matchMap.get(job.id)?.score ?? 0),
+    [jobs, matchMap],
   );
+  const hasScores = matchMap.size > 0;
 
   // Raw scroll offset, shared with the scroll handler below — a second signal read off
   // the same `onScroll` event `pull` already listens to, not a separate subscription.
@@ -140,6 +156,30 @@ export default function ReelsScreen() {
     const upperScore = matchScores[upperIndex] ?? lowerScore;
     return lowerScore + (upperScore - lowerScore) * fraction;
   }, [matchScores, pageHeight]);
+
+  /*
+   * Which card the caption under the ring is describing.
+   *
+   * The ring's number is a shared value interpolated on the UI thread, so it morphs between two
+   * cards without a single React render. The caption is a word, and a word cannot be
+   * interpolated — it has to change at a page boundary, which means crossing to the JS thread.
+   * One `setState` per card is the cost, and it is charged only when the rounded index actually
+   * moves rather than on every frame.
+   */
+  const [activeIndex, setActiveIndex] = useState(0);
+  useAnimatedReaction(
+    () => (pageHeight > 0 ? Math.round(scrollY.value / pageHeight) : 0),
+    (current, previous) => {
+      if (current !== previous) runOnJS(setActiveIndex)(current);
+    },
+    [pageHeight],
+  );
+
+  const activeExplanation = useMemo(() => {
+    const job = jobs[Math.min(Math.max(activeIndex, 0), Math.max(jobs.length - 1, 0))];
+    const match = job ? matchMap.get(job.id) : undefined;
+    return match ? { ...match.components, coverage: match.coverage } : null;
+  }, [jobs, activeIndex, matchMap]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setPageHeight(event.nativeEvent.layout.height);
@@ -319,13 +359,13 @@ export default function ReelsScreen() {
         <FeedToggle value={feed} onChange={handleFeedChange} />
       </View>
 
-      {jobs.length > 0 ? (
+      {jobs.length > 0 && hasScores ? (
         <View
           style={[
             styles.matchRingWrap,
             { top: insets.top + (TOGGLE_HEIGHT - MATCH_RING_SIZE) / 2 + MATCH_RING_DROP },
           ]}>
-          <ResumeMatchRing progress={matchProgress} />
+          <ResumeMatchRing progress={matchProgress} explain={activeExplanation} />
         </View>
       ) : null}
 

@@ -1,6 +1,8 @@
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,6 +20,7 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
+import { useResumes } from '@/hooks/useResumes';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useJobsByIds } from '@/hooks/useJobFeeds';
@@ -43,18 +46,27 @@ export default function ActivityScreen() {
   const {
     isInitialLoading,
     likedJobIds,
-    resumes,
-    defaultResumeId,
+    user,
     notifications,
     unreadNotificationCount,
     toggleSave,
-    setDefaultResume,
     setApplicationStatus,
     markNotificationRead,
     markAllNotificationsRead,
     weeklyGoal,
     setWeeklyGoal,
   } = useCareerDeck();
+
+  const {
+    resumes,
+    isLoading: resumesLoading,
+    isBusy: resumesBusy,
+    canParse,
+    upload,
+    parse,
+    setDefault,
+    openUrl,
+  } = useResumes(user?.id ?? null);
 
   const applications = useTrackedApplications();
   const counts = usePipelineCounts();
@@ -68,6 +80,61 @@ export default function ActivityScreen() {
   const [editingGoal, setEditingGoal] = useState(false);
 
   const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
+
+  /*
+   * Pick a PDF, upload it, parse it, and land on the review screen.
+   *
+   * Four steps behind one tap, and the ordering is the part worth keeping: the row is created
+   * before the parse runs, so a parse that fails leaves a resume the user can retry rather than
+   * nothing at all. `useResumes` refetches on either outcome for the same reason — a failed
+   * parse writes the reason onto the row, and that row is the only place the user learns it.
+   */
+  const handleAddResume = useCallback(async () => {
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: 'application/pdf',
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (picked.canceled) return;
+
+    const file = picked.assets[0];
+    if (!file) return;
+
+    try {
+      /*
+       * Base64 out of the cache and back into bytes. `fetch(file.uri)` would be shorter and is
+       * unreliable for `file://` URIs across platforms here; reading it explicitly is the path
+       * that behaves the same on both.
+       */
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binary = globalThis.atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+
+      const created = await upload({
+        name: (file.name ?? 'Resume').replace(/\.pdf$/i, '').slice(0, 120) || 'Resume',
+        bytes: bytes.buffer,
+      });
+
+      if (!canParse) {
+        // No API service on this build, so there is nothing to review. The file is stored and
+        // the shelf says "Not read yet", which is exactly what has happened.
+        return;
+      }
+
+      await parse(created.id);
+      router.push({ pathname: '/resume-review', params: { id: created.id } });
+    } catch (error) {
+      Alert.alert(
+        'That resume did not upload',
+        error instanceof Error ? error.message : 'Something went wrong. Try again.',
+      );
+    }
+  }, [upload, parse, canParse, router]);
   const pickerEntry = applications.find((entry) => entry.application.id === pickerFor) ?? null;
 
   /*
@@ -140,9 +207,10 @@ export default function ActivityScreen() {
 
         <ResumeShelf
           resumes={resumes}
-          defaultResumeId={defaultResumeId}
-          loading={isInitialLoading}
+          loading={isInitialLoading || resumesLoading}
           onView={setViewingResumeId}
+          onAdd={handleAddResume}
+          busy={resumesBusy}
         />
 
         <ActivityTabs
@@ -256,12 +324,13 @@ export default function ActivityScreen() {
 
       <ResumeViewerModal
         resume={viewingResume}
-        isDefault={viewingResume?.id === defaultResumeId}
+        isDefault={viewingResume?.isDefault ?? false}
         visible={viewingResume !== null}
         onClose={() => setViewingResumeId(null)}
         onSetDefault={() => {
-          if (viewingResume) setDefaultResume(viewingResume.id);
+          if (viewingResume) void setDefault(viewingResume.id);
         }}
+        onRequestUrl={openUrl}
       />
     </SafeAreaView>
   );

@@ -744,6 +744,62 @@ export type Database = {
           },
         ]
       }
+      job_match_scores: {
+        Row: {
+          components: Json
+          computed_at: string
+          job_id: string
+          resume_id: string
+          score: number
+          user_id: string
+        }
+        Insert: {
+          components: Json
+          computed_at?: string
+          job_id: string
+          resume_id: string
+          score: number
+          user_id: string
+        }
+        Update: {
+          components?: Json
+          computed_at?: string
+          job_id?: string
+          resume_id?: string
+          score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_match_scores_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_match_scores_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_match_scores_resume_id_fkey"
+            columns: ["resume_id"]
+            isOneToOne: false
+            referencedRelation: "resumes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_match_scores_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_sources: {
         Row: {
           board_token: string | null
@@ -815,6 +871,7 @@ export type Database = {
           dedup_key: string | null
           description_html: string | null
           description_text: string
+          embedding: string | null
           employment_type: Database["public"]["Enums"]["employment_type"]
           external_id: string | null
           first_seen_at: string
@@ -855,6 +912,7 @@ export type Database = {
           dedup_key?: string | null
           description_html?: string | null
           description_text: string
+          embedding?: string | null
           employment_type: Database["public"]["Enums"]["employment_type"]
           external_id?: string | null
           first_seen_at?: string
@@ -895,6 +953,7 @@ export type Database = {
           dedup_key?: string | null
           description_html?: string | null
           description_text?: string
+          embedding?: string | null
           employment_type?: Database["public"]["Enums"]["employment_type"]
           external_id?: string | null
           first_seen_at?: string
@@ -1033,6 +1092,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pii_access_log: {
+        Row: {
+          actor_id: string | null
+          actor_type: string
+          created_at: string
+          detail: string | null
+          id: number
+          purpose: Database["public"]["Enums"]["pii_purpose"]
+          resource: Database["public"]["Enums"]["pii_resource"]
+          resource_id: string | null
+          subject_user_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_type: string
+          created_at?: string
+          detail?: string | null
+          id?: never
+          purpose: Database["public"]["Enums"]["pii_purpose"]
+          resource: Database["public"]["Enums"]["pii_resource"]
+          resource_id?: string | null
+          subject_user_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_type?: string
+          created_at?: string
+          detail?: string | null
+          id?: never
+          purpose?: Database["public"]["Enums"]["pii_purpose"]
+          resource?: Database["public"]["Enums"]["pii_resource"]
+          resource_id?: string | null
+          subject_user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -1207,6 +1302,133 @@ export type Database = {
           {
             foreignKeyName: "reports_resolved_by_fkey"
             columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resume_profiles: {
+        Row: {
+          confirmed_fields: string[]
+          education: Json
+          email_enc: string | null
+          embedding: string | null
+          experience: Json
+          full_name_enc: string | null
+          location: string | null
+          parsed_at: string
+          parser_version: string
+          phone_enc: string | null
+          raw_parse: Json | null
+          resume_id: string
+          seniority: Database["public"]["Enums"]["seniority_level"] | null
+          skills: string[]
+          user_confirmed_at: string | null
+          years_experience: number | null
+        }
+        Insert: {
+          confirmed_fields?: string[]
+          education?: Json
+          email_enc?: string | null
+          embedding?: string | null
+          experience?: Json
+          full_name_enc?: string | null
+          location?: string | null
+          parsed_at?: string
+          parser_version: string
+          phone_enc?: string | null
+          raw_parse?: Json | null
+          resume_id: string
+          seniority?: Database["public"]["Enums"]["seniority_level"] | null
+          skills?: string[]
+          user_confirmed_at?: string | null
+          years_experience?: number | null
+        }
+        Update: {
+          confirmed_fields?: string[]
+          education?: Json
+          email_enc?: string | null
+          embedding?: string | null
+          experience?: Json
+          full_name_enc?: string | null
+          location?: string | null
+          parsed_at?: string
+          parser_version?: string
+          phone_enc?: string | null
+          raw_parse?: Json | null
+          resume_id?: string
+          seniority?: Database["public"]["Enums"]["seniority_level"] | null
+          skills?: string[]
+          user_confirmed_at?: string | null
+          years_experience?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resume_profiles_resume_id_fkey"
+            columns: ["resume_id"]
+            isOneToOne: true
+            referencedRelation: "resumes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resumes: {
+        Row: {
+          content_hash: string | null
+          created_at: string
+          deleted_at: string | null
+          file_size: number | null
+          focus: string | null
+          id: string
+          is_default: boolean
+          name: string
+          page_count: number | null
+          parse_error: string | null
+          parse_status: Database["public"]["Enums"]["resume_parse_status"]
+          storage_path: string
+          thumbnail_path: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content_hash?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          file_size?: number | null
+          focus?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          page_count?: number | null
+          parse_error?: string | null
+          parse_status?: Database["public"]["Enums"]["resume_parse_status"]
+          storage_path: string
+          thumbnail_path?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content_hash?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          file_size?: number | null
+          focus?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          page_count?: number | null
+          parse_error?: string | null
+          parse_status?: Database["public"]["Enums"]["resume_parse_status"]
+          storage_path?: string
+          thumbnail_path?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resumes_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1651,6 +1873,20 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      compute_match: {
+        Args: {
+          p_job_city: string
+          p_job_region: string
+          p_job_seniority: Database["public"]["Enums"]["seniority_level"]
+          p_job_skills: string[]
+          p_job_type: Database["public"]["Enums"]["location_type"]
+          p_preferred_locs: string[]
+          p_remote_ok: boolean
+          p_resume_seniority: Database["public"]["Enums"]["seniority_level"]
+          p_resume_skills: string[]
+        }
+        Returns: Json
+      }
       confirm_edu_verification: {
         Args: { p_token_hash: string; p_user_id: string }
         Returns: {
@@ -1659,8 +1895,25 @@ export type Database = {
           verification_id: string
         }[]
       }
+      confirm_resume_profile: {
+        Args: {
+          p_location?: string
+          p_resume_id: string
+          p_seniority?: Database["public"]["Enums"]["seniority_level"]
+          p_skills?: string[]
+          p_years?: number
+        }
+        Returns: Database["public"]["CompositeTypes"]["resume_card"]
+        SetofOptions: {
+          from: "*"
+          to: "resume_card"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       decode_cursor: { Args: { p_cursor: string }; Returns: Json }
       delete_own_comment: { Args: { p_comment_id: string }; Returns: boolean }
+      delete_resume: { Args: { p_resume_id: string }; Returns: boolean }
       drop_old_impression_partitions: {
         Args: { p_keep_months?: number }
         Returns: number
@@ -1696,6 +1949,7 @@ export type Database = {
       generate_handle: { Args: never; Returns: string }
       ingest_upsert_job: { Args: { p: Json }; Returns: string }
       ingest_upsert_jobs: { Args: { p_rows: Json }; Returns: Json }
+      invalidate_match_scores: { Args: { p_user_id: string }; Returns: number }
       is_moderator: { Args: { p_user_id: string }; Returns: boolean }
       job_comments: {
         Args: { p_cursor?: string; p_job_id: string; p_limit?: number }
@@ -1716,8 +1970,39 @@ export type Database = {
         }
         Returns: string
       }
+      location_affinity: {
+        Args: {
+          p_city: string
+          p_preferred: string[]
+          p_region: string
+          p_remote_ok: boolean
+          p_type: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: number
+      }
       log_impressions: { Args: { p_rows: Json }; Returns: number }
+      log_pii_access: {
+        Args: {
+          p_actor_id: string
+          p_actor_type: string
+          p_detail?: string
+          p_purpose: Database["public"]["Enums"]["pii_purpose"]
+          p_resource: Database["public"]["Enums"]["pii_resource"]
+          p_resource_id: string
+          p_subject: string
+        }
+        Returns: number
+      }
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: number }
+      match_scores: {
+        Args: { p_job_ids: string[] }
+        Returns: {
+          components: Json
+          computed_at: string
+          job_id: string
+          score: number
+        }[]
+      }
       moderation_queue: {
         Args: { p_limit?: number }
         Returns: {
@@ -1756,6 +2041,16 @@ export type Database = {
           strike_severity: number
         }[]
       }
+      my_resumes: {
+        Args: never
+        Returns: Database["public"]["CompositeTypes"]["resume_card"][]
+        SetofOptions: {
+          from: "*"
+          to: "resume_card"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       notify_moderation: {
         Args: {
           p_detail?: string
@@ -1786,7 +2081,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      prune_deleted_resumes: {
+        Args: { p_grace_days?: number }
+        Returns: {
+          resume_id: string
+          storage_path: string
+        }[]
+      }
+      prune_match_scores: { Args: { p_keep_days?: number }; Returns: number }
       prune_notifications: { Args: { p_keep_days?: number }; Returns: number }
+      prune_pii_access_log: { Args: { p_keep_days?: number }; Returns: number }
       reconcile_comment_counts: { Args: never; Returns: number }
       reconcile_follower_counts: { Args: never; Returns: number }
       record_identity_verification: {
@@ -1801,6 +2105,22 @@ export type Database = {
         Returns: Database["public"]["Enums"]["verification_tier"]
       }
       refresh_open_job_counts: { Args: never; Returns: number }
+      register_resume: {
+        Args: {
+          p_content_hash?: string
+          p_file_size?: number
+          p_focus?: string
+          p_name: string
+          p_storage_path: string
+        }
+        Returns: Database["public"]["CompositeTypes"]["resume_card"]
+        SetofOptions: {
+          from: "*"
+          to: "resume_card"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       report_content: {
         Args: {
           p_comment_id: string
@@ -1817,6 +2137,34 @@ export type Database = {
           p_status: Database["public"]["Enums"]["report_status"]
         }
         Returns: boolean
+      }
+      resume_for_service: {
+        Args: { p_resume_id: string }
+        Returns: {
+          content_hash: string
+          parse_status: Database["public"]["Enums"]["resume_parse_status"]
+          resume_id: string
+          storage_path: string
+          user_id: string
+        }[]
+      }
+      save_resume_profile: {
+        Args: {
+          p_education?: Json
+          p_email_enc?: string
+          p_experience?: Json
+          p_full_name_enc?: string
+          p_location?: string
+          p_page_count?: number
+          p_parser_version: string
+          p_phone_enc?: string
+          p_raw_parse?: Json
+          p_resume_id: string
+          p_seniority?: Database["public"]["Enums"]["seniority_level"]
+          p_skills?: string[]
+          p_years?: number
+        }
+        Returns: string
       }
       search_companies: {
         Args: { p_limit?: number; p_query: string }
@@ -1843,6 +2191,13 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      seniority_affinity: {
+        Args: {
+          p_job: Database["public"]["Enums"]["seniority_level"]
+          p_resume: Database["public"]["Enums"]["seniority_level"]
+        }
+        Returns: number
+      }
       set_block_from_comment: {
         Args: { p_comment_id: string; p_on: boolean }
         Returns: boolean
@@ -1855,6 +2210,7 @@ export type Database = {
         Args: { p_company_slug: string; p_on: boolean }
         Returns: boolean
       }
+      set_default_resume: { Args: { p_resume_id: string }; Returns: boolean }
       set_job_interaction: {
         Args: {
           p_job_id: string
@@ -1862,6 +2218,18 @@ export type Database = {
           p_on: boolean
         }
         Returns: boolean
+      }
+      set_parse_status: {
+        Args: {
+          p_error?: string
+          p_resume_id: string
+          p_status: Database["public"]["Enums"]["resume_parse_status"]
+        }
+        Returns: boolean
+      }
+      skill_jaccard: {
+        Args: { p_left: string[]; p_right: string[] }
+        Returns: number
       }
       start_edu_verification: {
         Args: {
@@ -1937,8 +2305,17 @@ export type Database = {
         | "verification"
         | "job_alert"
         | "deadline"
+      pii_purpose:
+        | "parse"
+        | "match"
+        | "user_download"
+        | "autoapply"
+        | "support"
+        | "export"
+      pii_resource: "resume_pdf" | "resume_profile"
       report_status: "open" | "actioned" | "dismissed"
       report_target: "comment" | "profile"
+      resume_parse_status: "pending" | "parsing" | "parsed" | "failed"
       salary_period: "hour" | "year"
       seniority_level: "intern" | "new_grad" | "mid" | "senior" | "staff_plus"
       verification_kind: "edu_email" | "government_id"
@@ -2021,6 +2398,26 @@ export type Database = {
         dedup_group_id: string | null
         page_cursor: string | null
         rank: number | null
+      }
+      resume_card: {
+        id: string | null
+        name: string | null
+        focus: string | null
+        file_size: number | null
+        page_count: number | null
+        is_default: boolean | null
+        parse_status: Database["public"]["Enums"]["resume_parse_status"] | null
+        parse_error: string | null
+        skills: string[] | null
+        education: Json | null
+        experience: Json | null
+        years_experience: number | null
+        location: string | null
+        seniority: Database["public"]["Enums"]["seniority_level"] | null
+        parsed_at: string | null
+        user_confirmed_at: string | null
+        created_at: string | null
+        updated_at: string | null
       }
       viewer_sets: {
         liked_job_ids: string[] | null
@@ -2192,8 +2589,18 @@ export const Constants = {
         "job_alert",
         "deadline",
       ],
+      pii_purpose: [
+        "parse",
+        "match",
+        "user_download",
+        "autoapply",
+        "support",
+        "export",
+      ],
+      pii_resource: ["resume_pdf", "resume_profile"],
       report_status: ["open", "actioned", "dismissed"],
       report_target: ["comment", "profile"],
+      resume_parse_status: ["pending", "parsing", "parsed", "failed"],
       salary_period: ["hour", "year"],
       seniority_level: ["intern", "new_grad", "mid", "senior", "staff_plus"],
       verification_kind: ["edu_email", "government_id"],

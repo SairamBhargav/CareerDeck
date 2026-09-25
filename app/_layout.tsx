@@ -90,6 +90,15 @@ function RootNavigator() {
           <Stack.Screen name="profile" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ headerShown: false }} />
           <Stack.Screen name="verify" options={{ headerShown: false }} />
+          {/*
+            * A modal, not a pushed screen. It is a step in an upload the user just started, and
+            * it has to be dismissable without anywhere to go back to — Activity is underneath
+            * it and is where they came from.
+            */}
+          <Stack.Screen
+            name="resume-review"
+            options={{ presentation: 'modal', headerShown: false }}
+          />
           <Stack.Screen name="collection/[type]" options={{ headerShown: false }} />
           <Stack.Screen name="job/[id]" options={{ presentation: 'modal', title: 'Job details' }} />
           <Stack.Screen name="company/[id]" options={{ title: '' }} />

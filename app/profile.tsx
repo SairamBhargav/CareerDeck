@@ -16,6 +16,7 @@ import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useResumes } from '@/hooks/useResumes';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 
 /** How many preference chips the Profile row previews before it stops counting them out. */
@@ -33,8 +34,6 @@ export default function ProfileScreen() {
   const styles = useStyles();
   const {
     user,
-    resumes,
-    defaultResume,
     applications,
     followedCompanySlugs,
     savedJobIds,
@@ -46,6 +45,7 @@ export default function ProfileScreen() {
     setPreferredLocations,
     updateIdentity,
   } = useCareerDeck();
+  const { resumes, defaultResume } = useResumes(user?.id ?? null);
 
   const goal = useWeeklyGoal();
   const { userId } = useAuth();
@@ -79,8 +79,10 @@ export default function ProfileScreen() {
       label: 'Resumes',
       // Which one the apply sheet will reach for. The resumes themselves live on
       // Activity, so this is a read-only figure rather than a way in.
-      hint: defaultResume ? `Default · ${defaultResume.focus}` : 'No default set',
-      value: `${resumes.length} saved`,
+      hint: defaultResume
+        ? `Default · ${defaultResume.focus ?? defaultResume.name}`
+        : 'No default set',
+      value: resumes.length === 1 ? '1 saved' : `${resumes.length} saved`,
     },
   ];
 

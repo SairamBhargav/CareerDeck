@@ -37,8 +37,14 @@ import type {
   Job,
   JobComment,
   LocationType,
+  MatchScore,
   NotificationKind,
   ReportReason,
+  Resume,
+  ResumeEducation,
+  ResumeExperience,
+  ResumeParseStatus,
+  ResumeSeniority,
   SalaryPeriod,
   Seniority,
   VerificationTier,
@@ -1000,4 +1006,257 @@ export async function fetchVerifications(): Promise<{
     eduExpiresAt: verifiedEdu?.expires_at ?? null,
     pendingEduEmail: pendingEdu?.edu_email ?? null,
   };
+}
+
+// ── resumes and matching (phase 4) ─────────────────────────────────────────────
+
+/**
+ * Matches the `resume_card` composite in the phase 4 migration.
+ *
+ * No `storage_path`, and that is not an oversight the way a missing field usually is: the
+ * function does not return one. The client never addresses the object — it cannot read it
+ * anyway, since the bucket grants `select` to nobody — and a path it does not hold is a path it
+ * cannot put in a log, a crash report or a deep link. PHASE4.md §4.2.
+ */
+interface ResumeCardRow {
+  id: string;
+  name: string;
+  focus: string | null;
+  file_size: number | null;
+  page_count: number | null;
+  is_default: boolean;
+  parse_status: ResumeParseStatus;
+  parse_error: string | null;
+  skills: string[] | null;
+  education: ResumeEducation[] | null;
+  experience: ResumeExperience[] | null;
+  years_experience: number | string | null;
+  location: string | null;
+  seniority: ResumeSeniority | null;
+  parsed_at: string | null;
+  user_confirmed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function toResume(row: ResumeCardRow): Resume {
+  return {
+    id: row.id,
+    name: row.name,
+    focus: row.focus,
+    fileSize: row.file_size,
+    pageCount: row.page_count,
+    isDefault: row.is_default,
+    parseStatus: row.parse_status,
+    parseError: row.parse_error,
+    profile: {
+      skills: row.skills ?? [],
+      education: row.education ?? [],
+      experience: row.experience ?? [],
+      // `numeric` arrives as a string over PostgREST — the same care `toNumber` takes for salary.
+      yearsExperience: toNumber(row.years_experience),
+      location: row.location,
+      seniority: row.seniority,
+      parsedAt: row.parsed_at,
+      confirmedAt: row.user_confirmed_at,
+    },
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** This account's resumes, default first. One call; there is no pagination and never will be. */
+export async function fetchResumes(): Promise<Resume[]> {
+  const { data, error } = await supabase.rpc('my_resumes');
+  if (error) throw error;
+  return ((data ?? []) as ResumeCardRow[]).map(toResume);
+}
+
+interface MatchScoreRow {
+  job_id: string;
+  score: number;
+  components: Record<string, number> | null;
+  computed_at: string;
+}
+
+/**
+ * Match scores for the postings on screen — §3.10.
+ *
+ * Deliberately shaped like `fetchCommentCounts` above, because it is the same decision one
+ * phase later: a score is per-reader and changes when the resume changes, so folding it into
+ * `job_card` would make every feed page uncacheable for a number in one corner of one card.
+ * PHASE3.md's decision D, applied again.
+ *
+ * Note this read *writes* — `match_scores()` computes and caches whatever it does not already
+ * hold. An empty map is the honest answer for a user with no parsed default resume, and the
+ * ring is hidden rather than drawn at zero.
+ */
+export async function fetchMatchScores(jobIds: string[]): Promise<Map<string, MatchScore>> {
+  if (jobIds.length === 0) return new Map();
+
+  const { data, error } = await supabase.rpc('match_scores', { p_job_ids: jobIds.slice(0, 200) });
+  if (error) throw error;
+
+  const scores = new Map<string, MatchScore>();
+  for (const row of (data ?? []) as MatchScoreRow[]) {
+    const { coverage, ...components } = row.components ?? {};
+    scores.set(row.job_id, {
+      score: row.score,
+      components,
+      coverage: typeof coverage === 'number' ? coverage : 1,
+      computedAt: row.computed_at,
+    });
+  }
+  return scores;
+}
+
+/**
+ * Registers an uploaded object as a resume.
+ *
+ * Two steps, and the upload is the other one: the client puts the bytes in the bucket under its
+ * own folder (the one thing storage RLS lets it do) and then calls this. A multi-megabyte body
+ * has no business travelling through a Postgres function, and a failed upload this way leaves
+ * no row — an orphaned object is collected by the retention sweep, whereas a row pointing at
+ * nothing is a resume the shelf will offer to open.
+ */
+export async function registerResume(input: {
+  name: string;
+  storagePath: string;
+  fileSize?: number;
+  contentHash?: string;
+  focus?: string;
+}): Promise<Resume> {
+  const { data, error } = await supabase.rpc('register_resume', {
+    p_name: input.name,
+    p_storage_path: input.storagePath,
+    /*
+     * `?? undefined` rather than `?? null` throughout: these arguments have SQL defaults, and
+     * the generated types make a defaulted argument optional rather than nullable. Sending an
+     * explicit null would also work in Postgres — it is the same value — but it would not
+     * typecheck, and the generated file is the contract.
+     */
+    p_file_size: input.fileSize ?? undefined,
+    p_content_hash: input.contentHash ?? undefined,
+    p_focus: input.focus ?? undefined,
+  });
+  if (error) throw error;
+  return toResume(data as ResumeCardRow);
+}
+
+/** §3.9's database invariant, exercised. Invalidates every cached score on the way through. */
+export async function setDefaultResume(resumeId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_default_resume', { p_resume_id: resumeId });
+  if (error) throw error;
+  return data === true;
+}
+
+/**
+ * The parse-confirmation screen's write — §3.9's `user_confirmed_at`.
+ *
+ * Only the four fields the matcher reads. Name, email and phone are sealed at parse time and
+ * this phase never opens them: confirming a fact the user already knows is not worth a
+ * decryption, a log row and a plaintext P0 field on the wire. PHASE4.md §4.4.
+ */
+export async function confirmResumeProfile(
+  resumeId: string,
+  edits: {
+    skills?: string[];
+    seniority?: ResumeSeniority | null;
+    yearsExperience?: number | null;
+    location?: string | null;
+  },
+): Promise<Resume> {
+  const { data, error } = await supabase.rpc('confirm_resume_profile', {
+    p_resume_id: resumeId,
+    p_skills: edits.skills ?? undefined,
+    p_seniority: edits.seniority ?? undefined,
+    p_years: edits.yearsExperience ?? undefined,
+    p_location: edits.location ?? undefined,
+  });
+  if (error) throw error;
+  return toResume(data as ResumeCardRow);
+}
+
+/** Soft delete. The object survives the §13.2 grace period before the sweep destroys it. */
+export async function deleteResume(resumeId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('delete_resume', { p_resume_id: resumeId });
+  if (error) throw error;
+  return data === true;
+}
+
+/** 128 bits of hex. Enough to name an object; this is not a security boundary. */
+function randomObjectId(): string {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Uploads the bytes, then registers them.
+ *
+ * The object key is `{user_id}/{uuid}.pdf` because the storage policy matches on the first path
+ * segment — Supabase storage has no owner column, so the owner has to be in the key, and the
+ * table's own check constraint says the same thing a second time.
+ */
+export async function uploadResume(input: {
+  name: string;
+  bytes: ArrayBuffer;
+  focus?: string;
+}): Promise<Resume> {
+  const { data: session } = await supabase.auth.getUser();
+  const userId = session.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  const objectName = `${userId}/${randomObjectId()}.pdf`;
+
+  const upload = await supabase.storage.from('resumes').upload(objectName, input.bytes, {
+    contentType: 'application/pdf',
+    upsert: false,
+  });
+  if (upload.error) throw upload.error;
+
+  try {
+    return await registerResume({
+      name: input.name,
+      storagePath: objectName,
+      fileSize: input.bytes.byteLength,
+      focus: input.focus,
+    });
+  } catch (error) {
+    /*
+     * The row is what makes the object reachable, so a failed registration leaves an object
+     * nothing will ever look at. The retention sweep would collect it eventually, but the cap
+     * inside `register_resume` counts rows and the user's next attempt should not be charged
+     * for this one — so it goes now. Storage grants the owner `delete` precisely so this works
+     * without the service.
+     */
+    await supabase.storage.from('resumes').remove([objectName]).catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * A short-lived signed URL for the user's own resume, issued by the API service.
+ *
+ * This is the one read in the app that could have gone straight to Supabase and deliberately
+ * does not. §3.9 requires every read of a resume to be logged, and a client that signs its own
+ * URL logs nothing — so the bucket grants `select` to nobody and this call writes a
+ * `pii_access_log` row before it signs. PHASE4.md §4.2.
+ */
+export async function fetchResumeUrl(resumeId: string): Promise<string> {
+  const response = await serviceFetch<{ url: string }>(`/v1/resumes/${resumeId}/url`, {
+    method: 'GET',
+  });
+  return response.url;
+}
+
+/**
+ * Asks the service to read the PDF.
+ *
+ * Slow by the standards of everything else in this file — it is a model reading several
+ * rendered pages — so the timeout is generous and the caller shows a progress state. The
+ * resume's own `parse_status` carries the outcome regardless, which is what lets this move to
+ * a worker later without the client changing.
+ */
+export async function parseResume(resumeId: string): Promise<void> {
+  await serviceFetch(`/v1/resumes/${resumeId}/parse`, { method: 'POST', timeoutMs: 120_000 });
 }

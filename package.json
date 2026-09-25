@@ -22,6 +22,7 @@
     "verify:phase1": "node scripts/verify-phase1.mjs",
     "verify:phase2": "node scripts/verify-phase2.mjs",
     "verify:phase3": "node scripts/verify-phase3.mjs",
+    "verify:phase4": "node scripts/verify-phase4.mjs",
     "server:dev": "npm --prefix server run dev",
     "ingest": "node --env-file-if-exists=server/.env server/src/ingest/run.ts",
     "ingest:sweep": "node --env-file-if-exists=server/.env server/src/ingest/run.ts --sweep"
@@ -40,6 +41,8 @@
     "expo-blur": "~57.0.3",
     "expo-constants": "~57.0.18",
     "expo-crypto": "~57.0.3",
+    "expo-document-picker": "~57.0.2",
+    "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-linking": "~57.0.10",

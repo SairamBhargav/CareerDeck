@@ -8,6 +8,7 @@ import { adminClient, requireAuth, type AuthedUser } from './auth.ts';
 import { comments } from './comments.ts';
 import { capabilities, env } from './env.ts';
 import { moderation, reviewPage } from './moderation/review.ts';
+import { resumes } from './resumes.ts';
 import { verification, webhooks } from './verification.ts';
 
 /**
@@ -26,9 +27,15 @@ import { verification, webhooks } from './verification.ts';
  *  - **`/v1/moderation/*` and `/moderation`** — the human review queue. Needs to read what the
  *    anonymity contract hides from users. §10.
  *
+ * Phase 4 adds `/v1/resumes/*`, and one of its three routes breaks the pattern the other six
+ * follow. Parsing needs a model and sealing a contact field needs an encryption key, so those
+ * two arrive for the established reason. `GET /v1/resumes/:id/url` needs no secret at all and
+ * is here anyway, because §3.9 requires every read of a resume to be logged and a read the
+ * client performs against storage by itself cannot be. PHASE4.md §4.2.
+ *
  * Everything else the app does still goes straight to Supabase, because RLS still expresses it.
- * Phase 1's decision B is unchanged: reads are not here, and the seam that would move them is
- * still `lib/api.ts`.
+ * Phase 1's decision B is unchanged for *jobs*: the feed is not here, and the seam that would
+ * move it is still `lib/api.ts`.
  */
 
 if (env.sentryDsn) {
@@ -97,6 +104,7 @@ v1.get('/me', async (c) => {
 v1.route('/comments', comments);
 v1.route('/verify', verification);
 v1.route('/moderation', moderation);
+v1.route('/resumes', resumes);
 
 app.onError((error, c) => {
   if (error instanceof HTTPException) {

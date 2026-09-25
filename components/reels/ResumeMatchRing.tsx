@@ -40,6 +40,22 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 interface ResumeMatchRingProps {
   /** 0-100. Update continuously (e.g. from scroll) for the "cool" morphing effect. */
   progress: SharedValue<number>;
+  /**
+   * What the number is made of, for the posting currently on screen — §3.10's `components`.
+   *
+   * Drives the caption under the ring. Phase 3 and earlier this said "MATCH" unconditionally,
+   * which was the honest label for a hash of two ids. Now that there is a real calculation
+   * behind it, the caption says which part of it is carrying the score.
+   */
+  explain?: MatchExplanation | null;
+}
+
+export interface MatchExplanation {
+  skillOverlap?: number;
+  seniority?: number;
+  location?: number;
+  /** 0-1. How much of the formula had an input at all. */
+  coverage: number;
 }
 
 /**
@@ -52,7 +68,7 @@ interface ResumeMatchRingProps {
  * the word underneath is doing the real work: it says the figure is a percentage *of a
  * resume against this posting*, not a level of something filling up.
  */
-export function ResumeMatchRing({ progress }: ResumeMatchRingProps) {
+export function ResumeMatchRing({ progress, explain }: ResumeMatchRingProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -110,9 +126,47 @@ export function ResumeMatchRing({ progress }: ResumeMatchRingProps) {
         <Text style={styles.label}>{label}%</Text>
       </View>
 
-      <Text style={styles.caption}>MATCH</Text>
+      <Text style={styles.caption} numberOfLines={1}>
+        {captionFor(explain)}
+      </Text>
     </Animated.View>
   );
+}
+
+/**
+ * One word for why the number is what it is — §13.3's "keeping `components` explainable isn't
+ * only a UX nicety".
+ *
+ * The full sentence §3.10 imagines ("strong skills match, but they want 3 years") needs room
+ * this badge does not have, so this is the one-word version: the component doing the most work.
+ * It is a deliberate step short of the eventual design and a long step past "MATCH", which is
+ * what a ring over a hash function was entitled to say.
+ *
+ * `THIN` is the case worth having: a posting that lists no skills is scored on seniority and
+ * location alone and renormalized, so it can read 90 on a quarter of the formula. Saying so is
+ * the difference between a confident number and a number that looks confident.
+ */
+function captionFor(explain: MatchExplanation | null | undefined): string {
+  if (!explain) return 'MATCH';
+  if (explain.coverage < 0.6) return 'PARTIAL';
+
+  const candidates: { label: string; value: number | undefined }[] = [
+    { label: 'SKILLS', value: explain.skillOverlap },
+    { label: 'LEVEL', value: explain.seniority },
+    { label: 'PLACE', value: explain.location },
+  ];
+
+  let best: { label: string; value: number } | null = null;
+  for (const candidate of candidates) {
+    if (typeof candidate.value !== 'number') continue;
+    if (best === null || candidate.value > best.value) {
+      best = { label: candidate.label, value: candidate.value };
+    }
+  }
+
+  // Nothing scored well enough to be the reason. "MATCH" is then the honest caption: the
+  // number is a blend of three mediocre things rather than one good one.
+  return best !== null && best.value >= 0.6 ? best.label : 'MATCH';
 }
 
 const useStyles = makeStyles((colors) => ({

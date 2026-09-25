@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -16,27 +16,53 @@ interface ResumeBubbleProps {
 }
 
 /**
- * A resume rendered as a real page-1 thumbnail — Google Drive–style, readable at a
- * glance without opening it. Tapping opens the actual PDF in ResumeViewerModal; the
- * checkmark badge is a pure status indicator for "this is the default," not something
- * you tap here to change.
+ * One stored resume on the Activity shelf.
+ *
+ * ── What happened to the thumbnail ────────────────────────────────────────────
+ *
+ * Through phase 3 this rendered a real page-1 image, because the two resumes in the app were
+ * bundled assets with a `.png` sitting next to the `.pdf`. A resume the user uploaded this
+ * afternoon has no such image, and producing one means rendering a page of an arbitrary PDF —
+ * a native dependency, on a file the user supplied, for a picture of a document they already
+ * recognise by name.
+ *
+ * So the preview is a glyph and the *parse state* instead, which turns out to be the thing
+ * worth showing: "we read this one" versus "we could not" is information the user needs and a
+ * thumbnail never carried. The bucket for real thumbnails exists in the phase 4 migration for
+ * whenever that render pipeline is worth building.
  */
 export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
+  const state = describe(resume);
+
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${resume.name}${isDefault ? ', default resume' : ''}`}
+      accessibilityLabel={`Open ${resume.name}${isDefault ? ', default resume' : ''}. ${state.label}.`}
       style={({ pressed }) => [
         styles.card,
         isDefault ? styles.cardSelected : null,
         pressed ? styles.pressed : null,
       ]}>
       <View style={styles.preview}>
-        <Image source={resume.thumbnail} style={styles.previewImage} resizeMode="cover" />
+        {resume.parseStatus === 'parsing' ? (
+          <ActivityIndicator color={colors.textTertiary} />
+        ) : (
+          <Ionicons
+            name={state.icon}
+            size={44}
+            color={state.tone === 'bad' ? colors.danger : colors.textTertiary}
+          />
+        )}
+
+        <Text
+          style={[styles.state, state.tone === 'bad' ? { color: colors.danger } : null]}
+          numberOfLines={1}>
+          {state.label}
+        </Text>
 
         {isDefault ? (
           <View style={styles.badge}>
@@ -53,6 +79,36 @@ export function ResumeBubble({ resume, isDefault, onPress }: ResumeBubbleProps) 
       </View>
     </Pressable>
   );
+}
+
+/**
+ * The four parse states, in the words the shelf uses.
+ *
+ * `parsed` deliberately reports the skill count rather than saying "Ready": the number is the
+ * one piece of evidence that the parse actually worked, and a resume that came back with two
+ * skills is visibly different from one that came back with thirty.
+ */
+function describe(resume: Resume): {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  tone: 'normal' | 'bad';
+} {
+  switch (resume.parseStatus) {
+    case 'parsed': {
+      const count = resume.profile.skills.length;
+      return {
+        icon: resume.profile.confirmedAt ? 'checkmark-circle-outline' : 'document-text-outline',
+        label: count === 1 ? '1 skill' : `${count} skills`,
+        tone: 'normal',
+      };
+    }
+    case 'parsing':
+      return { icon: 'document-text-outline', label: 'Reading…', tone: 'normal' };
+    case 'failed':
+      return { icon: 'alert-circle-outline', label: "Couldn't read", tone: 'bad' };
+    default:
+      return { icon: 'document-outline', label: 'Not read yet', tone: 'normal' };
+  }
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -74,10 +130,15 @@ const useStyles = makeStyles((colors) => ({
   preview: {
     height: PREVIEW_HEIGHT,
     backgroundColor: colors.backgroundMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
-  previewImage: {
-    width: '100%',
-    height: '100%',
+  state: {
+    fontSize: fontSize.caption,
+    fontWeight: '600',
+    color: colors.textTertiary,
+    paddingHorizontal: spacing.xs,
   },
   badge: {
     position: 'absolute',

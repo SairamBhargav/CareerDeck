@@ -41,6 +41,15 @@ export interface Palette {
   likeSurface: string;
   likeBorder: string;
 
+  /**
+   * Something the user has to act on: a resume the parser could not read, a failed upload.
+   *
+   * Added in phase 4, which is where the app got its first state that is neither "working" nor
+   * "loading". Deliberately not `like` — a heart and a failure reading in the same red would
+   * make one of them mean less.
+   */
+  danger: string;
+
   /** The weekly goal ring once the week is done, and the streak marks behind it. */
   goalMet: string;
   goalMetSurface: string;
@@ -93,6 +102,8 @@ const lightPalette: Palette = {
   like: '#FF3B5C',
   likeSurface: '#FFECEF',
   likeBorder: '#FFD3DA',
+
+  danger: '#C4341E',
 
   goalMet: '#12A150',
   goalMetSurface: '#E4F6EB',
@@ -149,6 +160,10 @@ const darkPalette: Palette = {
   like: '#FF4D6D',
   likeSurface: 'rgba(255, 77, 109, 0.18)',
   likeBorder: 'rgba(255, 77, 109, 0.38)',
+
+  // Lighter than its light-mode counterpart: a deep red on a dark surface reads as brown
+  // before it reads as a warning.
+  danger: '#FF8A75',
 
   // Lifted off the light value: #12A150 goes muddy against near-black.
   goalMet: '#34D77F',

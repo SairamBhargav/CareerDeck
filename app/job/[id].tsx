@@ -12,11 +12,13 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useJobById } from '@/hooks/useJobFeeds';
+import { useResumes } from '@/hooks/useResumes';
 
 export default function JobDetailScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { defaultResume, toggleSave, toggleLike } = useCareerDeck();
+  const { user, toggleSave, toggleLike } = useCareerDeck();
+  const { defaultResume } = useResumes(user?.id ?? null);
   const { job, isLoading } = useJobById(id);
   const [applyVisible, setApplyVisible] = useState(false);
 

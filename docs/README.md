@@ -1463,10 +1463,42 @@ Also deferred rather than built: editing a comment, a blocked-accounts list so a
 undone from the UI, appeals as a flow, `moderation_actions` as a full audit log, and push
 delivery for the notifications this phase writes.
 
-### Phase 4 — Resumes and matching (2–3 weeks)
+### Phase 4 — Resumes and matching (2–3 weeks) — **built**
 Storage bucket + RLS, upload, parse, `resume_profiles`, embeddings, `job_match_scores`,
 `pii_access_log`. Parse-confirmation screen. Delete `utils/resumeMatch.ts`.
 **Exit:** the match ring shows a real, explainable number.
+
+Design and outcome: [PHASE4.md](./PHASE4.md). Four decisions there depart from this document and
+are argued at length in it:
+
+- **Embeddings are a column and an index with nothing in them.** This phase declines that part of
+  the scope rather than deferring a detail of it. Nothing in phase 4 reads a vector — §3.10's own
+  worked `components` names none — and the consumer is §5.2's ANN retrieval, which is phase 5.
+  Filling the column means a second AI vendor chosen on behalf of something that does not exist
+  yet, and it fixes a dimension that a different vendor would make wrong. PHASE1.md's promise
+  ("phase 4 adds the column and the index") is kept in full. §3.
+- **Every read of a resume goes through the API service**, which is the first read in four phases
+  to break phase 1's decision B for neither a secret nor performance. §3.9 requires every access to
+  be logged and a client that signs its own URL logs nothing, so the bucket grants the owner
+  insert, update and delete and **no select**. An audit log with a hole in it where the app's own
+  reads belong would answer "did anyone read this" with "no". §4.2.
+- **Contact fields are sealed and never opened.** AES-256-GCM in the service, not
+  `pgp_sym_encrypt` — a key passed as a SQL argument lands in `pg_stat_statements` and in the log
+  on error, which is not "held outside the DB". Nothing in this phase decrypts them; phase 6 is
+  the first reader. §4.3.
+- **The confirmation screen confirms four fields, not the parse.** Skills, level, location and
+  years — the ones the matcher reads. Showing somebody their own phone number back costs a
+  decryption, an audit row and a plaintext P0 field on the wire to confirm a fact they already
+  know. §4.4.
+
+The scorer deliberately does **not** use §5.1's weights. That blend ranks a corpus, so recency and
+affinity belong in it; this number answers "does my resume fit this job", which a posting's age has
+nothing to do with. Three components, renormalized over whatever is answerable, with `coverage`
+travelling alongside so a 90 on a third of the formula is distinguishable from a 90 on all of it.
+§3.2.
+
+Measured: `npm run verify:phase4` passes 68 checks. Three SQL bugs it caught that review had not are
+recorded in PHASE4.md §7, along with the two things a local stack could not exercise.
 
 ### Phase 5 — Ranking (2–3 weeks)
 Heuristic scorer, `feed_sessions`, Redis pool, diversity + exploration, tunable weights,

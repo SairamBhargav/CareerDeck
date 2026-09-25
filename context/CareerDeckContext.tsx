@@ -11,7 +11,6 @@ import {
 
 import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { useAuth } from '@/context/AuthContext';
-import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
 import { useApplicationRecords } from '@/hooks/useApplicationRecords';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useProfile } from '@/hooks/useProfile';
@@ -22,7 +21,6 @@ import type {
   AppNotification,
   Application,
   ApplicationStatus,
-  Resume,
   User,
   UserIdentityEdit,
 } from '@/types';
@@ -46,12 +44,17 @@ import type {
  * slimmed to hold only session/viewer state" — plus the two things later phases own and that
  * therefore still live in memory:
  *
- *  - **Resumes** (phase 4's storage bucket and `resumes` table).
  *  - **Auto Apply credits** (phase 6's `credit_transactions` ledger).
  *
- * Each is a fixture behind a real-looking interface, and each becomes a hook of its own the way
+ * It is a fixture behind a real-looking interface, and it becomes a hook of its own the way
  * applications and comments did. Nothing above this file knows the difference, which is the
  * point of the facade.
+ *
+ * **Resumes were the other one, and phase 4 collected on the prediction.** `resumes`,
+ * `defaultResumeId` and `setDefaultResume` are gone from here into `hooks/useResumes.ts`,
+ * reading the `resumes` table and a private storage bucket. `defaultResumeId` is the one worth
+ * noting: it was a `useState` seeded from a fixture, which made "exactly one default" true for
+ * as long as the last render said so. It is now a partial unique index. §3.9.
  */
 
 interface CareerDeckState {
@@ -69,8 +72,6 @@ interface CareerDeckState {
   /** Set when the profile could not be read — the app shell can't be trusted until it is. */
   profileError: Error | null;
   retryProfile: () => void;
-  resumes: Resume[];
-  defaultResumeId: string;
   /** The user's tracked applications, newest activity first. */
   applications: Application[];
   /**
@@ -81,8 +82,6 @@ interface CareerDeckState {
    */
   notifications: AppNotification[];
   unreadNotificationCount: number;
-  /** The resume currently used to pre-fill the apply sheet. */
-  defaultResume: Resume | undefined;
   /**
    * Company **slugs**, from `company_follows` by way of `viewer_state()`. The join keys on
    * the company uuid; the slug is what comes back out, because it is what the Following
@@ -99,7 +98,6 @@ interface CareerDeckState {
   toggleSave: (jobId: string) => void;
   /** One-way: a story that has been watched stays watched for the session. */
   markNewsSeen: (newsId: string) => void;
-  setDefaultResume: (resumeId: string) => void;
   /** Moves an application to a new stage. The event row is written by a trigger. */
   setApplicationStatus: (applicationId: string, status: ApplicationStatus) => void;
   /**
@@ -191,7 +189,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   const [seenNewsIds, setSeenNewsIds] = useState<Set<string>>(() => new Set<string>());
-  const [defaultResumeId, setDefaultResumeId] = useState(seedDefaultResumeId);
   // Seeded with a single day's grant. Accrual across days, and the balance surviving a
   // restart, both need the credit ledger in §7, which phase 6 builds.
   const [autoApplyCredits, setAutoApplyCredits] = useState<number>(AUTO_APPLY_ECONOMY.dailyGrant);
@@ -225,10 +222,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   // on every story frame, and a fresh Set each time would re-render the whole tree.
   const markNewsSeen = useCallback((newsId: string) => {
     setSeenNewsIds((current) => (current.has(newsId) ? current : new Set(current).add(newsId)));
-  }, []);
-
-  const setDefaultResume = useCallback((resumeId: string) => {
-    setDefaultResumeId(resumeId);
   }, []);
 
   const setWeeklyGoal = useCallback(
@@ -283,9 +276,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       user,
       profileError,
       retryProfile,
-      resumes: mockResumes,
-      defaultResumeId,
-      defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
       applications: tracker.applications,
       /*
        * §1.3(b), closed.
@@ -308,7 +298,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       toggleLike: viewer.toggleLike,
       toggleSave: viewer.toggleSave,
       markNewsSeen,
-      setDefaultResume,
       setApplicationStatus: tracker.setApplicationStatus,
       logApplication: tracker.logApplication,
       hasApplied: tracker.hasApplied,
@@ -340,7 +329,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     viewer.toggleLike,
     viewer.toggleSave,
     seenNewsIds,
-    defaultResumeId,
     tracker.applications,
     tracker.setApplicationStatus,
     tracker.logApplication,
@@ -352,7 +340,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     viewer.isCommentLiked,
     viewer.toggleCommentLike,
     markNewsSeen,
-    setDefaultResume,
     weeklyGoal,
     setWeeklyGoal,
     autoApplyCredits,
