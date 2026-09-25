@@ -11,7 +11,11 @@ import { makeStyles } from '@/context/ThemeContext';
 
 /**
  * The first thing anyone sees. Three cards slide in and stack onto each other, the
- * wordmark arrives under them, then the copy and the button.
+ * wordmark arrives under them, then the button.
+ *
+ * No tagline. The mark and the name are the whole statement — a line of copy underneath
+ * asks to be read before anything has been offered, and pulls the eye off the thing the
+ * screen just spent three quarters of a second drawing.
  *
  * It waits for a tap rather than advancing itself. An auto-advance reads as something
  * being skipped, and this is the one screen in the app whose entire job is to be looked
@@ -41,9 +45,6 @@ export default function WelcomeScreen() {
             <Animated.View entering={FadeInDown.duration(420)} style={styles.words}>
               <Text style={styles.wordmark} accessibilityRole="header">
                 CareerDeck
-              </Text>
-              <Text style={styles.tagline}>
-                Internships and new-grad roles, and the people going for the same ones.
               </Text>
             </Animated.View>
           ) : (
@@ -101,20 +102,13 @@ const useStyles = makeStyles((colors) => ({
   },
   // Matches the rendered height of `words` closely enough that the mark holds still.
   wordsPlaceholder: {
-    height: 96,
+    height: 44,
   },
   wordmark: {
     fontSize: fontSize.hero + 2,
     fontWeight: '700',
     letterSpacing: -1,
     color: colors.text,
-  },
-  tagline: {
-    maxWidth: 268,
-    textAlign: 'center',
-    fontSize: fontSize.body,
-    lineHeight: 22,
-    color: colors.textSecondary,
   },
   actions: {
     width: '100%',
