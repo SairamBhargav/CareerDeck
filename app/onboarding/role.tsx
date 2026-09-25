@@ -4,9 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { makeStyles } from '@/context/ThemeContext';
 import { ROLE_OPTIONS, useOnboarding, type RoleKey } from '@/context/OnboardingContext';
-import Ionicons from '@expo/vector-icons/Ionicons';
 
 /**
  * Step one: who you are and what you want, in one tap.
@@ -18,11 +17,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
  * The answer is load-bearing downstream: it seeds `preferred_employment_types`, tells the
  * ranker which seniorities to lead with, and decides whether sign-up asks for a school
  * and graduation year at all.
+ *
+ * Selection is the fill, with nothing added inside the row. A checkmark here would be the
+ * second thing saying what the fill already says, and it is the same choice step two
+ * makes — the steps have to agree on what "picked" looks like or the sequence stops
+ * reading as one.
  */
 export default function RoleStep() {
   const router = useRouter();
   const styles = useStyles();
-  const { colors } = useTheme();
   const { role, setRole } = useOnboarding();
 
   const choose = (key: RoleKey) => {
@@ -55,11 +58,6 @@ export default function RoleStep() {
               <Text style={[styles.label, selected ? styles.labelSelected : null]}>
                 {option.label}
               </Text>
-              {selected ? (
-                <View style={styles.check}>
-                  <Ionicons name="checkmark" size={14} color={colors.accent} />
-                </View>
-              ) : null}
             </Pressable>
           );
         })}
@@ -97,14 +95,6 @@ const useStyles = makeStyles((colors) => ({
   },
   labelSelected: {
     color: colors.accentText,
-  },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentText,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   pressed: {
     opacity: 0.75,
