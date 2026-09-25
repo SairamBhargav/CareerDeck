@@ -1,5 +1,14 @@
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+/*
+ * The explicit legacy entry point, not the bare `expo-file-system` import.
+ *
+ * SDK 57 split the package: the default export is the new class-based `File`/`Directory`
+ * API, and `readAsStringAsync`/`EncodingType` moved to `expo-file-system/legacy`. Importing
+ * them from the bare module still works today through a deprecation-warning shim, but that
+ * shim is the part scheduled to go away — the legacy subpath itself is the stable, supported
+ * way to keep using the functional API. One import, everything below is unchanged.
+ */
+import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
