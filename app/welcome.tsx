@@ -10,8 +10,8 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 
 /**
- * The first thing anyone sees. Three cards stack up, the wordmark arrives under them,
- * then the copy and the button.
+ * The first thing anyone sees. Three cards slide in and stack onto each other, the
+ * wordmark arrives under them, then the copy and the button.
  *
  * It waits for a tap rather than advancing itself. An auto-advance reads as something
  * being skipped, and this is the one screen in the app whose entire job is to be looked

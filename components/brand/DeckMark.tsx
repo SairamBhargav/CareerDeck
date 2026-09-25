@@ -33,6 +33,17 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
  *
  * Below `THREE_CARD_MIN` the back card is a two-pixel sliver that renders as a smudge on
  * one device and a hairline on the next. Two cards still say "stack"; three say nothing.
+ *
+ * ── The deal ──────────────────────────────────────────────────────────────────
+ *
+ * Each card slides in from the right, a touch low and held nearer upright than it ends,
+ * then tips into its angle as it stops — a card being pushed onto the pile and settling
+ * against the ones already there. Deliberately not a rise-and-fade: cards arrive opaque
+ * and early (see the opacity ramp), because a card still translucent when it lands reads
+ * as an element appearing rather than an object being placed.
+ *
+ * The stagger is longer than a third of the travel, so the three landings are three
+ * separate events. Shorter and they blur into one indistinct movement.
  */
 
 /** The box every other measurement is a fraction of. */
@@ -50,15 +61,18 @@ const LAYOUT = [
 /** Under this width the mark drops to two cards. */
 const THREE_CARD_MIN = 44;
 
-/** Per-card stagger on the stack-up entrance. */
-const STAGGER_MS = 90;
-const CARD_MS = 380;
+/** Per-card stagger on the deal, and how long one card takes to travel. */
+const STAGGER_MS = 150;
+const CARD_MS = 420;
+
+/** Where a card begins its slide, in base-box points relative to where it lands. */
+const DEAL = { x: 62, y: 16, rotate: 9 };
 
 export interface DeckMarkProps {
   /** Width of the mark's box in points. Height follows at 126/132 of it. */
   size?: number;
   /**
-   * Plays the stack-up entrance once on mount. Off by default: the mark is used in
+   * Plays the deal once on mount. Off by default: the mark is used in
    * headers and lockups far more often than it is used as a hero.
    */
   animated?: boolean;
@@ -80,7 +94,7 @@ export function DeckMark({ size = BASE, animated = false, onSettled, inverted = 
   const showThird = size >= THREE_CARD_MIN;
   const play = animated && !reducedMotion;
 
-  // One value per card, 0 = dealt from below and turned, 1 = landed. Cards that are not
+  // One value per card, 0 = still off to the right, 1 = landed. Cards that are not
   // animating start landed, so the same component serves both cases without a branch in
   // the markup.
   const back = useSharedValue(play ? 0 : 1);
@@ -107,7 +121,9 @@ export function DeckMark({ size = BASE, animated = false, onSettled, inverted = 
       return;
     }
 
-    const ease = { duration: CARD_MS, easing: Easing.out(Easing.cubic) };
+    // Decisive push, hard deceleration: the card carries speed most of the way and then
+    // stops against the stack rather than drifting into place.
+    const ease = { duration: CARD_MS, easing: Easing.bezier(0.16, 1, 0.3, 1) };
     back.value = withDelay(0, withTiming(1, ease));
     mid.value = withDelay(STAGGER_MS, withTiming(1, ease));
     front.value = withDelay(
@@ -146,15 +162,23 @@ function Card({ progress, index, scale, fill, inverted, front = false }: CardPro
   const styles = useStyles();
   const spot = LAYOUT[index] ?? LAYOUT[2];
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
-    transform: [
-      // Dealt from below and slightly under-rotated, so the fan opens as it lands.
-      { translateY: (1 - progress.value) * 26 * scale },
-      { rotate: `${spot.rotate * progress.value}deg` },
-      { scale: 0.94 + progress.value * 0.06 },
-    ],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    const left = 1 - p;
+    return {
+      // Opaque by a third of the way in, so the rest of the travel is a solid card
+      // moving — that is what makes it read as being placed rather than appearing.
+      opacity: Math.min(1, p * 3),
+      transform: [
+        { translateX: left * DEAL.x * scale },
+        { translateY: left * DEAL.y * scale },
+        // Ends *more* turned than it starts: the fan opens under the card as it sets
+        // down, instead of the card unwinding onto a fan that was already there.
+        { rotate: `${spot.rotate + left * DEAL.rotate}deg` },
+        { scale: 1 + left * 0.03 },
+      ],
+    };
+  });
 
   const ink = inverted ? '#0E0F13' : colors.accentText;
 
