@@ -426,6 +426,80 @@ export type Database = {
           },
         ]
       }
+      feed_experiments: {
+        Row: {
+          is_running: boolean
+          name: string
+          notes: string | null
+          started_at: string
+          stopped_at: string | null
+          treatment_pct: number
+        }
+        Insert: {
+          is_running?: boolean
+          name: string
+          notes?: string | null
+          started_at?: string
+          stopped_at?: string | null
+          treatment_pct?: number
+        }
+        Update: {
+          is_running?: boolean
+          name?: string
+          notes?: string | null
+          started_at?: string
+          stopped_at?: string | null
+          treatment_pct?: number
+        }
+        Relationships: []
+      }
+      feed_sessions: {
+        Row: {
+          arm: Database["public"]["Enums"]["feed_arm"]
+          components: Json
+          created_at: string
+          cursor: number
+          experiment: string | null
+          expires_at: string
+          id: string
+          job_ids: string[]
+          surface: Database["public"]["Enums"]["feed_surface"]
+          user_id: string
+        }
+        Insert: {
+          arm?: Database["public"]["Enums"]["feed_arm"]
+          components?: Json
+          created_at?: string
+          cursor?: number
+          experiment?: string | null
+          expires_at?: string
+          id?: string
+          job_ids: string[]
+          surface: Database["public"]["Enums"]["feed_surface"]
+          user_id: string
+        }
+        Update: {
+          arm?: Database["public"]["Enums"]["feed_arm"]
+          components?: Json
+          created_at?: string
+          cursor?: number
+          experiment?: string | null
+          expires_at?: string
+          id?: string
+          job_ids?: string[]
+          surface?: Database["public"]["Enums"]["feed_surface"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feed_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       handle_words: {
         Row: {
           kind: string
@@ -1203,6 +1277,33 @@ export type Database = {
           },
         ]
       }
+      ranking_weights: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          weights: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          weights: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          weights?: Json
+        }
+        Relationships: []
+      }
       raw_postings: {
         Row: {
           content_hash: string
@@ -1595,6 +1696,35 @@ export type Database = {
           },
         ]
       }
+      user_taste_vectors: {
+        Row: {
+          computed_at: string
+          embedding: string
+          signal_count: number
+          user_id: string
+        }
+        Insert: {
+          computed_at?: string
+          embedding: string
+          signal_count?: number
+          user_id: string
+        }
+        Update: {
+          computed_at?: string
+          embedding?: string
+          signal_count?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_taste_vectors_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       verification_blocklist: {
         Row: {
           created_at: string
@@ -1821,6 +1951,7 @@ export type Database = {
     }
     Functions: {
       accept_content_policy: { Args: { p_version: string }; Returns: string }
+      active_weights: { Args: never; Returns: Json }
       apply_strike: {
         Args: {
           p_comment_id?: string
@@ -1833,6 +1964,22 @@ export type Database = {
           expires_at: string
           severity: number
           strike_id: string
+        }[]
+      }
+      build_feed_session: {
+        Args: {
+          p_experiment?: string
+          p_size?: number
+          p_surface?: Database["public"]["Enums"]["feed_surface"]
+          p_user_id: string
+        }
+        Returns: string
+      }
+      candidate_pool: {
+        Args: { p_limit?: number; p_user_id: string }
+        Returns: {
+          job_id: string
+          source: string
         }[]
       }
       close_stale_jobs: { Args: { p_unseen_hours?: number }; Returns: number }
@@ -1926,9 +2073,29 @@ export type Database = {
         Args: { p_months_ahead?: number }
         Returns: number
       }
+      experiment_arm: {
+        Args: { p_experiment: string; p_user_id: string }
+        Returns: Database["public"]["Enums"]["feed_arm"]
+      }
       expire_edu_verifications: {
         Args: { p_grace_days?: number }
         Returns: number
+      }
+      explain_feed_rank: { Args: { p_job_id: string }; Returns: Json }
+      feed_experiment_results: {
+        Args: { p_experiment?: string; p_since?: string }
+        Returns: {
+          applications: number
+          apply_rate: number
+          arm: Database["public"]["Enums"]["feed_arm"]
+          contaminated: number
+          impressions: number
+          lift_pct: number
+          save_rate: number
+          saves: number
+          sessions: number
+          users: number
+        }[]
       }
       feed_jobs: {
         Args: {
@@ -2081,6 +2248,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      pref_match: {
+        Args: {
+          p_city: string
+          p_locs: string[]
+          p_region: string
+          p_remote: boolean
+          p_roles: string[]
+          p_title_normalized: string
+          p_type: Database["public"]["Enums"]["location_type"]
+        }
+        Returns: number
+      }
       prune_deleted_resumes: {
         Args: { p_grace_days?: number }
         Returns: {
@@ -2088,9 +2267,40 @@ export type Database = {
           storage_path: string
         }[]
       }
+      prune_feed_sessions: { Args: { p_keep_hours?: number }; Returns: number }
       prune_match_scores: { Args: { p_keep_days?: number }; Returns: number }
       prune_notifications: { Args: { p_keep_days?: number }; Returns: number }
       prune_pii_access_log: { Args: { p_keep_days?: number }; Returns: number }
+      rank_score: {
+        Args: {
+          p_affinity: number
+          p_cohort: number
+          p_popularity: number
+          p_pref: number
+          p_quality: number
+          p_recency: number
+          p_seen_count: number
+          p_skill: number
+          p_urgency: number
+          p_weights: Json
+        }
+        Returns: Json
+      }
+      ranked_feed: {
+        Args: {
+          p_cursor?: string
+          p_limit?: number
+          p_surface?: Database["public"]["Enums"]["feed_surface"]
+        }
+        Returns: Database["public"]["CompositeTypes"]["job_card"][]
+        SetofOptions: {
+          from: "*"
+          to: "job_card"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      recency_score: { Args: { p_posted_at: string }; Returns: number }
       reconcile_comment_counts: { Args: never; Returns: number }
       reconcile_follower_counts: { Args: never; Returns: number }
       record_identity_verification: {
@@ -2259,6 +2469,7 @@ export type Database = {
         Args: { p_sep: string; p_values: string[] }
         Returns: string
       }
+      urgency_score: { Args: { p_closes_at: string }; Returns: number }
       viewer_state: {
         Args: { p_limit?: number }
         Returns: Database["public"]["CompositeTypes"]["viewer_sets"]
@@ -2287,6 +2498,7 @@ export type Database = {
         | "company_site"
         | "feed"
       employment_type: "Internship" | "Full-time" | "Part-time" | "Contract"
+      feed_arm: "ranked" | "recency"
       feed_surface:
         | "reels"
         | "home"
@@ -2569,6 +2781,7 @@ export const Constants = {
         "feed",
       ],
       employment_type: ["Internship", "Full-time", "Part-time", "Contract"],
+      feed_arm: ["ranked", "recency"],
       feed_surface: [
         "reels",
         "home",

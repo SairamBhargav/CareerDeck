@@ -61,7 +61,15 @@ export default function ReelsScreen() {
   const styles = useStyles();
   const { user, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
-  const forYouFeed = useJobFeed('recent');
+  /*
+   * §5, finally wired up. "For You" is the ranked feed; it was `'recent'` — phase 1's
+   * ordering under a label that promised something else — for four phases.
+   *
+   * Note this is the surface the A/B measures, and not by accident: `useDwellImpressions`
+   * below is the only place dwell is recorded, and §3.6 calls dwell "the strongest implicit
+   * signal you have and the reason a Reels-style UI is worth the trouble".
+   */
+  const forYouFeed = useJobFeed('recommended');
   const followingFeed = useFollowingFeed();
   const tabBarHeight = useTabBarHeight();
   /*

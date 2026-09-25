@@ -1500,10 +1500,44 @@ travelling alongside so a 90 on a third of the formula is distinguishable from a
 Measured: `npm run verify:phase4` passes 68 checks. Three SQL bugs it caught that review had not are
 recorded in PHASE4.md §7, along with the two things a local stack could not exercise.
 
-### Phase 5 — Ranking (2–3 weeks)
+### Phase 5 — Ranking (2–3 weeks) — **built**
 Heuristic scorer, `feed_sessions`, Redis pool, diversity + exploration, tunable weights,
 taste vectors, pgvector retrieval. A/B harness.
 **Exit:** ranked feed beats recency on apply-rate, measurably.
+
+Design and outcome: [PHASE5.md](./PHASE5.md). Five decisions there depart from this document
+and are argued at length in it:
+
+- **The ranker stays in Postgres.** PHASE1.md named the trigger for moving reads to the API
+  service — "a Redis candidate pool and a diversity pass that Postgres cannot express" — and
+  neither happened. The diversity pass is a greedy walk over two hundred scored rows, and
+  moving it would mean shipping the wide end of the pipeline out of the database to sort it.
+  The seam still earned its keep: the pagination model changed completely and the client
+  change is one branch in `lib/api.ts`. §2.
+- **No Redis.** §5.4 asks for a mirror with Postgres as the fallback; the fallback is a
+  primary-key read of one row, once per *page*. Phase 3's rate-limiter argument, one phase
+  later, with the trigger named the same way. §4.2.
+- **Taste vectors are declared and dormant.** §5.2's own first clause is conditional — "once
+  resumes are parsed *and embeddings exist*" — and its second half is implemented in full:
+  ranking does not change, one retrieval arm does. A third live arm (same industry as
+  companies the reader engages with) stands in until the vector arm lands. §5.
+- **The experiment is attributed by reader, not by impression.** §3.6's `session_id` is one
+  per app launch, so the obvious join cannot work. Assignment is sticky, so the arm is read
+  from the sessions actually served — and readers who somehow appear under both arms are
+  counted as `contaminated` and excluded rather than averaged in. §6.2.
+- **Cold start is not a separate path.** §5.1 describes it as one. Two paths would mean code
+  that only runs on somebody's first day and is therefore never exercised, guarding the most
+  important impression the product makes. `cohort` and `popularity` are ordinary components
+  and renormalization produces exactly the behaviour §5.1 asks for. §3.2.
+
+The scorer deliberately keeps §5.1's weights verbatim and adds only the two that section's own
+cold-start paragraph names. `job_card.rank` — declared in phase 1, filled only by search —
+finally carries the feed's score, and `explain_feed_rank()` answers §13.3 for the feed the way
+`job_match_scores.components` answers it for the ring.
+
+Measured: `npm run verify:phase5` passes 51 checks with no API service running, which is itself
+one of the assertions. Three test bugs it caught in itself — each of which would have produced a
+green run that proved nothing — are recorded in PHASE5.md §8.
 
 ### Phase 6 — Money and Auto Apply (3–4 weeks)
 `credit_transactions` + grant/streak/spend/refund jobs. RevenueCat + entitlements.

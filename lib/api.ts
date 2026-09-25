@@ -70,7 +70,15 @@ export interface Page<T> {
   nextCursor: string | null;
 }
 
-export type FeedSort = 'recent' | 'salary' | 'company';
+/**
+ * `recommended` is phase 5's ranked feed; the other three are phase 1's explicit sorts.
+ *
+ * The split is the point. A reader who taps "Salary" has asked a question with a correct
+ * answer and must get salary order — a ranker that quietly reorders an explicit sort is a
+ * control that lies. Ranking is what the feed does when nobody has asked for anything
+ * specific, which is the overwhelmingly common case and the one §5 is about.
+ */
+export type FeedSort = 'recommended' | 'recent' | 'salary' | 'company';
 
 export interface FeedQuery {
   sort?: FeedSort;
@@ -226,8 +234,32 @@ function pageOf<T>(rows: JobCardRow[], limit: number, map: (row: JobCardRow) => 
 export async function fetchFeed(query: FeedQuery = {}): Promise<Page<JobEnvelope>> {
   const limit = query.limit ?? PAGE_SIZE;
 
+  /*
+   * Phase 5, and the moment phase 1's decision B was written for.
+   *
+   * This module's own header promised that "opaque cursors" meant "keyset pagination is an
+   * implementation detail of the SQL, and phase 5 gets to change it". It is changed: a
+   * cursor into the ranked feed encodes a session and an offset rather than a sort value
+   * and an id, and because no caller has ever looked inside one, nothing above this
+   * function knows. `useJobFeed`, `useInfiniteQuery` and every screen are untouched.
+   *
+   * Note what did *not* happen. The header also predicted this was the point where these
+   * functions would "start issuing `fetch` to `/v1/feed`", and they do not — PHASE5.md §2
+   * argues why the ranker stays in Postgres. The seam was worth having anyway; it is the
+   * reason changing the pagination model cost one branch.
+   */
+  if ((query.sort ?? 'recommended') === 'recommended' && !query.companySlugs?.length) {
+    const ranked = await supabase.rpc('ranked_feed', {
+      p_cursor: query.cursor ?? undefined,
+      p_limit: limit,
+      p_surface: 'reels',
+    });
+    if (ranked.error) throw ranked.error;
+    return pageOf((ranked.data ?? []) as JobCardRow[], limit, toEnvelope);
+  }
+
   const { data, error } = await supabase.rpc('feed_jobs', {
-    p_sort: query.sort ?? 'recent',
+    p_sort: query.sort === 'recommended' ? 'recent' : (query.sort ?? 'recent'),
     /*
      * `undefined`, not `null`, for an absent argument.
      *
