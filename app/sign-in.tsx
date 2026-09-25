@@ -41,7 +41,7 @@ export default function SignInScreen() {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState<'email' | 'code' | 'apple' | 'google' | null>(null);
+  const [busy, setBusy] = useState<SignInKind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const codeInput = useRef<TextInput>(null);
 
@@ -60,7 +60,7 @@ export default function SignInScreen() {
         after?.();
       } catch (caught) {
         if (caught instanceof SignInCancelled) return;
-        setError(messageFor(caught));
+        setError(messageFor(caught, kind));
       } finally {
         setBusy(null);
       }
@@ -233,16 +233,25 @@ export default function SignInScreen() {
   );
 }
 
+/** Which button is in flight — and, when one fails, which failure is being reported. */
+type SignInKind = 'email' | 'code' | 'apple' | 'google';
+
 /**
  * Supabase&rsquo;s auth errors are written for developers. These are the three a user
  * will actually hit; everything else falls through with its own wording rather than
  * being flattened into "Something went wrong", which tells them nothing.
  */
-function messageFor(error: unknown): string {
+function messageFor(error: unknown, kind: SignInKind): string {
   const raw = error instanceof Error ? error.message : String(error);
   const lower = raw.toLowerCase();
 
-  if (lower.includes('expired') || lower.includes('invalid') || lower.includes('not found')) {
+  // Scoped to the code step. Supabase says "invalid" for several unrelated failures, and
+  // telling someone their code is wrong when Google is what actually failed sends them
+  // hunting for an email that was never sent.
+  if (
+    kind === 'code' &&
+    (lower.includes('expired') || lower.includes('invalid') || lower.includes('not found'))
+  ) {
     return 'That code is wrong or has expired. Ask for a new one.';
   }
   if (lower.includes('rate limit') || lower.includes('too many') || lower.includes('security purposes')) {
