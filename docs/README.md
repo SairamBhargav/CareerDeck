@@ -1431,12 +1431,37 @@ Also deferred rather than built: `application_intents`, `auto_apply_run_id` on
 `applications`, a `hide` / `not_interested` UI, and the join that would replace the
 Following feed's slug filter.
 
-### Phase 3 — Identity and social (3–4 weeks)
+### Phase 3 — Identity and social (3–4 weeks) — **built**
 Verification (both paths), `comments`, likes, reports, blocks, strikes.
 Moderation classifier in the write path. Internal review queue. `notifications`.
 Realtime on threads.
 **Exit:** verified users comment, moderation blocks the obvious, review queue staffed,
 content policy published.
+
+Design and outcome: [PHASE3.md](./PHASE3.md). The content policy itself is published at
+[CONTENT-POLICY.md](./CONTENT-POLICY.md). Four decisions there depart from this document and
+are argued at length in it:
+
+- **The comment write path is the first route in the API service** — §10's classifier needs a
+  secret — but every rule stays in SQL. `post_comment()` is `service_role`-only and enforces
+  tier, strikes, rate, thread depth and policy acceptance itself, so a bug in the service can
+  produce a wrongly *classified* comment and never an illegitimate one. §4.1.
+- **The rate limit is Postgres, not Redis.** §10 specifies Redis. A partial index answers
+  "10 in the last hour" in a millisecond and is transactional with the insert, which makes it
+  exactly right rather than approximately right. The trigger for revisiting it is named. §4.2.
+- **Realtime is a broadcast from the database, not `postgres_changes`.** A changefeed sends the
+  row, and the row contains `author_id` — the one column this phase exists to withhold. A
+  trigger sends the `comments_public` projection on a private per-posting topic instead. §3.2.
+- **Comment counts do not ride on `job_card`.** A counter that changes every few seconds would
+  make every feed page per-reader for a number nobody reads while scrolling, which is §1.3(a)'s
+  actual point. They travel separately, like viewer state. `feed_jobs` is untouched. §3.1.
+
+§1.3(b) is closed here, as phase 2 said it would be: `comments.like_count` is the true stored
+total and the viewer's own like arrives in `viewer_state()`.
+
+Also deferred rather than built: editing a comment, a blocked-accounts list so a block can be
+undone from the UI, appeals as a flow, `moderation_actions` as a full audit log, and push
+delivery for the notifications this phase writes.
 
 ### Phase 4 — Resumes and matching (2–3 weeks)
 Storage bucket + RLS, upload, parse, `resume_profiles`, embeddings, `job_match_scores`,

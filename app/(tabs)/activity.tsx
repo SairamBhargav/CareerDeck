@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
-import { CommentActivityCard } from '@/components/activity/CommentActivityCard';
+import { NotificationCard } from '@/components/activity/NotificationCard';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
 import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
 import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
@@ -45,13 +45,13 @@ export default function ActivityScreen() {
     likedJobIds,
     resumes,
     defaultResumeId,
-    commentActivity,
-    unreadCommentCount,
+    notifications,
+    unreadNotificationCount,
     toggleSave,
     setDefaultResume,
     setApplicationStatus,
-    markCommentActivityRead,
-    markAllCommentActivityRead,
+    markNotificationRead,
+    markAllNotificationsRead,
     weeklyGoal,
     setWeeklyGoal,
   } = useCareerDeck();
@@ -81,26 +81,36 @@ export default function ActivityScreen() {
   const { jobs: likedJobs } = useJobsByIds(likedJobIds);
 
   /*
-   * Comment activity points at mock job ids, and those postings no longer exist —
-   * PHASE1.md §8.6. The card falls back to "A posting" rather than rendering blank,
-   * and phase 3's real `comments` table gives it something to resolve again.
+   * The postings the inbox points at.
+   *
+   * Through phase 2 this reused the liked-jobs list, because comment activity was a fixture
+   * pointing at mock ids that no longer existed (PHASE1.md §8.6) and there was nothing to resolve.
+   * Real notifications carry a real `jobId`, so they are resolved by id — the same
+   * `useJobsByIds` the liked tab uses, which is already a batched read.
    */
-  const jobById = useMemo(() => new Map(likedJobs.map((job) => [job.id, job])), [likedJobs]);
+  const notificationJobIds = useMemo(
+    () => [...new Set(notifications.map((entry) => entry.jobId).filter((id): id is string => id !== null))],
+    [notifications],
+  );
+  const { jobs: notificationJobs } = useJobsByIds(notificationJobIds);
+  const jobById = useMemo(
+    () => new Map([...likedJobs, ...notificationJobs].map((job) => [job.id, job])),
+    [likedJobs, notificationJobs],
+  );
 
-  // The unread badge clears a beat after the list is opened, rather than the instant
-  // the tab is pressed — long enough that the user sees which rows were new.
-  // markAllCommentActivityRead returns the same array when nothing is unread, so this
-  // settles after one pass instead of re-triggering itself.
+  // The unread badge clears a beat after the list is opened, rather than the instant the tab is
+  // pressed — long enough that the user sees which rows were new. `markAllNotificationsRead` is a
+  // no-op when nothing is unread, so this settles after one pass instead of re-triggering itself.
   useEffect(() => {
     if (tab !== 'comments') return;
-    const timer = setTimeout(markAllCommentActivityRead, 1200);
+    const timer = setTimeout(markAllNotificationsRead, 1200);
     return () => clearTimeout(timer);
-  }, [tab, commentActivity, markAllCommentActivityRead]);
+  }, [tab, notifications, markAllNotificationsRead]);
 
   const tabCounts: Record<ActivityTab, number> = {
     applications: applications.length,
     liked: likedJobs.length,
-    comments: commentActivity.length,
+    comments: notifications.length,
   };
 
   const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
@@ -138,7 +148,7 @@ export default function ActivityScreen() {
         <ActivityTabs
           tab={tab}
           counts={tabCounts}
-          unreadComments={unreadCommentCount}
+          unreadComments={unreadNotificationCount}
           onChange={setTab}
         />
 
@@ -193,19 +203,21 @@ export default function ActivityScreen() {
           ) : null}
 
           {tab === 'comments' ? (
-            commentActivity.length > 0 ? (
-              commentActivity.map((entry, index) => {
-                const job = jobById.get(entry.jobId);
+            notifications.length > 0 ? (
+              notifications.map((entry, index) => {
+                const job = entry.jobId === null ? undefined : jobById.get(entry.jobId);
                 return (
                   <Animated.View
                     key={entry.id}
                     entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                    <CommentActivityCard
+                    <NotificationCard
                       entry={entry}
+                      // A posting that has since closed and been swept is a real case, not an
+                      // error: the notification still reads, it just cannot be opened.
                       jobTitle={job?.title ?? 'A posting'}
                       companyName={job?.companyName ?? ''}
                       onPress={() => {
-                        markCommentActivityRead(entry.id);
+                        markNotificationRead(entry.id);
                         if (job) handlePressJob(job);
                       }}
                     />
@@ -215,8 +227,8 @@ export default function ActivityScreen() {
             ) : (
               <EmptyState
                 icon="chatbubbles-outline"
-                title="No replies yet"
-                message="Comment on a posting in Deck and replies to it land here."
+                title="Nothing yet"
+                message="Replies to your comments, and anything that happens to your account, land here."
               />
             )
           ) : null}

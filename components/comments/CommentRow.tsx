@@ -38,6 +38,11 @@ interface CommentRowProps {
   onReply: () => void;
   /** Omitted on comments the viewer can't remove, which disables the swipe entirely. */
   onDelete?: () => void;
+  /**
+   * Opens the report sheet. Omitted on the viewer's own comments — there is nothing to report
+   * about yourself, and the database refuses it anyway.
+   */
+  onReport?: () => void;
 }
 
 /**
@@ -49,6 +54,17 @@ interface CommentRowProps {
  * tap rather than deleting on release: a thread is scrolled vertically past these rows
  * constantly, and a gesture that destroys something on release is the wrong thing to
  * leave sitting under a scrolling thumb.
+ *
+ * -- Who wrote it, in phase 3 -------------------------------------------------
+ *
+ * There is no name here and there cannot be one. README §3.8's contract is that users are
+ * anonymous to each other, so the row shows a generated pseudonym and, beside it, the badge the
+ * database composed from the school the account actually verified. That badge is the useful half
+ * of an identity for this product: it says whether the person answering knows what they are
+ * talking about, without saying who they are.
+ *
+ * The avatar therefore carries a letter taken from the pseudonym rather than from a name, which
+ * is also why it reads as a shape rather than as a person.
  */
 export function CommentRow({
   comment,
@@ -57,6 +73,7 @@ export function CommentRow({
   onToggleLike,
   onReply,
   onDelete,
+  onReport,
 }: CommentRowProps) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -105,7 +122,9 @@ export function CommentRow({
       offsetX.value = open ? -DELETE_WIDTH : 0;
     });
 
-  const replyTargetLabel = comment.isYou ? 'your comment' : comment.authorName;
+  const replyTargetLabel = comment.isYou ? 'your comment' : comment.authorHandle;
+  // First letter of the pseudonym. Not a name's initial, because there is no name.
+  const initial = comment.authorHandle.charAt(0).toUpperCase();
 
   return (
     <View style={styles.wrapper}>
@@ -123,7 +142,13 @@ export function CommentRow({
       ) : null}
 
       <GestureDetector gesture={swipe}>
-        <Animated.View style={[styles.row, isReply ? styles.rowReply : null, slideStyle]}>
+        <Animated.View
+          style={[
+            styles.row,
+            isReply ? styles.rowReply : null,
+            comment.pending ? styles.pendingRow : null,
+            slideStyle,
+          ]}>
           <View
             style={[
               styles.avatar,
@@ -135,15 +160,22 @@ export function CommentRow({
               },
             ]}>
             <Text style={[styles.avatarText, isReply ? styles.avatarTextReply : null]}>
-              {comment.authorInitials}
+              {initial}
             </Text>
           </View>
 
           <View style={styles.body}>
             <View style={styles.meta}>
               <Text style={styles.author} numberOfLines={1}>
-                {comment.isYou ? 'You' : comment.authorName}
+                {comment.isYou ? 'You' : comment.authorHandle}
               </Text>
+              {/* The badge is the credential, so it gets its own text rather than being appended
+                  to the handle and truncated away on a narrow screen. */}
+              {comment.authorBadge ? (
+                <Text style={styles.badge} numberOfLines={1}>
+                  {comment.authorBadge}
+                </Text>
+              ) : null}
               <Text style={styles.time}>{formatPostedAt(comment.createdAt)}</Text>
             </View>
 
@@ -160,21 +192,43 @@ export function CommentRow({
               />
             ) : null}
 
-            <Pressable
-              onPress={onReply}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={'Reply to ' + replyTargetLabel}
-              style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
-              <Text style={styles.replyLabel}>Reply</Text>
-            </Pressable>
+            <View style={styles.actions}>
+              {/* A comment this device wrote and the server has not confirmed. It cannot be
+                  replied to or reported yet: it has no id anybody else could act on. */}
+              {comment.pending ? (
+                <Text style={styles.replyLabel}>Sending...</Text>
+              ) : (
+                <>
+                  <Pressable
+                    onPress={onReply}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={'Reply to ' + replyTargetLabel}
+                    style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
+                    <Text style={styles.replyLabel}>Reply</Text>
+                  </Pressable>
+
+                  {onReport ? (
+                    <Pressable
+                      onPress={onReport}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={'Report this comment, or block ' + replyTargetLabel}
+                      style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
+                      <Text style={styles.replyLabel}>Report</Text>
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
+            </View>
           </View>
 
           <Pressable
             onPress={onToggleLike}
+            disabled={comment.pending === true}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityState={{ selected: liked }}
+            accessibilityState={{ selected: liked, disabled: comment.pending === true }}
             accessibilityLabel={liked ? 'Unlike this comment' : 'Like this comment'}
             style={({ pressed }) => [styles.like, pressed ? styles.pressed : null]}>
             <Animated.View style={heartStyle}>
@@ -197,6 +251,22 @@ export function CommentRow({
 }
 
 const useStyles = makeStyles((colors) => ({
+  // Dimmed rather than replaced by a spinner: the text is what the writer is looking at, and
+  // taking it away to show progress is worse than showing it faintly.
+  pendingRow: {
+    opacity: 0.55,
+  },
+  badge: {
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
   wrapper: {
     justifyContent: 'center',
   },

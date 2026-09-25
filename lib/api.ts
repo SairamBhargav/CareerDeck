@@ -24,16 +24,24 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { serviceFetch } from '@/lib/service';
 import type {
   Application,
   ApplicationSource,
   ApplicationStatus,
+  AppNotification,
   Company,
+  CommentGate,
+  EduChallenge,
   EmploymentType,
   Job,
+  JobComment,
   LocationType,
+  NotificationKind,
+  ReportReason,
   SalaryPeriod,
   Seniority,
+  VerificationTier,
 } from '@/types';
 
 /** What the server knows about this viewer's relationship to a posting. §1.3(a). */
@@ -374,6 +382,12 @@ export interface ViewerSets {
   followedCompanyIds: string[];
   /** The same follows as slugs, which is what routes and the Following feed filter use. */
   followedCompanySlugs: string[];
+  /**
+   * Phase 3. §1.3(b): "store the true count; send `viewerHasLiked` separately" — this is the
+   * separately. The stored `like_count` on a comment is now the real total, and whether *this*
+   * reader is one of them rides here with the rest of their relationship graph.
+   */
+  likedCommentIds: string[];
 }
 
 export const EMPTY_VIEWER_SETS: ViewerSets = {
@@ -382,6 +396,7 @@ export const EMPTY_VIEWER_SETS: ViewerSets = {
   hiddenJobIds: [],
   followedCompanyIds: [],
   followedCompanySlugs: [],
+  likedCommentIds: [],
 };
 
 interface ViewerSetsRow {
@@ -390,6 +405,7 @@ interface ViewerSetsRow {
   hidden_job_ids: string[] | null;
   followed_company_ids: string[] | null;
   followed_company_slugs: string[] | null;
+  liked_comment_ids: string[] | null;
 }
 
 export async function fetchViewerState(): Promise<ViewerSets> {
@@ -413,6 +429,7 @@ export async function fetchViewerState(): Promise<ViewerSets> {
     hiddenJobIds: row.hidden_job_ids ?? [],
     followedCompanyIds: row.followed_company_ids ?? [],
     followedCompanySlugs: row.followed_company_slugs ?? [],
+    likedCommentIds: row.liked_comment_ids ?? [],
   };
 }
 
@@ -598,4 +615,389 @@ export async function logImpressions(events: ImpressionEvent[]): Promise<number>
 
   if (error) throw error;
   return typeof data === 'number' ? data : 0;
+}
+
+/* ── phase 3: what the viewer said ─────────────────────────────────────────────
+ *
+ * README §3.2, §3.8, §10. Two things distinguish this section from everything above it.
+ *
+ * **Some of it does not go to Postgres.** Posting a comment and verifying an address both pass
+ * through `server/` — one needs a moderation classifier, the other an email provider, and both
+ * need a secret. Those calls go through `lib/service.ts`; everything else here is still a Supabase
+ * RPC, because everything else is still expressible in RLS. The split is visible in this file on
+ * purpose: `postComment` can fail in ways `fetchJobComments` cannot.
+ *
+ * **Nothing here can carry an author's identity.** `comment_card` has no `author_id` and the
+ * database has no grant that would produce one, so these types have nowhere to put it. Blocking
+ * and reporting therefore take a *comment* id and resolve the author server-side, which reads like
+ * a workaround and is actually the contract holding.
+ */
+
+/** Matches the `comment_card` composite in the phase 3 migration. */
+interface CommentCardRow {
+  id: string;
+  job_id: string;
+  parent_id: string | null;
+  body: string;
+  gif_id: string | null;
+  like_count: number;
+  reply_count: number;
+  created_at: string;
+  edited_at: string | null;
+  author_handle: string;
+  author_badge: string | null;
+  author_color: string;
+  is_own: boolean;
+  page_cursor: string | null;
+}
+
+function toComment(row: CommentCardRow): JobComment {
+  return {
+    id: row.id,
+    jobId: row.job_id,
+    parentId: row.parent_id,
+    authorHandle: row.author_handle,
+    authorBadge: row.author_badge,
+    authorColor: row.author_color,
+    isYou: row.is_own,
+    body: row.body,
+    ...(row.gif_id === null ? {} : { gifId: row.gif_id }),
+    createdAt: row.created_at,
+    editedAt: row.edited_at,
+    // Straight through, not adjusted. §1.3(b): this is the true total and the viewer's own like
+    // arrives in `ViewerSets.likedCommentIds`. Phase 2 added one here against a fixture; doing
+    // that against a real count is the double-count §1.3(b) warned about.
+    likeCount: row.like_count,
+    replyCount: row.reply_count,
+  };
+}
+
+/** Roots only, newest first. The sheet fetches a thread's replies when it is opened. */
+export async function fetchJobComments(
+  jobId: string,
+  cursor?: string | null,
+  limit = 20,
+): Promise<Page<JobComment>> {
+  const { data, error } = await supabase.rpc('job_comments', {
+    p_job_id: jobId,
+    p_cursor: cursor ?? undefined,
+    p_limit: limit,
+  });
+
+  if (error) throw error;
+  const rows = (data ?? []) as CommentCardRow[];
+
+  return {
+    items: rows.map(toComment),
+    nextCursor: rows.length < limit ? null : (rows[rows.length - 1]?.page_cursor ?? null),
+  };
+}
+
+export async function fetchCommentReplies(commentId: string): Promise<JobComment[]> {
+  const { data, error } = await supabase.rpc('comment_replies', { p_comment_id: commentId });
+  if (error) throw error;
+  return ((data ?? []) as CommentCardRow[]).map(toComment);
+}
+
+/**
+ * Comment totals for the postings a screen is holding.
+ *
+ * Deliberately **not** a field on `job_card`. A counter that changes every few seconds inside a
+ * feed page would make that page per-reader and uncacheable — phase 2 spent a section on why that
+ * matters — and it would do it for a number nobody is reading while they scroll. So the volatile
+ * counter travels separately, on the same principle as viewer state. PHASE3.md §3.
+ */
+export async function fetchCommentCounts(jobIds: string[]): Promise<Map<string, number>> {
+  if (jobIds.length === 0) return new Map();
+
+  const { data, error } = await supabase.rpc('comment_counts', { p_job_ids: jobIds.slice(0, 200) });
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const row of (data ?? []) as { job_id: string; comment_count: number }[]) {
+    counts.set(row.job_id, row.comment_count);
+  }
+  return counts;
+}
+
+interface CommentGateRow {
+  can_comment: boolean | null;
+  tier: VerificationTier | null;
+  handle: string | null;
+  badge: string | null;
+  policy_version: string | null;
+  policy_accepted: boolean | null;
+  muted_until: string | null;
+  banned: boolean | null;
+  remaining_hour: number | null;
+  remaining_day: number | null;
+}
+
+export const CLOSED_GATE: CommentGate = {
+  canComment: false,
+  tier: 'none',
+  handle: null,
+  badge: null,
+  policyVersion: null,
+  policyAccepted: false,
+  mutedUntil: null,
+  banned: false,
+  remainingHour: 0,
+  remainingDay: 0,
+};
+
+export async function fetchCommentGate(): Promise<CommentGate> {
+  const { data, error } = await supabase.rpc('comment_gate');
+  if (error) throw error;
+
+  // Same defensive shape-handling as `fetchViewerState`: a composite comes back as an object, and
+  // reading the wrong shape here would silently close the composer for everybody.
+  const row = (Array.isArray(data) ? data[0] : data) as CommentGateRow | null | undefined;
+  if (!row) return CLOSED_GATE;
+
+  return {
+    canComment: row.can_comment === true,
+    tier: row.tier ?? 'none',
+    handle: row.handle,
+    badge: row.badge,
+    policyVersion: row.policy_version,
+    policyAccepted: row.policy_accepted === true,
+    mutedUntil: row.muted_until,
+    banned: row.banned === true,
+    remainingHour: row.remaining_hour ?? 0,
+    remainingDay: row.remaining_day ?? 0,
+  };
+}
+
+export interface NewComment {
+  jobId: string;
+  body: string;
+  parentId?: string | null;
+  gifId?: string | null;
+  /**
+   * Makes a retried POST return the existing comment instead of writing a second one.
+   *
+   * Every write phase 2 added was idempotent by construction — a toggle sets a state. This one
+   * appends, so idempotency has to be carried, and the client is the only place that knows two
+   * attempts were the same attempt.
+   */
+  idempotencyKey: string;
+}
+
+/**
+ * Posts a comment, through the API service.
+ *
+ * The one write in the app that does not go to Postgres directly and is not queued in the outbox.
+ * PHASE3.md §5 has the argument: a comment the classifier will refuse must fail in front of the
+ * person who wrote it, while they can still edit it — queueing it would mean telling them it
+ * posted, and then quietly dropping it an hour later when the outbox gave up.
+ *
+ * Throws `ServiceError` with a `code` the composer branches on: `not_verified`,
+ * `policy_not_accepted`, `rate_limited`, `rejected`, `blocked`, `offline`.
+ */
+export async function postComment(input: NewComment): Promise<JobComment> {
+  const { comment } = await serviceFetch<{ comment: CommentCardRow }>('/v1/comments', {
+    body: {
+      jobId: input.jobId,
+      body: input.body,
+      parentId: input.parentId ?? null,
+      gifId: input.gifId ?? null,
+      idempotencyKey: input.idempotencyKey,
+    },
+    // Longer than a read, because the classifier is in the path by design.
+    timeoutMs: 20_000,
+  });
+
+  return toComment(comment);
+}
+
+/** Sets a comment like to a state. Phase 2's contract, so the outbox can replay it safely. */
+export async function setCommentLike(commentId: string, on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_comment_like', {
+    p_comment_id: commentId,
+    p_on: on,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+/** Soft-deletes the viewer's own comment and everything replying to it. */
+export async function deleteOwnComment(commentId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('delete_own_comment', { p_comment_id: commentId });
+  if (error) throw error;
+  return data === true;
+}
+
+/**
+ * Reports a comment, or the account behind it.
+ *
+ * Keyed by the comment either way — including when the target is the account, because the client
+ * holds no account identifier and never will. §3.8.
+ */
+export async function reportComment(
+  commentId: string,
+  reason: ReportReason,
+  detail?: string,
+  target: 'comment' | 'profile' = 'comment',
+): Promise<string> {
+  const { data, error } = await supabase.rpc('report_content', {
+    p_comment_id: commentId,
+    p_reason: reason,
+    p_detail: detail ?? undefined,
+    p_target: target,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Blocks or unblocks the author of a comment. Two-directional in effect — see the migration. */
+export async function setBlockFromComment(commentId: string, on: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc('set_block_from_comment', {
+    p_comment_id: commentId,
+    p_on: on,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+/** Records that this account was shown, and accepted, a version of the content policy. §10. */
+export async function acceptContentPolicy(version: string): Promise<string> {
+  const { data, error } = await supabase.rpc('accept_content_policy', { p_version: version });
+  if (error) throw error;
+  return data as string;
+}
+
+// ── notifications ──────────────────────────────────────────────────────────────
+
+interface NotificationRow {
+  id: string;
+  kind: NotificationKind;
+  subject_type: string | null;
+  subject_id: string | null;
+  aggregate_count: number;
+  payload: Record<string, unknown> | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+function text(payload: Record<string, unknown> | null, key: string): string | null {
+  const value = payload?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function toNotification(row: NotificationRow): AppNotification {
+  return {
+    id: row.id,
+    kind: row.kind,
+    subjectId: row.subject_id,
+    aggregateCount: row.aggregate_count,
+    createdAt: row.created_at,
+    read: row.read_at !== null,
+    jobId: text(row.payload, 'job_id'),
+    actorHandle: text(row.payload, 'actor_handle'),
+    actorColor: text(row.payload, 'actor_color'),
+    yourComment: text(row.payload, 'your_comment'),
+    replyBody: text(row.payload, 'reply_body'),
+    headline: text(row.payload, 'headline'),
+    detail: text(row.payload, 'detail'),
+  };
+}
+
+/**
+ * The whole inbox, newest first.
+ *
+ * Read from `notifications_public`, which is the view that drops `actor_id` — so this function
+ * *cannot* return who liked your comment even if a future caller asked it to. Capped rather than
+ * paginated: an inbox nobody has scrolled to the bottom of does not need a cursor, and the cap is
+ * two hundred rows of small JSON.
+ */
+export async function fetchNotifications(limit = 200): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('notifications_public')
+    .select('id, kind, subject_type, subject_id, aggregate_count, payload, read_at, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return ((data ?? []) as NotificationRow[]).map(toNotification);
+}
+
+/**
+ * Marks specific notifications read, or every unread one when passed nothing.
+ *
+ * The key is omitted rather than sent as null for "everything", which is the same convention
+ * `fetchFeed` uses for its optional arguments and for the same reason: omitting it lets the SQL
+ * apply its own default, and the generated types model a defaulted argument as optional-and-not-null.
+ */
+export async function markNotificationsRead(ids?: string[]): Promise<number> {
+  const { data, error } = await supabase.rpc(
+    'mark_notifications_read',
+    // `undefined` for "everything", so Postgres applies the parameter's own default. The generated
+    // types model a defaulted argument as optional-and-not-null, which is the check that keeps this
+    // call site honest about the function's signature.
+    ids && ids.length > 0 ? { p_ids: ids } : undefined,
+  );
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
+}
+
+// ── verification ───────────────────────────────────────────────────────────────
+
+/**
+ * Starts the `.edu` path. Through the service, because a code has to be emailed.
+ *
+ * Throws `ServiceError` with `domain_not_recognised` when no school owns the domain — which is not
+ * a failure the user can fix by retyping, and is the moment to offer the ID path instead. §3.2 is
+ * explicit that the two are siblings, and this is where that matters in the UI.
+ */
+export async function startEduVerification(email: string): Promise<EduChallenge> {
+  return serviceFetch<EduChallenge>('/v1/verify/edu/start', { body: { email } });
+}
+
+export async function confirmEduVerification(
+  code: string,
+): Promise<{ school: string; badge: string | null }> {
+  return serviceFetch<{ school: string; badge: string | null }>('/v1/verify/edu/confirm', {
+    body: { code },
+  });
+}
+
+/** Hands back the vendor's hosted inquiry URL. The document never touches CareerDeck. §3.2. */
+export async function startIdentityVerification(): Promise<{ url: string; provider: string }> {
+  return serviceFetch<{ url: string; provider: string }>('/v1/verify/identity/start', { body: {} });
+}
+
+interface VerificationRow {
+  kind: 'edu_email' | 'government_id';
+  status: 'pending' | 'verified' | 'failed' | 'expired';
+  edu_email: string | null;
+  expires_at: string | null;
+}
+
+/**
+ * The account's verification state, read straight from Postgres.
+ *
+ * Note what the select list does *not* ask for: `token_hash`, `provider_ref`, `provider_result`.
+ * The column grant would refuse them, and naming them here would turn a deliberate restriction
+ * into a runtime error somebody debugs for an afternoon.
+ */
+export async function fetchVerifications(): Promise<{
+  eduExpiresAt: string | null;
+  pendingEduEmail: string | null;
+}> {
+  const { data, error } = await supabase
+    .from('verifications')
+    .select('kind, status, edu_email, expires_at')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  const rows = (data ?? []) as VerificationRow[];
+
+  const verifiedEdu = rows.find((row) => row.kind === 'edu_email' && row.status === 'verified');
+  const pendingEdu = rows.find((row) => row.kind === 'edu_email' && row.status === 'pending');
+
+  return {
+    eduExpiresAt: verifiedEdu?.expires_at ?? null,
+    pendingEduEmail: pendingEdu?.edu_email ?? null,
+  };
 }

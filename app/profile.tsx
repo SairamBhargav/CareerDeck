@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
+import { useVerification } from '@/hooks/useVerification';
+import { useAuth } from '@/context/AuthContext';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { SkillChip } from '@/components/common/SkillChip';
 import { EditProfileSheet } from '@/components/profile/EditProfileSheet';
@@ -46,6 +48,8 @@ export default function ProfileScreen() {
   } = useCareerDeck();
 
   const goal = useWeeklyGoal();
+  const { userId } = useAuth();
+  const verification = useVerification(userId);
 
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingPreferences, setEditingPreferences] = useState(false);
@@ -136,6 +140,10 @@ export default function ProfileScreen() {
 
         <ProfileHeader
           user={user}
+          // The badge, or the way to get one. Both come from the same read as the composer's gate,
+          // so the profile cannot claim a verification the comment sheet would refuse.
+          commentBadge={verification.canComment ? (verification.badge ?? 'Verified') : null}
+          onVerify={() => router.push('/verify')}
           streakWeeks={goal.streakWeeks}
           applications={applications.length}
           autoApplyCredits={autoApplyCredits}

@@ -11,19 +11,17 @@ import {
 
 import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { useAuth } from '@/context/AuthContext';
-import { mockCommentActivity } from '@/data/mockCommentActivity';
-import { mockComments } from '@/data/mockComments';
 import { defaultResumeId as seedDefaultResumeId, mockResumes } from '@/data/mockResumes';
 import { useApplicationRecords } from '@/hooks/useApplicationRecords';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useProfile } from '@/hooks/useProfile';
 import { useViewerState } from '@/hooks/useViewerState';
 import { setImpressionsEnabled } from '@/lib/impressions';
 import { setOutboxUser } from '@/lib/outbox';
 import type {
+  AppNotification,
   Application,
   ApplicationStatus,
-  CommentActivity,
-  JobComment,
   Resume,
   User,
   UserIdentityEdit,
@@ -38,17 +36,22 @@ import type {
  * tracker are rows now, read by `useViewerState` and `useApplicationRecords`, written
  * optimistically and queued through `lib/outbox.ts`.
  *
- * What is left in this file is what Appendix A says should be left — "the existing
- * context, slimmed to hold only session/viewer state" — plus the three things later
- * phases own and that therefore still live in memory:
+ * Phase 3 takes comments and the notification inbox. Comments were never really state this
+ * file could hold — they are per-posting, paginated and moderated — so rather than becoming a
+ * set of context fields they moved out entirely, into `useJobComments` / `useCommentActions`
+ * called by the sheet that needs them. The inbox did become a field, because the tab bar's
+ * unread badge needs it and the tab bar is nowhere near Activity.
  *
- *  - **Comments and comment activity** (phase 3's `comments`, `notifications`).
+ * What is left in this file is what Appendix A says should be left — "the existing context,
+ * slimmed to hold only session/viewer state" — plus the two things later phases own and that
+ * therefore still live in memory:
+ *
  *  - **Resumes** (phase 4's storage bucket and `resumes` table).
  *  - **Auto Apply credits** (phase 6's `credit_transactions` ledger).
  *
- * Each of those is a fixture behind a real-looking interface, and each becomes a hook of
- * its own the way applications just did. Nothing above this file knows the difference,
- * which is the point of the facade.
+ * Each is a fixture behind a real-looking interface, and each becomes a hook of its own the way
+ * applications and comments did. Nothing above this file knows the difference, which is the
+ * point of the facade.
  */
 
 interface CareerDeckState {
@@ -70,11 +73,14 @@ interface CareerDeckState {
   defaultResumeId: string;
   /** The user's tracked applications, newest activity first. */
   applications: Application[];
-  /** Every comment on every posting, with the viewer's own likes already applied. */
-  comments: JobComment[];
-  /** Replies and likes on the user's own comments, newest first. */
-  commentActivity: CommentActivity[];
-  unreadCommentCount: number;
+  /**
+   * Replies, likes, moderation notices and verification notices — newest first. §3.8.
+   *
+   * Held here rather than read by Activity alone because the tab bar's unread badge needs the
+   * count, and the tab bar is not on the Activity screen.
+   */
+  notifications: AppNotification[];
+  unreadNotificationCount: number;
   /** The resume currently used to pre-fill the apply sheet. */
   defaultResume: Resume | undefined;
   /**
@@ -103,17 +109,15 @@ interface CareerDeckState {
   logApplication: (jobId: string, source: Application['source']) => void;
   /** Whether this job is already in the tracker, so Apply can read "Applied" instead. */
   hasApplied: (jobId: string) => boolean;
-  likedCommentIds: string[];
-  toggleCommentLike: (commentId: string) => void;
   /**
-   * Posts on a job's thread. `parentId` is the top-level comment being answered, or
-   * null for a new thread — replies never nest further, see JobComment.
+   * Whether the viewer has liked a comment — §1.3(b)'s `viewerHasLiked`, which travels apart
+   * from the comment's stored count. Posting, deleting, reporting and blocking are *not* here:
+   * they belong to the sheet that does them, through `useCommentActions`.
    */
-  addComment: (jobId: string, body: string, parentId: string | null, gifId?: string) => void;
-  /** Removes a comment and anything replying to it — an orphaned reply reads as a non sequitur. */
-  deleteComment: (commentId: string) => void;
-  markCommentActivityRead: (activityId: string) => void;
-  markAllCommentActivityRead: () => void;
+  isCommentLiked: (commentId: string) => boolean;
+  toggleCommentLike: (commentId: string) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
 
   /** Applications the user is aiming to send each week. Set by them, not by us. */
   weeklyGoal: number;
@@ -158,16 +162,6 @@ export interface StreakAward {
 
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
 
-function toggleInSet(current: Set<string>, id: string): Set<string> {
-  const next = new Set(current);
-  if (next.has(id)) {
-    next.delete(id);
-  } else {
-    next.add(id);
-  }
-  return next;
-}
-
 export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const { userId } = useAuth();
   const {
@@ -181,6 +175,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
   const viewer = useViewerState(userId);
   const tracker = useApplicationRecords(userId);
+  const inbox = useNotifications(userId);
 
   /*
    * The two module-level singletons that need to know who is signed in.
@@ -212,16 +207,20 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
   const user = profile?.user ?? null;
   const weeklyGoal = profile?.weeklyGoal ?? DEFAULT_WEEKLY_GOAL;
+  /*
+   * The inbox is deliberately *not* in here.
+   *
+   * The shell waits on this before it renders anything, and the three reads it does wait on are
+   * ones the first frame is wrong without: who you are, what you have saved, what you have
+   * applied to. A notification badge that appears a moment later is correct behaviour; a splash
+   * screen held open for it is not.
+   */
   const isInitialLoading = isProfileLoading || viewer.isLoading || tracker.isLoading;
 
   const setCredits = useCallback((next: number) => {
     creditsRef.current = next;
     setAutoApplyCredits(next);
   }, []);
-  const [commentActivity, setCommentActivity] = useState<CommentActivity[]>(mockCommentActivity);
-  const [comments, setComments] = useState<JobComment[]>(mockComments);
-  const [likedCommentIds, setLikedCommentIds] = useState<Set<string>>(() => new Set<string>());
-
   // Returning the same Set when nothing changes matters here: this fires from an effect
   // on every story frame, and a fresh Set each time would re-render the whole tree.
   const markNewsSeen = useCallback((newsId: string) => {
@@ -230,46 +229,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
 
   const setDefaultResume = useCallback((resumeId: string) => {
     setDefaultResumeId(resumeId);
-  }, []);
-
-  const toggleCommentLike = useCallback((commentId: string) => {
-    setLikedCommentIds((current) => toggleInSet(current, commentId));
-  }, []);
-
-  const addComment = useCallback((jobId: string, body: string, parentId: string | null, gifId?: string) => {
-    const trimmed = body.trim();
-    // A GIF on its own is a comment; text on its own is a comment; neither is not.
-    if (trimmed.length === 0 && gifId === undefined) return;
-    // No profile means no author to attribute it to. Unreachable from the UI — the
-    // thread is behind the auth gate — but a comment signed by nobody is worse than one
-    // that doesn't get posted.
-    if (!user) return;
-
-    setComments((current) => [
-      ...current,
-      {
-        id: `c-local-${Date.now()}`,
-        jobId,
-        parentId,
-        // Read off live `user`, not the fixture: the profile is editable now, and a
-        // comment posted after a rename should carry the new name.
-        authorName: user.displayName,
-        authorInitials: `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase(),
-        // Matches the avatar on Home and Profile, which both use the accent fill.
-        authorColor: '#111114',
-        isYou: true,
-        body: trimmed,
-        gifId,
-        createdAt: new Date().toISOString().slice(0, 10),
-        likeCount: 0,
-      },
-    ]);
-  }, [user]);
-
-  const deleteComment = useCallback((commentId: string) => {
-    setComments((current) =>
-      current.filter((comment) => comment.id !== commentId && comment.parentId !== commentId),
-    );
   }, []);
 
   const setWeeklyGoal = useCallback(
@@ -318,20 +277,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   // two name fields, so there is only ever one spelling of who this is.
   const updateIdentity = useCallback((edit: UserIdentityEdit) => writeIdentity(edit), [writeIdentity]);
 
-  const markCommentActivityRead = useCallback((activityId: string) => {
-    setCommentActivity((current) =>
-      current.map((entry) => (entry.id === activityId ? { ...entry, read: true } : entry)),
-    );
-  }, []);
-
-  const markAllCommentActivityRead = useCallback(() => {
-    setCommentActivity((current) =>
-      // Same array back when there's nothing unread, so opening the tab twice doesn't
-      // re-render the list for no reason.
-      current.some((entry) => !entry.read) ? current.map((entry) => ({ ...entry, read: true })) : current,
-    );
-  }, []);
-
   const value = useMemo<CareerDeckState>(() => {
     return {
       isInitialLoading,
@@ -343,19 +288,17 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       defaultResume: mockResumes.find((resume) => resume.id === defaultResumeId),
       applications: tracker.applications,
       /*
-       * The viewer's own like is folded into the count here rather than at the component.
+       * §1.3(b), closed.
        *
-       * §1.3(b) names this as one of the three modelling problems to fix, and it is still
-       * here on purpose: the fix is "store the true count, send `viewerHasLiked`
-       * separately", and there is no stored count to be true until phase 3 builds
-       * `comments`. Folding it in against a fixture is harmless; folding it in against a
-       * real count double-counts, so this line and phase 3 land together.
+       * Phase 2 folded the viewer's own like into `likeCount` here and left a note that the fix
+       * and phase 3 would land together, because there was no stored count for the fix to be
+       * about. There is now: `comments.like_count` is the true total, maintained by a trigger, and
+       * the viewer's own like arrives in `viewer_state()` alongside their saves and follows. So
+       * this no longer adds one to anything — it hands out the predicate instead, and the row
+       * renders a filled heart from that.
        */
-      comments: comments.map((comment) =>
-        likedCommentIds.has(comment.id) ? { ...comment, likeCount: comment.likeCount + 1 } : comment,
-      ),
-      commentActivity,
-      unreadCommentCount: commentActivity.filter((entry) => !entry.read).length,
+      notifications: inbox.notifications,
+      unreadNotificationCount: inbox.unreadCount,
       followedCompanySlugs: viewer.followedCompanySlugs,
       likedJobIds: viewer.likedJobIds,
       savedJobIds: viewer.savedJobIds,
@@ -369,12 +312,10 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       setApplicationStatus: tracker.setApplicationStatus,
       logApplication: tracker.logApplication,
       hasApplied: tracker.hasApplied,
-      likedCommentIds: [...likedCommentIds],
-      toggleCommentLike,
-      addComment,
-      deleteComment,
-      markCommentActivityRead,
-      markAllCommentActivityRead,
+      isCommentLiked: viewer.isCommentLiked,
+      toggleCommentLike: viewer.toggleCommentLike,
+      markNotificationRead: inbox.markRead,
+      markAllNotificationsRead: inbox.markAllRead,
       weeklyGoal,
       setWeeklyGoal,
       autoApplyCredits,
@@ -404,16 +345,14 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     tracker.setApplicationStatus,
     tracker.logApplication,
     tracker.hasApplied,
-    comments,
-    likedCommentIds,
-    commentActivity,
+    inbox.notifications,
+    inbox.unreadCount,
+    inbox.markRead,
+    inbox.markAllRead,
+    viewer.isCommentLiked,
+    viewer.toggleCommentLike,
     markNewsSeen,
     setDefaultResume,
-    toggleCommentLike,
-    addComment,
-    deleteComment,
-    markCommentActivityRead,
-    markAllCommentActivityRead,
     weeklyGoal,
     setWeeklyGoal,
     autoApplyCredits,

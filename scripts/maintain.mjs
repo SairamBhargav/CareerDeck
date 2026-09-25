@@ -19,6 +19,19 @@
  *     denormalized counter nobody verifies is a counter that is eventually wrong and
  *     nothing else in the system would notice.
  *
+ * Phase 3 adds three more, all of the same character:
+ *
+ *  4. **Reconcile comment counts.** `comments.like_count` and `comments.reply_count` get the same
+ *     treatment as the follower counter, for the same reason.
+ *  5. **Expire school verifications.** §3.2: ".edu addresses die after graduation. Run a quarterly
+ *     job that re-challenges `edu` verifications older than ~2 years. Do not silently revoke —
+ *     notify, give a grace period, offer the ID path, then downgrade the badge (not the account)."
+ *     It runs nightly rather than quarterly, because a nightly job that usually finds nothing is
+ *     far more reliable than a quarterly one nobody remembers exists; the function itself is
+ *     idempotent and only acts on rows that are genuinely past their date.
+ *  6. **Prune read notifications.** §13.2's retention, applied to the one table phase 3 adds that
+ *     grows without bound.
+ *
  * Runs as the service role, which is why it is a script rather than something the app can
  * call. Wired into .github/workflows/ingest.yml so it happens on the same schedule as the
  * crawl; it is idempotent, so running it by hand is always safe.
@@ -43,6 +56,10 @@ const admin = createClient(url, key, { auth: { persistSession: false } });
 const MONTHS_AHEAD = 3;
 /** §13.2's retention for impressions. */
 const KEEP_MONTHS = 13;
+/** §3.2's grace period between warning somebody their address has expired and acting on it. */
+const VERIFICATION_GRACE_DAYS = 30;
+/** How long a read notification is kept. Long enough to answer "what did that reply say". */
+const NOTIFICATION_KEEP_DAYS = 90;
 
 let failed = false;
 
@@ -66,6 +83,16 @@ await run('impression partitions dropped', () =>
 );
 
 await run('follower counts corrected', () => admin.rpc('reconcile_follower_counts'));
+
+await run('comment counts corrected', () => admin.rpc('reconcile_comment_counts'));
+
+await run('school verifications expired', () =>
+  admin.rpc('expire_edu_verifications', { p_grace_days: VERIFICATION_GRACE_DAYS }),
+);
+
+await run('read notifications pruned', () =>
+  admin.rpc('prune_notifications', { p_keep_days: NOTIFICATION_KEEP_DAYS }),
+);
 
 // A failed partition creation is the one that matters: it is a silent outage a month from
 // now rather than an error today, so it has to fail the job loudly.

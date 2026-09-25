@@ -61,7 +61,6 @@ export default function ReelsScreen() {
   const { defaultResume, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
   const forYouFeed = useJobFeed('recent');
   const followingFeed = useFollowingFeed();
-  const commentCounts = useCommentCounts();
   const tabBarHeight = useTabBarHeight();
   /*
    * §3.6: "reels.tsx already knows which page is active; it just needs to time it."
@@ -102,6 +101,15 @@ export default function ReelsScreen() {
 
   const activeFeed = feed === 'forYou' ? forYouFeed : followingFeed;
   const jobs = activeFeed.jobs;
+
+  /*
+   * Comment counts for the page of reels currently loaded, read separately from the feed.
+   *
+   * Phase 2's feed payload deliberately carries nothing that changes per reader or per second, and
+   * a comment count is the second of those — folding it into `job_card` would make every feed page
+   * uncacheable for a number nobody reads while scrolling. PHASE3.md §3.
+   */
+  const commentCounts = useCommentCounts(useMemo(() => jobs.map((job) => job.id), [jobs]));
 
   // No company lookup any more: the feed payload carries the logo and brand colour on
   // each posting, because the query already joins `companies` to build the card.

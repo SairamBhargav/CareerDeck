@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
+import { useVerification } from '@/hooks/useVerification';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
 import { AUTO_APPLY_ECONOMY } from '@/constants/goal';
@@ -32,8 +33,9 @@ export default function SettingsScreen() {
   const isDark = scheme === 'dark';
 
   const { weeklyGoal, setWeeklyGoal, autoApplyCredits } = useCareerDeck();
-  const { session, signOut } = useAuth();
+  const { session, userId, signOut } = useAuth();
   const goal = useWeeklyGoal();
+  const verification = useVerification(userId);
 
   const [editingGoal, setEditingGoal] = useState(false);
 
@@ -93,6 +95,20 @@ export default function SettingsScreen() {
 
   const accountRows: RowGroupItem[] = [
     { key: 'edit-profile', icon: 'person-outline', label: 'Edit profile', onPress: () => router.push('/profile') },
+    {
+      key: 'verification',
+      icon: 'shield-checkmark-outline',
+      label: 'Verification',
+      /*
+       * The hint states what verification is *for*, not just whether it is done. §3.2 puts the gate
+       * on commenting alone — everything else works on a plain email account — and a row that read
+       * "Not verified" with no object would imply the account is somehow incomplete.
+       */
+      hint: verification.canComment
+        ? (verification.badge ?? 'Verified — you can comment')
+        : 'Verify to comment on postings',
+      onPress: () => router.push('/verify'),
+    },
     {
       key: 'email',
       icon: 'mail-outline',

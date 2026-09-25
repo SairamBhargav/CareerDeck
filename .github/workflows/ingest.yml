@@ -104,10 +104,14 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node server/src/ingest/run.ts --sweep
 
-      # Partition creation, retention and the follower-count reconcile — PHASE2.md §7.
+      # Partition creation, retention and the follower-count reconcile — PHASE2.md §7 — plus
+      # phase 3's comment-count reconcile, school-verification expiry and notification
+      # retention (PHASE3.md §2.3, and §3.2's "do not silently revoke").
+      #
       # Independent of the crawl: it has to run even on a night when every board was
       # unreachable, because the partition it creates is what next month's impression
-      # logging writes into.
+      # logging writes into, and the expiry pass it runs is what notifies a graduating
+      # student before their badge lapses.
       - name: Maintain
         if: steps.guard.outputs.configured == 'true' && !cancelled()
         env:

@@ -39,9 +39,12 @@ export interface ViewerState extends ViewerSets {
   isLiked: (jobId: string) => boolean;
   isSaved: (jobId: string) => boolean;
   isFollowing: (companySlug: string) => boolean;
+  /** Phase 3. §1.3(b)'s `viewerHasLiked`, kept apart from the comment's stored count. */
+  isCommentLiked: (commentId: string) => boolean;
   toggleLike: (jobId: string) => void;
   toggleSave: (jobId: string) => void;
   toggleFollow: (companySlug: string) => void;
+  toggleCommentLike: (commentId: string) => void;
 }
 
 function withId(ids: string[], id: string, present: boolean): string[] {
@@ -77,7 +80,14 @@ export function useViewerState(userId: string | null): ViewerState {
   useEffect(() => {
     if (userId === null) return;
     return subscribeToOutbox(({ sent }) => {
-      if (sent.some((operation) => operation.kind === 'interaction' || operation.kind === 'follow')) {
+      if (
+        sent.some(
+          (operation) =>
+            operation.kind === 'interaction' ||
+            operation.kind === 'follow' ||
+            operation.kind === 'comment.like',
+        )
+      ) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
     });
@@ -142,9 +152,32 @@ export function useViewerState(userId: string | null): ViewerState {
     [apply, sets.followedCompanySlugs],
   );
 
+  /*
+   * Comment likes, phase 3.
+   *
+   * The same set-to-a-state contract and the same outbox as everything above, because a comment
+   * like is a state and not an append — which is exactly why it belongs here while *posting* a
+   * comment does not (PHASE3.md §5). The comment's own `likeCount` is left alone: it is the true
+   * total from the server, and §1.3(b) is specifically about not folding this flag into it.
+   */
+  const toggleCommentLike = useCallback(
+    (commentId: string) => {
+      const on = !sets.likedCommentIds.includes(commentId);
+
+      apply((current) => ({
+        ...current,
+        likedCommentIds: withId(current.likedCommentIds, commentId, on),
+      }));
+
+      void enqueue({ kind: 'comment.like', commentId, on });
+    },
+    [apply, sets.likedCommentIds],
+  );
+
   const liked = useMemo(() => new Set(sets.likedJobIds), [sets.likedJobIds]);
   const saved = useMemo(() => new Set(sets.savedJobIds), [sets.savedJobIds]);
   const followed = useMemo(() => new Set(sets.followedCompanySlugs), [sets.followedCompanySlugs]);
+  const likedComments = useMemo(() => new Set(sets.likedCommentIds), [sets.likedCommentIds]);
 
   return {
     ...sets,
@@ -153,8 +186,10 @@ export function useViewerState(userId: string | null): ViewerState {
     isLiked: useCallback((jobId: string) => liked.has(jobId), [liked]),
     isSaved: useCallback((jobId: string) => saved.has(jobId), [saved]),
     isFollowing: useCallback((companySlug: string) => followed.has(companySlug), [followed]),
+    isCommentLiked: useCallback((commentId: string) => likedComments.has(commentId), [likedComments]),
     toggleLike,
     toggleSave,
     toggleFollow,
+    toggleCommentLike,
   };
 }

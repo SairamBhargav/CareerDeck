@@ -21,6 +21,7 @@
     "verify:phase0": "node scripts/verify-phase0.mjs",
     "verify:phase1": "node scripts/verify-phase1.mjs",
     "verify:phase2": "node scripts/verify-phase2.mjs",
+    "verify:phase3": "node scripts/verify-phase3.mjs",
     "server:dev": "npm --prefix server run dev",
     "ingest": "node --env-file-if-exists=server/.env server/src/ingest/run.ts",
     "ingest:sweep": "node --env-file-if-exists=server/.env server/src/ingest/run.ts --sweep"

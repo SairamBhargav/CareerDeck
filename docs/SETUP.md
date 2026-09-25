@@ -1,7 +1,8 @@
-# Running CareerDeck — phases 0 and 1
+# Running CareerDeck
 
-Companion to [README.md](./README.md), which is the plan, and
-[PHASE1.md](./PHASE1.md), which is phase 1's design. This is the part you operate.
+Companion to [README.md](./README.md), which is the plan, and the per-phase designs
+([PHASE1.md](./PHASE1.md), [PHASE2.md](./PHASE2.md), [PHASE3.md](./PHASE3.md)). This is the part you
+operate.
 
 **Phase 0** is §15's first milestone: Supabase, migration tooling, auth, `profiles` /
 `user_preferences` / `schools`, a seed script, the API service skeleton, Sentry wiring,
@@ -12,6 +13,19 @@ and the client reading identity and preferences from Postgres instead of a fixtu
 Greenhouse / Lever / Ashby crawlers, dedup, staleness, full-text search, and a paginated
 feed. *Exit condition: 10k+ real postings from 100+ companies, feed and search work,
 dedup rate < 2%.*
+
+**Phase 2** is what the reader did: follows, likes, saves, the application tracker, impressions, an
+offline outbox. *Exit condition: every existing UI interaction persists; impressions logging at
+volume.*
+
+**Phase 3** is what they say: both verification paths, comments, moderation in the write path, the
+strike ladder, reports, blocks, notifications, realtime threads, and an internal review queue.
+*Exit condition: verified users comment, moderation blocks the obvious, review queue staffed,
+content policy published.*
+
+**Phase 3 is the first phase where `npm run server:dev` is not optional** — posting a comment and
+verifying an address both go through it, because a moderation classifier and an email provider each
+need a secret. Everything else in the app still talks to Postgres directly.
 
 ---
 
@@ -56,9 +70,12 @@ top of `supabase/config.toml`.
 | `npm run types:generate` | Rewrites `types/database.ts` — **run after every migration** |
 | `npm run verify:phase0` | Identity, preferences and the phase 0 authz rules |
 | `npm run verify:phase1` | The pipeline, the read API, the authz rules, and the corpus metrics |
+| `npm run verify:phase2` | Every interaction write path, the authz rules, and impression throughput |
+| `npm run verify:phase3` | Verification, commenting, moderation, the leak checks — needs `server:dev` for half of it |
+| `npm run db:maintain` | The nightly jobs: impression partitions, counter reconciles, verification expiry, notification retention |
 | `npm run ingest` | Crawls every enabled source that is due, then sweeps |
 | `npm run ingest:sweep` | The staleness pass on its own |
-| `npm run server:dev` | The API service on :8787 — **not needed by the app in phase 1** |
+| `npm run server:dev` | The API service on :8787 — **required for commenting and verification from phase 3** |
 
 ### Crawling
 
@@ -191,15 +208,74 @@ a public one. Nightly rather than four-hourly because there are no users waiting
 posting yet — `crawl_interval` is still honoured within a run, so tightening the cadence
 later is one line of cron.
 
-### F. Fly.io — still not yet
+### F. The API service — now due
 
-`server/` holds the ingestion pipeline, which runs as a command. The app reads jobs
-directly from Postgres (PHASE1.md decision B), so there is still nothing for a deployed
-service to serve.
+Phases 1 and 2 needed nothing deployed: the app read jobs and wrote interactions straight to
+Postgres through RLS (PHASE1.md decision B), and `server/` held only the ingestion pipeline, which
+runs as a command.
 
-It comes due when phase 2 needs idempotency keys on writes and an impression batch
-endpoint, or when phase 5's ranker needs a process. `server/fly.toml` has the commands in
-its header comment. Secrets go through `fly secrets`, never into the file.
+Phase 3 changed that. Two things now genuinely cannot live in the client:
+
+- **`POST /v1/comments`** runs §10's moderation classifier, which needs a model credential.
+- **`/v1/verify/*`** sends a code to a school address and starts an identity check, which need an
+  email provider and a vendor's signing secret.
+
+Locally that is just `npm run server:dev` plus `EXPO_PUBLIC_API_URL=http://127.0.0.1:8787` in
+`.env.local`. On a physical device use your machine's LAN address, for the same reason the Supabase
+URL needs one.
+
+For a real deployment, `server/fly.toml` has the commands in its header comment. Secrets go through
+`fly secrets`, never into the file. `GET /health` reports which capabilities are actually live, so a
+deploy can be checked without reading the environment.
+
+**Without any of it, the app still runs.** Feeds, search, saving, following, applying, the tracker
+and every collection work exactly as before; the comment composer says commenting is unavailable
+rather than failing a request nobody can diagnose. PHASE3.md §8 has the full degradation table.
+
+### G. Moderation and verification credentials — needed before real users
+
+All four are optional, all four are in [`server/.env.example`](../server/.env.example), and each one
+degrades in a specific documented way rather than crashing.
+
+| Variable | What it turns on | Without it |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | The moderation classifier | Comments still post. The doxxing regex and threat lexicon still run; anything they miss is published as `flagged` and waits for a human. The server warns on every boot. |
+| `RESEND_API_KEY` | Delivering `.edu` verification codes | In development the code comes back in the response so the flow is testable. In production the route returns 503. |
+| `PERSONA_TEMPLATE_ID` + `PERSONA_WEBHOOK_SECRET` | The government-ID path | That path returns 503 and the webhook refuses every request. The `.edu` path is unaffected. |
+| `VERIFICATION_PEPPER` | Makes a ban stick to the credential | Defaulted, and **must match the database**. Changing it un-bans everyone banned under the old value. |
+
+Two of these are worth a warning rather than a row.
+
+**Shipping without a classifier is a decision, not an oversight.** Every comment posts as `flagged`
+and lands in the review queue, which is safe only if somebody is actually working the queue. It is
+the right setup for local development and the wrong one for real users.
+
+**`MODERATION_MODEL` is a real trade and the default is not obviously right.** §10 budgets 50–200ms
+for the classifier call; `claude-opus-5` with adaptive thinking does not fit that at p95, and
+`claude-haiku-4-5` does, for less money and some accuracy. Measure your own p95 before changing it —
+PHASE3.md §4.3.
+
+### H. A moderator account — before launch, not after the first incident
+
+§10 asks for the review queue to exist before launch, so it does. Getting into it takes two steps,
+and neither is self-service on purpose — granting yourself moderator is precisely the escalation the
+allow-list guards against.
+
+1. Create the account with a password (the Supabase dashboard, or `auth.admin.createUser`). The app
+   itself uses email codes and OAuth; the review page signs in with a password because a browser has
+   no app session.
+2. Insert the row:
+
+   ```sql
+   insert into public.moderators (user_id, email, can_ban)
+   values ('<uuid>', 'you@example.com', true);
+   ```
+
+   `can_ban` is separate because a ban burns the verification credential and cannot be walked back —
+   a new reviewer can work reports on their first day without that power.
+
+Then open `/moderation` on the service. A non-moderator gets a 404 there, not a 403: an endpoint that
+admits to existing is an endpoint worth probing.
 
 ---
 
@@ -311,7 +387,66 @@ is what fills it.
 
 ---
 
-## 5. Troubleshooting
+## 6. What phase 3 actually built
+
+### Database
+
+`20260924000000_phase3_social.sql` — one migration, applied by `npm run db:reset` alongside phases
+0-2.
+
+- **Pseudonyms.** `profiles.handle` has existed since phase 0 and was never filled. It is now
+  generated at signup from `handle_words`, and a comment shows `quiet-otter-4821` plus the badge
+  composed from the school the account *verified* — never the one they typed.
+- **`verifications`** and **`verification_blocklist`**. Both §3.2 paths, and the peppered digest that
+  makes a ban stick to the credential rather than to the account.
+- **`comments`**, **`comment_likes`**, **`blocks`**, **`reports`**, **`user_strikes`**,
+  **`notifications`**, **`moderators`**.
+- **`comments_public`** and **`notifications_public`** — the projections that make the anonymity
+  contract structural. The base `comments` table is readable by nobody: `author_id` is never one
+  `select *` away.
+- **`post_comment()`**, service-role only, which enforces tier, strikes, the rate limit, thread
+  depth, policy acceptance and idempotency in SQL, so the service supplies only a classifier verdict.
+- **Realtime on threads**, as a broadcast of the public projection on a private per-posting topic —
+  not `postgres_changes`, which would send `author_id` to every listener.
+
+### Service
+
+`npm run server:dev`. Three groups of routes, on top of phase 0's skeleton:
+
+- `POST /v1/comments` — §10's pipeline: doxxing regex, threat lexicon, hosted classifier, then the
+  SQL write path. A refusal is a 422 with a sentence the writer can act on.
+- `/v1/verify/edu/{start,confirm}`, `/v1/verify/identity/start`, `POST /webhooks/persona`.
+- `/v1/moderation/*` and the review page at `/moderation`.
+
+### Client
+
+- Comments are real, paginated, live, and moderated. The composer knows in advance whether this
+  account can write and says why not.
+- The content policy is shown before a first comment and its version is recorded.
+- Reporting and blocking are one sheet, keyed by the comment, because the client holds no author id.
+- `app/verify.tsx` offers **both** verification paths as peers — §3.2 makes them siblings, and
+  hiding the ID path behind a failed `.edu` attempt would strand exactly the people it is for.
+- The Activity tab's third list is now the notification inbox: replies, aggregated likes, and
+  moderation and verification notices.
+- `data/mockComments.ts` and `data/mockCommentActivity.ts` are gone.
+
+### Checking it
+
+```
+npm run db:reset
+npm run server:dev      # in another terminal
+npm run verify:phase3
+```
+
+116 checks. With the service down it skips the HTTP half and says so, and still fails on anything
+wrong with the database half. A third of the checks exist to prove the phase does not *leak*: every
+response shape the client can obtain is searched recursively for `author_id`, `actor_id`,
+`issued_by` and `moderation_scores`, because this is the one phase where a working feature and a
+broken promise look identical from outside.
+
+---
+
+## 7. Troubleshooting
 
 | Symptom | Cause |
 |---|---|

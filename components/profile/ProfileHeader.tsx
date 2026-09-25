@@ -18,6 +18,15 @@ const STAGGER_MS = 50;
 
 interface ProfileHeaderProps {
   user: User;
+  /**
+   * `CS @ Purdue '27` once a school email is confirmed, "Verified" on the ID path, null otherwise.
+   *
+   * Composed by the database from the school the account actually verified — never from the
+   * free-text school on the profile, which is why the header cannot build it itself. §3.1.
+   */
+  commentBadge?: string | null;
+  /** Opens the verification screen. Shown only while there is no badge to show. */
+  onVerify?: () => void;
   /** Weeks at goal in a row. A ring is drawn around the avatar only while this is live. */
   streakWeeks: number;
   applications: number;
@@ -35,6 +44,8 @@ interface ProfileHeaderProps {
  */
 export function ProfileHeader({
   user,
+  commentBadge = null,
+  onVerify,
   streakWeeks,
   applications,
   autoApplyCredits,
@@ -49,6 +60,16 @@ export function ProfileHeader({
   // than rendering an empty row or "Class of 0".
   const initials = initialsOf(user);
   const studyLine = studyLineOf(user);
+
+  /*
+   * The badge, or a way to get one. Never both, and never an empty space where one would be.
+   *
+   * This is the only place in the app that shows the user their own comment identity, and showing
+   * it here rather than only on a comment is deliberate: the badge is composed from a *verified*
+   * school, so somebody who typed "Purdue" into their profile and never verified needs to see that
+   * their comments will not say Purdue.
+   */
+  const verifyPrompt = commentBadge === null && onVerify !== undefined;
 
   return (
     <View style={styles.wrap}>
@@ -103,6 +124,24 @@ export function ProfileHeader({
         {user.school ? <Text style={styles.detail}>{user.school}</Text> : null}
         {studyLine ? <Text style={styles.detail}>{studyLine}</Text> : null}
         {user.location ? <Text style={styles.detail}>{user.location}</Text> : null}
+
+        {commentBadge !== null ? (
+          <View style={styles.badge}>
+            <Ionicons name="shield-checkmark" size={12} color={colors.goalMet} />
+            <Text style={styles.badgeLabel}>{commentBadge}</Text>
+          </View>
+        ) : verifyPrompt ? (
+          <Pressable
+            onPress={onVerify}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Verify your account so you can comment on postings"
+            style={({ pressed }) => [styles.verify, pressed ? styles.pressed : null]}>
+            <Ionicons name="shield-outline" size={12} color={colors.textSecondary} />
+            <Text style={styles.verifyLabel}>Verify to comment</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
+          </Pressable>
+        ) : null}
       </Animated.View>
 
       <Animated.View entering={FadeInDown.duration(300).delay(STAGGER_MS * 2)} style={styles.stats}>
@@ -142,6 +181,45 @@ function Stat({ value, label, tint, first = false }: StatProps) {
 }
 
 const useStyles = makeStyles((colors) => ({
+  /*
+   * The badge reads as a credential rather than as another profile line: a pill with the
+   * verification tick, set apart from the free-text school above it. The distinction matters here
+   * more than anywhere else on this screen, because one of those lines is what the user typed and
+   * the other is what the database will vouch for.
+   */
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'center',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.backgroundMuted,
+  },
+  badgeLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  verify: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'center',
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+  },
+  verifyLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
   wrap: {
     alignItems: 'center',
     gap: spacing.lg,

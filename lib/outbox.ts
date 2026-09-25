@@ -4,6 +4,7 @@ import { AppState, Platform } from 'react-native';
 import {
   createApplication,
   setApplicationStatus,
+  setCommentLike,
   setCompanyFollow,
   setJobInteraction,
   type InteractionKind,
@@ -39,6 +40,15 @@ import type { ApplicationSource, ApplicationStatus } from '@/types';
  * because a lost impression is a lost training row and a lost like is a lost user action.
  * Putting telemetry in the same queue as intent means a telemetry failure can block intent.
  *
+ * And, from phase 3, **posting a comment** — which is the more interesting exclusion, because it
+ * looks exactly like the kind of write this file exists for. It is not, and the difference is the
+ * one property everything here depends on: every operation below sets a state, so a retry after an
+ * ambiguous failure cannot do harm. A comment appends, and worse, it can be *refused* — by the
+ * moderation classifier, by the rate limit, by a strike. Queueing it would mean showing somebody a
+ * posted comment and dropping it an hour later, when they no longer have the text and cannot be
+ * told anything useful. So a post is a foreground write that fails in front of the person who made
+ * it. A comment *like* is in here, because a like is a state like any other. PHASE3.md §5.
+ *
  * ── Why AsyncStorage ───────────────────────────────────────────────────────────
  *
  * Appendix A suggests expo-sqlite or MMKV. Neither is a dependency yet, and both are native
@@ -65,6 +75,7 @@ const MAX_ATTEMPTS = 12;
 
 export type OutboxOperation =
   | { kind: 'interaction'; jobId: string; interaction: InteractionKind; on: boolean }
+  | { kind: 'comment.like'; commentId: string; on: boolean }
   | { kind: 'follow'; companySlug: string; on: boolean }
   | { kind: 'application.create'; jobId: string; source: ApplicationSource; appliedAt: string }
   | { kind: 'application.status'; jobId: string; status: ApplicationStatus };
@@ -109,6 +120,8 @@ function collapseKey(operation: OutboxOperation): string | null {
   switch (operation.kind) {
     case 'interaction':
       return `interaction:${operation.jobId}:${operation.interaction}`;
+    case 'comment.like':
+      return `comment.like:${operation.commentId}`;
     case 'follow':
       return `follow:${operation.companySlug}`;
     case 'application.status':
@@ -173,6 +186,9 @@ async function send(operation: OutboxOperation): Promise<void> {
   switch (operation.kind) {
     case 'interaction':
       await setJobInteraction(operation.jobId, operation.interaction, operation.on);
+      return;
+    case 'comment.like':
+      await setCommentLike(operation.commentId, operation.on);
       return;
     case 'follow':
       await setCompanyFollow(operation.companySlug, operation.on);

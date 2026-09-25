@@ -27,6 +27,7 @@ import { mockCompanies } from '../data/mockCompanies.ts';
 import { mockJobs } from '../data/mockJobs.ts';
 import { mockUser } from '../data/mockUser.ts';
 import { BOARDS, boardUrlFor, logoUrlFor, monogramFor, type BoardEntry } from './board-list.ts';
+import { HANDLE_ADJECTIVES, HANDLE_NOUNS } from './handle-words.ts';
 import { SKILLS } from './skills-dictionary.ts';
 
 import { parseLocations } from '../server/src/ingest/normalize/location.ts';
@@ -128,6 +129,29 @@ function skillsSql(): string {
     '  label = excluded.label,',
     '  aliases = excluded.aliases,',
     '  category = excluded.category;',
+  ].join('\n');
+}
+
+// ── handle words (phase 3) ───────────────────────────────────────
+
+/**
+ * Reference data, not fixtures: `generate_handle()` reads this table inside the signup
+ * transaction, so a database without it hands every new account an `anon-<uuid>` handle.
+ * PHASE3.md §2.1 on why the vocabulary is curated rather than generated.
+ */
+function handleWordsSql(): string {
+  const rows = [
+    ...HANDLE_ADJECTIVES.map((word) => `  ('adjective', ${quote(word)})`),
+    ...HANDLE_NOUNS.map((word) => `  ('noun', ${quote(word)})`),
+  ].join(',\n');
+
+  return [
+    '-- Phase 3: the vocabulary every comment pseudonym is drawn from. Read by',
+    '-- generate_handle() during signup, so this is reference data and not a fixture — a',
+    '-- database missing it still works, it just hands out anon-<uuid> handles.',
+    'insert into public.handle_words (kind, word) values',
+    rows,
+    'on conflict (kind, word) do nothing;',
   ].join('\n');
 }
 
@@ -372,6 +396,7 @@ const header = [
 const body = [
   schoolsSql(),
   skillsSql(),
+  handleWordsSql(),
   companiesSql(companies),
   sourcesSql(BOARDS),
   jobsSql(companies),
@@ -388,6 +413,7 @@ writeFileSync(outputPath, `${header}${body}\n`, 'utf8');
 
 console.log(
   `Wrote ${outputPath}\n` +
-    `  ${SKILLS.length} skills, ${companies.length} companies, ${BOARDS.length} job sources, ` +
+    `  ${SKILLS.length} skills, ${HANDLE_ADJECTIVES.length + HANDLE_NOUNS.length} handle words, ` +
+    `${companies.length} companies, ${BOARDS.length} job sources, ` +
     `${mockJobs.length} fixture postings`,
 );

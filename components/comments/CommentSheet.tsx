@@ -23,15 +23,20 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CommentPolicySheet } from '@/components/comments/CommentPolicySheet';
 import { CommentRow } from '@/components/comments/CommentRow';
+import { ReportSheet } from '@/components/comments/ReportSheet';
 import { EmptyState } from '@/components/common/EmptyState';
 import { IconButton } from '@/components/common/IconButton';
+import { Skeleton } from '@/components/common/Skeleton';
+import { CONTENT_POLICY_VERSION } from '@/constants/policy';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { reactionGifs } from '@/data/mockGifs';
-import { useJobComments } from '@/hooks/useComments';
-import type { Job } from '@/types';
+import { useCommentActions, useCommentGate, useJobComments } from '@/hooks/useComments';
+import { ServiceError, ServiceUnavailable } from '@/lib/service';
+import type { CommentGate, Job, ReportReason } from '@/types';
 
 /**
  * Fraction of the screen the sheet covers at rest. Deliberately short of full: the reel
@@ -64,16 +69,32 @@ interface CommentSheetProps {
 /** Which comment the composer is currently answering, if any. */
 interface ReplyTarget {
   id: string;
-  authorName: string;
+  /**
+   * What the banner calls them — a pseudonym, or "your comment". Not a name: there is no name to
+   * hold here, which is the whole of README §3.8's contract.
+   */
+  authorLabel: string;
 }
 
 /**
  * The comment sheet behind a reel's comment action — a Reels-style thread list over the
  * card, with a GIF picker and a composer pinned to the bottom.
  *
- * Nothing here reaches a server: posting appends to the in-memory store, so a comment
- * survives until the app reloads. That's the same bargain every other interaction in
- * Milestone 0 makes.
+ * Phase 3 made all of this real, and three parts of the design show up in this file.
+ *
+ * **The composer knows before you type.** `useCommentGate()` answers whether this account can
+ * comment and why not, so an unverified reader sees a way to verify instead of a text box that
+ * rejects them. §10's rules are enforced in the database; this is the same answer, in advance, so
+ * nobody writes four hundred characters into a dead end.
+ *
+ * **Posting is a foreground write.** Every other action in the app is optimistic-and-queued
+ * (`lib/outbox.ts`), and a comment deliberately is not: the classifier can refuse it, and the
+ * person needs to hear that while they still have the text. So the row appears immediately marked
+ * `pending`, and a failure puts the draft back in the box with the reason. PHASE3.md §5.
+ *
+ * **Replies load when a thread is opened.** The list holds roots; "View 3 replies" fetches. A
+ * posting where one comment attracted a long argument otherwise makes opening this sheet download
+ * the argument.
  *
  * The caller keys this on the job id, so a new posting gets a new instance and the
  * composer starts empty — a half-typed reply aimed at a comment on a different job
@@ -84,8 +105,11 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const { likedCommentIds, toggleCommentLike, addComment, deleteComment } = useCareerDeck();
-  const { threads, total } = useJobComments(job?.id);
+  const { isCommentLiked, toggleCommentLike } = useCareerDeck();
+  const { threads, total, isLoading, hasMore, loadMore, openThread, openThreadIds, closeThread } =
+    useJobComments(job?.id);
+  const { gate, acceptPolicy } = useCommentGate();
+  const { post, isPosting, remove, report } = useCommentActions(job?.id);
 
   const sheetHeight = windowHeight * SHEET_HEIGHT_RATIO;
   const maxSheetHeight = windowHeight * SHEET_MAX_RATIO;
@@ -94,12 +118,16 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
-  const [openThreads, setOpenThreads] = useState<Set<string>>(() => new Set<string>());
+  /** Set when the last attempt was refused. Cleared as soon as the draft changes. */
+  const [postError, setPostError] = useState<string | null>(null);
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const [acceptingPolicy, setAcceptingPolicy] = useState(false);
+  const [reporting, setReporting] = useState<{ id: string; handle: string } | null>(null);
+  const [isReporting, setIsReporting] = useState(false);
 
   const translateY = useSharedValue(sheetHeight);
   const scrollY = useSharedValue(0);
   const keyboard = useAnimatedKeyboard();
-  const liked = new Set(likedCommentIds);
 
   // Slides up once, on mount — the parent unmounts this entirely when it closes.
   useEffect(() => {
@@ -170,44 +198,101 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   }));
 
   const toggleThread = (commentId: string) => {
-    setOpenThreads((current) => {
-      const next = new Set(current);
-      if (next.has(commentId)) next.delete(commentId);
-      else next.add(commentId);
-      return next;
-    });
+    if (openThreadIds.has(commentId)) closeThread(commentId);
+    else openThread(commentId);
   };
 
-  const handleReplyTo = (parentId: string, authorName: string, isYou: boolean, isNested: boolean) => {
-    setReplyTo({ id: parentId, authorName: isYou ? 'your comment' : authorName });
+  const handleReplyTo = (parentId: string, handle: string, isYou: boolean, isNested: boolean) => {
+    setReplyTo({ id: parentId, authorLabel: isYou ? 'your comment' : handle });
     // Answering someone inside a thread names them, the way a reply chain does — the
     // parent row is no longer directly above what you're writing.
-    if (isNested && !isYou) setDraft((current) => (current.length > 0 ? current : `@${authorName} `));
-    setOpenThreads((current) => new Set(current).add(parentId));
+    if (isNested && !isYou) setDraft((current) => (current.length > 0 ? current : `@${handle} `));
+    openThread(parentId);
     setGifOpen(false);
     inputRef.current?.focus();
   };
 
-  const handlePost = () => {
-    if (!job || draft.trim().length === 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    addComment(job.id, draft, replyTo?.id ?? null);
-    setDraft('');
-    setReplyTo(null);
+  /**
+   * Turns a refusal into a sentence the writer can act on.
+   *
+   * The service sends a short machine-readable code precisely so this does not have to match on
+   * prose — and for `rejected` it also sends the classifier's own explanation, which names what to
+   * change and is better than anything that could be written here.
+   */
+  const explain = (error: unknown): string => {
+    if (error instanceof ServiceUnavailable) {
+      return 'Commenting is not available on this build.';
+    }
+    if (error instanceof ServiceError) {
+      switch (error.code) {
+        case 'rejected':
+          return error.message;
+        case 'rate_limited':
+          return 'You have posted a lot in the last hour. Try again later.';
+        case 'not_verified':
+          return 'Verify your account from your profile to comment.';
+        case 'policy_not_accepted':
+          return 'Have a quick read of the comment rules first.';
+        case 'blocked':
+          return 'This reply cannot be delivered.';
+        case 'offline':
+          return 'Could not reach CareerDeck. Your comment is still here — try again.';
+        default:
+          return error.message;
+      }
+    }
+    return 'That did not send. Your comment is still here — try again.';
   };
 
-  const handlePickGif = (gifId: string) => {
+  const submit = async (gifId?: string) => {
     if (!job) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    addComment(job.id, draft, replyTo?.id ?? null, gifId);
+    if (draft.trim().length === 0 && gifId === undefined) return;
+
+    /*
+     * The policy gate, checked here as well as by the database.
+     *
+     * The write path raises 428 for an unread policy, so this is not what makes it true — it is
+     * what stops somebody losing a sentence to a round trip that could only ever have failed.
+     */
+    if (!gate.policyAccepted) {
+      setPolicyOpen(true);
+      return;
+    }
+
+    const body = draft;
+    const parentId = replyTo?.id ?? null;
+
+    // Cleared before the attempt, not after it: the draft belongs in the composer only while it
+    // has not been accepted, and putting it back on failure is what the catch below does.
     setDraft('');
     setReplyTo(null);
     setGifOpen(false);
+    setPostError(null);
+
+    try {
+      await post({ body, parentId, ...(gifId === undefined ? {} : { gifId }) });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // A reply lands inside a thread, so open it — otherwise the writer's own reply is behind a
+      // "View 1 reply" link and reads as having vanished.
+      if (parentId !== null) openThread(parentId);
+    } catch (error) {
+      setDraft(body);
+      if (parentId !== null && replyTo) setReplyTo(replyTo);
+      setPostError(explain(error));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const handlePost = () => void submit();
+
+  const handlePickGif = (gifId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void submit(gifId);
   };
 
   const handleDelete = (commentId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    deleteComment(commentId);
+    remove(commentId);
   };
 
   const handleToggleLike = (commentId: string) => {
@@ -215,9 +300,44 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     toggleCommentLike(commentId);
   };
 
+  const handleAcceptPolicy = async () => {
+    setAcceptingPolicy(true);
+    try {
+      await acceptPolicy(CONTENT_POLICY_VERSION);
+      setPolicyOpen(false);
+      inputRef.current?.focus();
+    } catch {
+      setPostError('Could not save that. Try again.');
+      setPolicyOpen(false);
+    } finally {
+      setAcceptingPolicy(false);
+    }
+  };
+
+  const handleReport = async (reason: ReportReason, detail: string | undefined, blockToo: boolean) => {
+    if (!reporting) return;
+    setIsReporting(true);
+    try {
+      await report({ commentId: reporting.id, reason, detail, blockToo });
+      setReporting(null);
+    } catch {
+      setPostError('Could not send that report. Try again.');
+      setReporting(null);
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
   if (!job) return null;
 
-  const canPost = draft.trim().length > 0;
+  /*
+   * The composer is shown to anybody who *could* comment, including somebody who has not read the
+   * policy yet — tapping send opens the policy rather than being refused, which is one tap towards
+   * commenting instead of a wall. It is hidden only when the account genuinely cannot: unverified,
+   * muted, or banned.
+   */
+  const gateReason = reasonFor(gate);
+  const canPost = draft.trim().length > 0 && !isPosting;
 
   return (
     <Modal visible={visible} animationType="none" transparent onRequestClose={dismiss}>
@@ -246,29 +366,43 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                 contentContainerStyle={styles.list}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}>
-                {threads.length === 0 ? (
+                {isLoading ? (
+                  <View style={styles.loading}>
+                    <Skeleton height={54} borderRadius={radius.lg} />
+                    <Skeleton height={54} borderRadius={radius.lg} />
+                    <Skeleton height={54} borderRadius={radius.lg} />
+                  </View>
+                ) : threads.length === 0 ? (
                   <EmptyState
                     icon="chatbubble-outline"
                     title="No comments yet"
                     message="Ask about the timeline, the interview, anything the posting leaves out."
                   />
                 ) : (
-                  threads.map(({ comment, replies }) => {
-                    const open = openThreads.has(comment.id);
+                  threads.map(({ comment, replies, loadingReplies }) => {
+                    const open = openThreadIds.has(comment.id);
 
                     return (
                       <Fragment key={comment.id}>
                         <CommentRow
                           comment={comment}
-                          liked={liked.has(comment.id)}
+                          liked={isCommentLiked(comment.id)}
                           onDelete={comment.isYou ? () => handleDelete(comment.id) : undefined}
+                          onReport={
+                            comment.isYou
+                              ? undefined
+                              : () => setReporting({ id: comment.id, handle: comment.authorHandle })
+                          }
                           onToggleLike={() => handleToggleLike(comment.id)}
                           onReply={() =>
-                            handleReplyTo(comment.id, comment.authorName, comment.isYou, false)
+                            handleReplyTo(comment.id, comment.authorHandle, comment.isYou, false)
                           }
                         />
 
-                        {replies.length > 0 ? (
+                        {/* The count comes from the comment's own `replyCount`, not from how many
+                            replies happen to be loaded — the link has to say "View 3 replies"
+                            before any of them have been fetched. */}
+                        {comment.replyCount > 0 ? (
                           <Pressable
                             onPress={() => toggleThread(comment.id)}
                             hitSlop={8}
@@ -277,14 +411,16 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                             accessibilityLabel={
                               open
                                 ? 'Hide replies'
-                                : `View ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`
+                                : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`
                             }
                             style={({ pressed }) => [styles.threadToggle, pressed ? styles.pressed : null]}>
                             <View style={styles.threadRule} />
                             <Text style={styles.threadToggleLabel}>
                               {open
-                                ? 'Hide replies'
-                                : `View ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+                                ? loadingReplies
+                                  ? 'Loading replies…'
+                                  : 'Hide replies'
+                                : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`}
                             </Text>
                           </Pressable>
                         ) : null}
@@ -295,13 +431,18 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                                 key={reply.id}
                                 comment={reply}
                                 isReply
-                                liked={liked.has(reply.id)}
+                                liked={isCommentLiked(reply.id)}
                                 onDelete={reply.isYou ? () => handleDelete(reply.id) : undefined}
+                                onReport={
+                                  reply.isYou
+                                    ? undefined
+                                    : () => setReporting({ id: reply.id, handle: reply.authorHandle })
+                                }
                                 onToggleLike={() => handleToggleLike(reply.id)}
                                 // Attaches to the same parent rather than nesting a level
                                 // deeper — see JobComment.
                                 onReply={() =>
-                                  handleReplyTo(comment.id, reply.authorName, reply.isYou, true)
+                                  handleReplyTo(comment.id, reply.authorHandle, reply.isYou, true)
                                 }
                               />
                             ))
@@ -310,14 +451,44 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                     );
                   })
                 )}
+
+                {/* A button rather than `onEndReached`: the sheet's list shares its pan with the
+                    dismiss gesture, and a fetch that fires while somebody is dragging the sheet
+                    closed is work nobody asked for. */}
+                {hasMore ? (
+                  <Pressable
+                    onPress={loadMore}
+                    accessibilityRole="button"
+                    accessibilityLabel="Load older comments"
+                    style={({ pressed }) => [styles.loadMore, pressed ? styles.pressed : null]}>
+                    <Text style={styles.threadToggleLabel}>Older comments</Text>
+                  </Pressable>
+                ) : null}
               </Animated.ScrollView>
             </GestureDetector>
 
             <Animated.View style={[styles.composer, composerStyle]}>
+              {/* Why you cannot write, when you cannot. Above the composer rather than replacing
+                  it, so the thread stays readable — reading is most of what this sheet is for, and
+                  an unverified reader is still a reader. */}
+              {gateReason ? (
+                <View style={styles.gateBanner}>
+                  <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
+                  <Text style={styles.gateText}>{gateReason}</Text>
+                </View>
+              ) : null}
+
+              {postError ? (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle-outline" size={14} color={colors.textOnBrand} />
+                  <Text style={styles.errorText}>{postError}</Text>
+                </View>
+              ) : null}
+
               {replyTo ? (
                 <View style={styles.replyBanner}>
                   <Text style={styles.replyBannerText} numberOfLines={1}>
-                    Replying to {replyTo.authorName}
+                    Replying to {replyTo.authorLabel}
                   </Text>
                   <Pressable
                     onPress={() => setReplyTo(null)}
@@ -348,8 +519,20 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                 <TextInput
                   ref={inputRef}
                   value={draft}
-                  onChangeText={setDraft}
-                  placeholder={replyTo ? 'Write a reply…' : 'Add a comment…'}
+                  onChangeText={(text) => {
+                    setDraft(text);
+                    // The error described the previous attempt. Once the text changes it describes
+                    // nothing, and leaving it up makes a fixed comment look still-broken.
+                    if (postError !== null) setPostError(null);
+                  }}
+                  editable={gateReason === null}
+                  placeholder={
+                    gateReason === null
+                      ? replyTo
+                        ? 'Write a reply…'
+                        : 'Add a comment…'
+                      : 'Commenting is locked'
+                  }
                   placeholderTextColor={colors.textTertiary}
                   style={styles.input}
                   multiline
@@ -359,6 +542,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
                 <Pressable
                   onPress={() => setGifOpen((open) => !open)}
+                  disabled={gateReason !== null}
                   hitSlop={6}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: gifOpen }}
@@ -395,11 +579,88 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
           </Animated.View>
         </GestureDetector>
       </View>
+
+      <CommentPolicySheet
+        visible={policyOpen}
+        busy={acceptingPolicy}
+        onAccept={() => void handleAcceptPolicy()}
+        onClose={() => setPolicyOpen(false)}
+      />
+
+      <ReportSheet
+        visible={reporting !== null}
+        authorHandle={reporting?.handle ?? ''}
+        busy={isReporting}
+        onSubmit={(reason, detail, blockToo) => void handleReport(reason, detail, blockToo)}
+        onClose={() => setReporting(null)}
+      />
     </Modal>
   );
 }
 
+/**
+ * Why this account cannot comment, or null when it can.
+ *
+ * Mirrors what `post_comment()` enforces, in the order it enforces it, and says the *specific*
+ * thing rather than "you cannot comment" — an unverified reader needs a route, a muted one needs a
+ * date, and a rate-limited one needs to know it is temporary. An unread policy is deliberately not
+ * in here: that one is one tap away and the send button handles it.
+ */
+function reasonFor(gate: CommentGate): string | null {
+  if (gate.banned) return 'This account can no longer comment.';
+  if (gate.mutedUntil !== null) {
+    const until = new Date(gate.mutedUntil);
+    return `You cannot comment until ${until.toLocaleDateString()}.`;
+  }
+  if (gate.tier !== 'edu' && gate.tier !== 'identity') {
+    return 'Verify your account from your profile to join the conversation.';
+  }
+  if (gate.remainingHour <= 0) return 'You have posted a lot in the last hour. Try again later.';
+  if (gate.remainingDay <= 0) return 'You have posted a lot today. Try again tomorrow.';
+  return null;
+}
+
 const useStyles = makeStyles((colors) => ({
+  loading: {
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  loadMore: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  gateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundMuted,
+  },
+  gateText: {
+    flex: 1,
+    fontSize: fontSize.caption,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.like,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: fontSize.caption,
+    lineHeight: 16,
+    color: colors.textOnBrand,
+    fontWeight: '600',
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
