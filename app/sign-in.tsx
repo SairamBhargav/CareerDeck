@@ -19,7 +19,7 @@ import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/consta
 import { SignInCancelled, useAuth } from '@/context/AuthContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 
-/** Matches `otp_length` in supabase/config.toml. */
+/** chekcs, Matches `otp_length` in supabase/config.toml. */
 const CODE_LENGTH = 6;
 
 type SignInKind = 'email' | 'code' | 'apple' | 'google' | 'dev';
