@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Pressable, Text, View } from 'react-native';
@@ -7,7 +6,7 @@ import { ScrollPane } from '@/components/common/ScrollPane';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { MIN_SECTORS, SECTORS } from '@/constants/industries';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { makeStyles } from '@/context/ThemeContext';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 /**
@@ -25,13 +24,13 @@ import { useOnboarding } from '@/context/OnboardingContext';
  * chips. The rail in the right gutter is what says there is more, before anyone has to
  * guess.
  *
- * No helper line under the chips. The button carries the count, which says the same thing
- * in the place the eye is already going.
+ * No helper line under the chips, and no checkmark inside a selected one. The button
+ * carries the count, which says the same thing where the eye already is — and a checkmark
+ * would widen the chip it appears in, re-wrapping the whole cluster on every tap.
  */
 export default function IndustriesStep() {
   const router = useRouter();
   const styles = useStyles();
-  const { colors } = useTheme();
   const { industries, toggleIndustry } = useOnboarding();
 
   const picked = industries.length;
@@ -64,9 +63,6 @@ export default function IndustriesStep() {
                   selected ? styles.chipSelected : null,
                   pressed ? styles.pressed : null,
                 ]}>
-                {selected ? (
-                  <Ionicons name="checkmark" size={14} color={colors.accentText} />
-                ) : null}
                 <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>
                   {sector.label}
                 </Text>
@@ -80,18 +76,20 @@ export default function IndustriesStep() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  // Centred so the ragged ends of each row balance instead of trailing off to the right.
+  // With this many chips of this many lengths, left-alignment reads as a broken grid;
+  // centring reads as a cluster, which is what it is.
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm + 2,
+    justifyContent: 'center',
+    gap: spacing.sm,
   },
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: 46,
-    paddingVertical: spacing.md + 1,
-    paddingHorizontal: spacing.lg + 2,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingVertical: spacing.sm + 1,
+    paddingHorizontal: spacing.md + 4,
     borderRadius: radius.pill,
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -102,7 +100,7 @@ const useStyles = makeStyles((colors) => ({
     borderColor: colors.accent,
   },
   chipLabel: {
-    fontSize: fontSize.body,
+    fontSize: fontSize.small + 1,
     fontWeight: '600',
     color: colors.text,
   },

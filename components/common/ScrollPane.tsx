@@ -28,8 +28,12 @@ import { makeStyles } from '@/context/ThemeContext';
  * bar until you touch, and on a region whose whole job is to say "there is more below"
  * that is backwards; and the platform bar appears hard against the screen edge rather
  * than in the content's gutter. This one is quiet but always there while the content
- * overflows, and hides itself the moment it fits — a rail whose thumb fills its track is
- * noise.
+ * overflows, and hides itself the moment it fits.
+ *
+ * There is no drawn track behind the thumb — only the thumb. A full-height line down the
+ * side of a screen is a second edge competing with the real one, and it is redundant:
+ * the thumb's position and length already say where you are and how much there is. What
+ * remains is the smallest mark that answers the question.
  *
  * Everything the rail does is computed on the UI thread from shared values. Nothing here
  * causes a React render while the finger is down.
@@ -130,19 +134,18 @@ const useStyles = makeStyles((colors) => ({
     // Leaves the rail its gutter, so no row ever runs underneath it.
     paddingRight: spacing.lg,
   },
+  // Spans the pane but draws nothing: it is the space the thumb travels in, not a line.
   track: {
     position: 'absolute',
     right: 0,
     top: 2,
     bottom: 2,
     width: RAIL_WIDTH,
-    borderRadius: RAIL_WIDTH,
-    backgroundColor: colors.border,
-    overflow: 'hidden',
   },
   thumb: {
     width: RAIL_WIDTH,
     borderRadius: RAIL_WIDTH,
-    backgroundColor: colors.borderStrong,
+    backgroundColor: colors.textTertiary,
+    opacity: 0.55,
   },
 }));
