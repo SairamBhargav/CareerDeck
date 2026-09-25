@@ -175,9 +175,20 @@ const PROFILE_TOOL: Anthropic.Tool = {
         },
       },
       yearsExperience: { type: ['number', 'null'] },
+      /*
+       * `anyOf`, not `type: ['string', 'null']` + `enum`. The latter is what every other
+       * nullable field on this tool uses, and it is what the strict-mode validator rejects
+       * the moment an `enum` is added to it — a live 400 read "Enum value 'intern' does not
+       * match declared type '['string', 'null']'", which is Anthropic's strict schema
+       * checker refusing to reconcile an array `type` against an `enum` that only covers one
+       * of its branches. Splitting the two branches into their own subschemas is what strict
+       * mode actually validates: a real enum on the string side, and a bare null branch.
+       */
       seniority: {
-        type: ['string', 'null'],
-        enum: ['intern', 'new_grad', 'mid', 'senior', 'staff_plus', null],
+        anyOf: [
+          { type: 'string', enum: ['intern', 'new_grad', 'mid', 'senior', 'staff_plus'] },
+          { type: 'null' },
+        ],
       },
       pageCount: { type: ['integer', 'null'], description: 'Pages in the document.' },
     },

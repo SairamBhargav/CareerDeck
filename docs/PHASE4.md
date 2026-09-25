@@ -410,11 +410,31 @@ anything that could be generated.
   `false`, so the promotion never fired. The partial unique index cannot catch this: *no* default
   satisfies it perfectly. The flag is now read before the update.
 
-**Two things the local stack could not exercise**, both reported as skips rather than passes:
+**A fourth bug, caught the moment a real key was configured** — not by `verify:phase4`, which had
+no key to run against, but by calling `extractResume()` directly against a real PDF. The first call
+came back `400 invalid_request_error`: *"Enum value 'intern' does not match declared type
+'['string', 'null']'"*.
 
-- **The parse itself**, on a deployment with no `ANTHROPIC_API_KEY`. The closing summary says so
-  explicitly rather than claiming the phase proven, because "a real resume parses" is this phase's
-  central claim and SQL alone does not establish it.
+The `seniority` field's schema was `{ type: ['string', 'null'], enum: [...] }` — the same shape
+every other nullable field on the tool uses, except none of the others also carry an `enum`. Under
+`strict: true`, Anthropic's schema validator rejects an `enum` paired with an array `type`: it
+cannot reconcile a five-value string enum against a type declaration that also allows null. The fix
+is `anyOf`, splitting the two branches into their own subschemas — `{type: 'string', enum: [...]}`
+and `{type: 'null'}` — which is what strict mode actually validates.
+
+Once fixed, the extractor read a real two-column resume correctly on the first call: name, email,
+phone and location found, skills properly slugged (`c-plus-plus`, `distributed-systems`), education
+and experience dated, and — the check that matters most — `yearsExperience: null` rather than an
+invented number, because the resume never states a total and the prompt says absence is a valid
+answer.
+
+**Two things the local stack could not exercise until a key existed**, one of which is now proven:
+
+- **The parse itself.** Was reported as a skip on every run with no `ANTHROPIC_API_KEY`, and the
+  closing summary said so explicitly rather than claiming the phase proven — "a real resume
+  parses" is this phase's central claim and SQL alone does not establish it. **Proven** as of the
+  bug above, directly against `assets/resumes/engineering.pdf`; the full route is still blocked by
+  the storage defect below until that stack issue clears.
 - **The storage round trip.** Storage schema migration 72 (`drop-bucketid-objname-index`) replaced
   the plain unique index on `(bucket_id, name)` with one partial on `where not is_versioned`, and
   storage-api v1.72.1 still issues a bare `on conflict (name, bucket_id)`. A partial index cannot be
