@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import {
@@ -12,6 +12,7 @@ import {
   uploadResume,
 } from '@/lib/api';
 import { isServiceConfigured } from '@/lib/service';
+import type { UploadedResume } from '@/lib/api';
 import type { MatchScore, Resume, ResumeSeniority } from '@/types';
 
 /**
@@ -52,7 +53,14 @@ export interface ResumeState {
   /** Whether this build can parse at all — the API service is optional. `lib/service.ts`. */
   canParse: boolean;
 
-  upload: (input: { name: string; bytes: ArrayBuffer; focus?: string }) => Promise<Resume>;
+  /**
+   * Stores a resume, or hands back the identical one already on the shelf.
+   *
+   * `reused: true` means these exact bytes were already here, so the caller must **not** go on
+   * to `parse` — the existing row already carries a finished profile, and re-parsing it is a
+   * model call spent to learn something the database has. See `uploadResume`.
+   */
+  upload: (input: { name: string; bytes: ArrayBuffer; focus?: string }) => Promise<UploadedResume>;
   parse: (resumeId: string) => Promise<void>;
   confirm: (
     resumeId: string,
@@ -170,6 +178,57 @@ export function useResumes(userId: string | null): ResumeState {
     remove: useCallback(async (id: string) => { await removeMutation.mutateAsync(id); }, [removeMutation]),
     openUrl: useCallback((id: string) => fetchResumeUrl(id), []),
   };
+}
+
+/**
+ * Signed URLs for the resumes on the shelf, so a bubble can show the actual document.
+ *
+ * ── Why this shares the viewer's cache ────────────────────────────────────────
+ *
+ * The key is `['resume', 'url', id]` — byte-identical to the one `ResumeViewerModal` uses, and
+ * that is the whole trick. The shelf and the viewer are two views of one document, so they
+ * should cost one signing between them: the shelf warms the URL, the viewer opens on a cache
+ * hit instead of a spinner, and `pii_access_log` gets one row rather than two.
+ *
+ * ── Why logging these reads is correct, not noise ─────────────────────────────
+ *
+ * §3.9 asks that every read of a resume be logged, and a thumbnail *is* a read — the document
+ * is on screen, with a name and a phone number on it. A preview that skipped the log would be
+ * exactly the hole PHASE4.md §4.2 refused to leave when it denied the bucket `select` to its
+ * own owner. So the rows are the honest cost of showing the file, and the 4-minute window on
+ * the query is what keeps it one row per viewing rather than one per render.
+ *
+ * Failure is silent by design: no URL means the bubble falls back to its glyph. A shelf that
+ * error-states because a preview could not be signed would be worse than one without previews,
+ * and the API service is optional in the first place (`lib/service.ts`).
+ */
+export function useResumePreviewUrls(
+  resumes: Resume[],
+  enabled = true,
+): Map<string, string> {
+  const queries = useQueries({
+    queries: resumes.map((resume) => ({
+      queryKey: ['resume', 'url', resume.id] as const,
+      queryFn: () => fetchResumeUrl(resume.id),
+      enabled: enabled && isServiceConfigured(),
+      // Four minutes against a URL signed for five, matching the viewer exactly. Drifting
+      // these apart is what would double the signings.
+      staleTime: 4 * 60_000,
+      gcTime: 4 * 60_000,
+      retry: false,
+    })),
+  });
+
+  return useMemo(() => {
+    const map = new Map<string, string>();
+    resumes.forEach((resume, index) => {
+      const url = queries[index]?.data;
+      if (typeof url === 'string') map.set(resume.id, url);
+    });
+    return map;
+    // `queries` is a new array every render; the URLs inside it are what matter, so the
+    // dependency is their joined value rather than the wrapper.
+  }, [resumes, queries.map((query) => query.data).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**

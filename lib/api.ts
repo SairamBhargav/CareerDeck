@@ -23,6 +23,8 @@
  *    implementation detail of the SQL, and phase 5 gets to change it.
  */
 
+import * as Crypto from 'expo-crypto';
+
 import { reportError } from '@/lib/observability';
 import { supabase } from '@/lib/supabase';
 import { serviceFetch } from '@/lib/service';
@@ -1106,6 +1108,38 @@ export async function fetchResumes(): Promise<Resume[]> {
   return ((data ?? []) as ResumeCardRow[]).map(toResume);
 }
 
+/**
+ * SHA-256 of the file, hex, via `expo-crypto`.
+ *
+ * Not `globalThis.crypto.subtle` — Hermes has no `crypto` global at all, which is the same
+ * footgun `randomObjectId` below was built on and the reason every upload used to throw.
+ */
+async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The resume this account already holds for these exact bytes, if any.
+ *
+ * `resumes.content_hash` and its index have existed since phase 4 — the index comment reads
+ * "the re-upload check" — but nothing ever computed a hash, so every row carried null and the
+ * index stayed empty. This is the read it was built for.
+ *
+ * The composite comes back with every field null when nothing matched, which is not an error
+ * and not a row: `id` is the field to test, because it is the one the database always fills
+ * for a real resume.
+ */
+export async function findResumeByContentHash(contentHash: string): Promise<Resume | null> {
+  const { data, error } = await supabase.rpc('resume_by_content_hash', {
+    p_content_hash: contentHash,
+  });
+  if (error) throw error;
+
+  const row = data as ResumeCardRow | null;
+  return row?.id ? toResume(row) : null;
+}
+
 interface MatchScoreRow {
   job_id: string;
   score: number;
@@ -1218,27 +1252,72 @@ export async function deleteResume(resumeId: string): Promise<boolean> {
   return data === true;
 }
 
-/** 128 bits of hex. Enough to name an object; this is not a security boundary. */
+/**
+ * 128 bits of hex. Enough to name an object; this is not a security boundary.
+ *
+ * Uses `expo-crypto`, not `globalThis.crypto`. Hermes ships no `crypto` global, so the
+ * previous `globalThis.crypto.getRandomValues` threw "Cannot read property
+ * 'getRandomValues' of undefined" on the *first* line of every upload, before the picked
+ * bytes ever reached the network. It presented as a storage failure and was not one:
+ * nothing was ever sent, which is why both the bucket and `resumes` stayed empty.
+ *
+ * `getRandomBytes` is the same call `lib/supabase.ts` already makes for the session key.
+ */
 function randomObjectId(): string {
-  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  const bytes = Crypto.getRandomBytes(16);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** What an upload settled into, and whether it cost anything to get there. */
+export interface UploadedResume {
+  resume: Resume;
+  /**
+   * True when these exact bytes were already on the shelf, so nothing was uploaded, no row
+   * was written, and — the part that matters — no parse is owed. The caller must not call
+   * `parseResume` on a reused resume; that is the whole saving.
+   */
+  reused: boolean;
+}
+
 /**
- * Uploads the bytes, then registers them.
+ * Hashes the bytes, reuses an identical resume if there is one, and otherwise uploads and
+ * registers them.
  *
  * The object key is `{user_id}/{uuid}.pdf` because the storage policy matches on the first path
  * segment — Supabase storage has no owner column, so the owner has to be in the key, and the
  * table's own check constraint says the same thing a second time.
+ *
+ * ── Why the hash comes first ───────────────────────────────────────────────────
+ *
+ * A parse is a model reading rendered pages: ~4,800 input and ~650 output tokens on
+ * `claude-opus-5` for a one-page resume, about four cents. Re-uploading the same file is not
+ * a rare accident — it is what happens when somebody edits one bullet elsewhere and sends the
+ * whole document again, or taps Add twice because the first tap did not visibly do anything.
+ *
+ * So the hash is computed and looked up *before* the upload, not after: a duplicate then
+ * costs one small RPC instead of an object, a row and a model call. `register_resume` still
+ * receives the hash so the next duplicate resolves the same way.
+ *
+ * This is a per-user check by construction — `resume_by_content_hash` filters on
+ * `auth.uid()` — so it never reveals that some other account holds the same document.
  */
 export async function uploadResume(input: {
   name: string;
   bytes: ArrayBuffer;
   focus?: string;
-}): Promise<Resume> {
+}): Promise<UploadedResume> {
   const { data: session } = await supabase.auth.getUser();
   const userId = session.user?.id;
   if (!userId) throw new Error('Not signed in.');
+
+  const contentHash = await sha256Hex(input.bytes);
+
+  /*
+   * A failed lookup must not block the upload. The hash is an optimisation, and a user whose
+   * dedup check errored should still get their resume stored — they just pay for the parse.
+   */
+  const existing = await findResumeByContentHash(contentHash).catch(() => null);
+  if (existing) return { resume: existing, reused: true };
 
   const objectName = `${userId}/${randomObjectId()}.pdf`;
 
@@ -1249,12 +1328,14 @@ export async function uploadResume(input: {
   if (upload.error) throw upload.error;
 
   try {
-    return await registerResume({
+    const resume = await registerResume({
       name: input.name,
       storagePath: objectName,
       fileSize: input.bytes.byteLength,
+      contentHash,
       focus: input.focus,
     });
+    return { resume, reused: false };
   } catch (error) {
     /*
      * The row is what makes the object reachable, so a failed registration leaves an object

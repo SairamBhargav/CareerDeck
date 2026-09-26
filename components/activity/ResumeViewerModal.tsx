@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { IconButton } from '@/components/common/IconButton';
+import { MarqueeText } from '@/components/common/MarqueeText';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -16,6 +18,14 @@ interface ResumeViewerModalProps {
   visible: boolean;
   onClose: () => void;
   onSetDefault: () => void;
+  /**
+   * Opens the parse-confirmation screen for this resume.
+   *
+   * Without this the screen was reachable only in the seconds after an upload, so a user who
+   * wanted to correct a skill the parser got wrong — the entire point of that screen, and of
+   * `confirmed_fields` as accuracy data — had to delete the resume and upload it again.
+   */
+  onReviewParse: () => void;
   /** Asks the API service for a signed URL. Every call writes a `pii_access_log` row. */
   onRequestUrl: (resumeId: string) => Promise<string>;
 }
@@ -42,6 +52,7 @@ export function ResumeViewerModal({
   visible,
   onClose,
   onSetDefault,
+  onReviewParse,
   onRequestUrl,
 }: ResumeViewerModalProps) {
   const insets = useSafeAreaInsets();
@@ -78,12 +89,29 @@ export function ResumeViewerModal({
       : 'That file could not be opened right now.'
     : null;
 
-  if (!resume) return null;
+  /*
+   * Nothing renders unless this is actually open.
+   *
+   * `Modal visible={false}` is supposed to be enough, and for ordinary views it is — but a
+   * WebView is a native view with its own window, and one left mounted behind a dismissed
+   * modal can keep drawing over whatever is on screen. The symptom is a PDF visible from
+   * places that are not the resume viewer, which is a privacy problem and not just a glitch:
+   * the document on screen is somebody's resume, with their phone number on it.
+   *
+   * So visibility gates the tree, not just the Modal. Unmounting also tears the WebView down
+   * on close, which means a reopen re-reads the signed URL instead of resurrecting a page
+   * whose five-minute URL may since have expired.
+   */
+  if (!resume || !visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close resume" />
-
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      {/*
+        No backdrop. The sheet below is `position: absolute` on all four edges, so it covers
+        the screen completely and the backdrop that used to sit under it was unreachable —
+        there is no "outside" to tap. An opaque modal says that honestly; a transparent one
+        with a dead Pressable behind it only looked like a sheet.
+      */}
       <View style={[styles.sheet, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.topBar}>
           <View style={styles.grabber} />
@@ -98,9 +126,11 @@ export function ResumeViewerModal({
 
         <View style={styles.fileBar}>
           <View style={styles.fileInfo}>
-            <Text style={styles.fileName} numberOfLines={1}>
-              {resume.name}
-            </Text>
+            {/*
+              Travels rather than truncates. This is the full file name, and the version marker
+              that distinguishes two near-identical resumes is usually the part an ellipsis ate.
+            */}
+            <MarqueeText style={styles.fileName}>{resume.name}</MarqueeText>
             <Text style={styles.fileMeta}>Edited {formatPostedAt(resume.updatedAt).toLowerCase()}</Text>
           </View>
 
@@ -112,6 +142,25 @@ export function ResumeViewerModal({
             style={styles.defaultButton}
           />
         </View>
+
+        {/*
+          The way to the parse. Only for a resume that has one — there is nothing to review on
+          a document that failed or has not been read, and the shelf already says which.
+        */}
+        {resume.parseStatus === 'parsed' ? (
+          <Pressable
+            onPress={onReviewParse}
+            accessibilityRole="button"
+            accessibilityLabel="Review what we read from this resume"
+            style={({ pressed }) => [styles.reviewRow, pressed ? styles.reviewPressed : null]}>
+            <Ionicons name="sparkles-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.reviewLabel}>
+              {resume.profile.confirmedAt ? 'What we read from this' : 'Check what we read'}
+            </Text>
+            <Text style={styles.reviewAction}>Review</Text>
+            <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+          </Pressable>
+        ) : null}
 
         <View style={[styles.pdfWrap, { paddingBottom: insets.bottom }]}>
           {error !== null ? (
@@ -139,10 +188,6 @@ export function ResumeViewerModal({
 }
 
 const useStyles = makeStyles((colors) => ({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheet: {
     position: 'absolute',
     top: 0,
@@ -152,6 +197,9 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
+    // Clips the WebView to the sheet. Without it the document's own square corners draw
+    // straight over the rounded ones, which is the other half of "the PDF is outside its box".
+    overflow: 'hidden',
   },
   topBar: {
     height: 28,
@@ -178,6 +226,28 @@ const useStyles = makeStyles((colors) => ({
     paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: screenPadding,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  reviewPressed: {
+    backgroundColor: colors.backgroundMuted,
+  },
+  reviewLabel: {
+    flex: 1,
+    fontSize: fontSize.small,
+    color: colors.textSecondary,
+  },
+  reviewAction: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.text,
   },
   pdfState: {
     flex: 1,
@@ -211,6 +281,7 @@ const useStyles = makeStyles((colors) => ({
   pdfWrap: {
     flex: 1,
     backgroundColor: colors.backgroundMuted,
+    overflow: 'hidden',
   },
   pdf: {
     flex: 1,

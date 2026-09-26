@@ -4,8 +4,10 @@ import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { Skeleton } from '@/components/common/Skeleton';
 import { RESUME_BUBBLE_WIDTH, ResumeBubble } from '@/components/activity/ResumeBubble';
+import { FREE_RESUME_LIMIT } from '@/constants/limits';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { useResumePreviewUrls } from '@/hooks/useResumes';
 import type { Resume } from '@/types';
 
 const SKELETON_COUNT = 3;
@@ -37,9 +39,35 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
   const styles = useStyles();
   const { colors } = useTheme();
 
+  /*
+   * The limit is the database's (`register_resume` raises CD011 past it); this is only so the
+   * tile can say so first. A user who has filled the shelf should see that, not discover it
+   * after picking a file.
+   */
+  const full = resumes.length >= FREE_RESUME_LIMIT;
+  const addDisabled = busy || full;
+
+  /*
+   * Signed URLs for the page previews. Shares the viewer's cache, so warming these also makes
+   * tapping a resume open instantly instead of on a spinner — see `useResumePreviewUrls`.
+   * Skipped entirely while the shelf is still loading, so a skeleton does not sign anything.
+   */
+  const previewUrls = useResumePreviewUrls(resumes, !loading);
+
   return (
     <View>
-      <SectionHeader title="Your Resumes" />
+      <View style={styles.header}>
+        <SectionHeader title="Your Resumes" />
+        {/*
+          Shown only once there is something to count, so a first-run shelf is not an
+          announcement about a limit the user has nowhere near reached.
+        */}
+        {resumes.length > 0 ? (
+          <Text style={[styles.count, full ? styles.countFull : null]}>
+            {resumes.length} of {FREE_RESUME_LIMIT}
+          </Text>
+        ) : null}
+      </View>
 
       {loading ? (
         <View style={styles.skeletonRow}>
@@ -69,26 +97,41 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
                * default" is now a partial unique index, so the row itself is the answer. §3.9.
                */
               isDefault={item.isDefault}
+              previewUri={previewUrls.get(item.id)}
               onPress={() => onView(item.id)}
             />
           )}
           ListFooterComponent={
             <Pressable
-              onPress={busy ? undefined : onAdd}
-              disabled={busy}
+              onPress={addDisabled ? undefined : onAdd}
+              disabled={addDisabled}
               accessibilityRole="button"
-              accessibilityLabel="Add a resume"
+              accessibilityLabel={
+                full ? 'Shelf full. Delete a resume to add another.' : 'Add a resume'
+              }
+              accessibilityState={{ disabled: addDisabled }}
               style={({ pressed }) => [
                 styles.add,
                 pressed ? styles.addPressed : null,
-                busy ? styles.addBusy : null,
+                addDisabled ? styles.addBusy : null,
               ]}>
               {busy ? (
                 <ActivityIndicator color={colors.textTertiary} />
               ) : (
-                <Ionicons name="add" size={28} color={colors.textSecondary} />
+                <Ionicons
+                  name={full ? 'lock-closed-outline' : 'add'}
+                  size={full ? 22 : 28}
+                  color={colors.textSecondary}
+                />
               )}
-              <Text style={styles.addLabel}>{busy ? 'Working…' : 'Add resume'}</Text>
+              <Text style={styles.addLabel}>
+                {busy ? 'Working…' : full ? 'Shelf full' : 'Add resume'}
+              </Text>
+              {/*
+                The way out, on the tile itself. "Shelf full" on its own is a dead end; the
+                next action is deleting one, and this is where the user is looking.
+              */}
+              {full && !busy ? <Text style={styles.addHint}>Delete one to add another</Text> : null}
             </Pressable>
           }
         />
@@ -98,6 +141,25 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
 }
 
 const useStyles = makeStyles((colors) => ({
+  /*
+   * SectionHeader carries its own bottom margin, so the row pulls the count up onto the
+   * same baseline rather than adding a second line of vertical rhythm.
+   */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  count: {
+    fontSize: fontSize.small,
+    fontWeight: '600',
+    color: colors.textTertiary,
+    paddingTop: 2,
+  },
+  countFull: {
+    color: colors.textSecondary,
+  },
   // Cancels Activity's screen padding so bubbles can run off both edges, then the
   // content inset below puts the first one back in line with the heading.
   bleed: {
@@ -137,5 +199,12 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.caption,
     fontWeight: '600',
     color: colors.textSecondary,
+  },
+  addHint: {
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.sm,
+    lineHeight: 14,
   },
 }));

@@ -124,10 +124,23 @@ export default function ActivityScreen() {
         bytes[index] = binary.charCodeAt(index);
       }
 
-      const created = await upload({
+      const { resume: created, reused } = await upload({
         name: (file.name ?? 'Resume').replace(/\.pdf$/i, '').slice(0, 120) || 'Resume',
         bytes: bytes.buffer,
       });
+
+      /*
+       * Already on the shelf, byte for byte — so straight to the review screen without a
+       * parse. Re-reading a document the database already holds a profile for is a model call
+       * for an answer we have, and it is the single easiest cost in the app to avoid.
+       *
+       * Still navigate: the user asked to add this resume, and the honest response is to show
+       * them the one they already have rather than appear to do nothing.
+       */
+      if (reused) {
+        router.push({ pathname: '/resume-review', params: { id: created.id } });
+        return;
+      }
 
       if (!canParse) {
         // No API service on this build, so there is nothing to review. The file is stored and
@@ -338,6 +351,14 @@ export default function ActivityScreen() {
         onClose={() => setViewingResumeId(null)}
         onSetDefault={() => {
           if (viewingResume) void setDefault(viewingResume.id);
+        }}
+        onReviewParse={() => {
+          if (!viewingResume) return;
+          // Closed first: the review screen is a route, and leaving a full-screen modal over
+          // it would put the PDF on top of the thing the user just asked to see.
+          const id = viewingResume.id;
+          setViewingResumeId(null);
+          router.push({ pathname: '/resume-review', params: { id } });
         }}
         onRequestUrl={openUrl}
       />

@@ -2351,6 +2351,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      resume_by_content_hash: {
+        Args: { p_content_hash: string }
+        Returns: Database["public"]["CompositeTypes"]["resume_card"]
+        SetofOptions: {
+          from: "*"
+          to: "resume_card"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       resume_for_service: {
         Args: { p_resume_id: string }
         Returns: {
