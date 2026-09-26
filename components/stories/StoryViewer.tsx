@@ -30,10 +30,15 @@ interface StoryViewerProps {
   groups: StoryGroup[];
   startGroupIndex: number;
   startItemIndex: number;
-  companyById: Map<string, Company>;
+  /**
+   * Keyed by **slug**, not uuid. A `NewsItem.companyId` has held a slug since phase 1
+   * (see `useNewsFeed`), and follows key on the slug too — so the one map serves both.
+   */
+  companyBySlug: Map<string, Company>;
   onClose: () => void;
   onSeen: (newsId: string) => void;
-  onToggleFollow: (companyId: string) => void;
+  /** Takes the company **slug** — `toggleFollow` keys on the slug, not the uuid. */
+  onToggleFollow: (companySlug: string) => void;
 }
 
 /**
@@ -50,7 +55,7 @@ export function StoryViewer({
   groups,
   startGroupIndex,
   startItemIndex,
-  companyById,
+  companyBySlug,
   onClose,
   onSeen,
   onToggleFollow,
@@ -81,7 +86,7 @@ export function StoryViewer({
   const group = groups[groupIndex];
   const itemIndex = group ? itemIndexByGroup[group.id] ?? 0 : 0;
   const item = group?.items[itemIndex];
-  const company = item?.companyId ? companyById.get(item.companyId) : undefined;
+  const company = item?.companyId ? companyBySlug.get(item.companyId) : undefined;
 
   // The timer stops for anything that takes attention off the story itself.
   const paused = articleOpen || held || swiping;
@@ -244,7 +249,7 @@ export function StoryViewer({
             company={company}
             onClose={() => setArticleOpen(false)}
             onToggleFollow={() => {
-              if (company) onToggleFollow(company.id);
+              if (company) onToggleFollow(company.slug);
             }}
           />
         ) : null}

@@ -13,7 +13,8 @@ interface SuggestedCompaniesProps {
   companies: Company[];
   loading: boolean;
   onPressCompany: (company: Company) => void;
-  onToggleFollow: (companyId: string) => void;
+  /** Takes the company **slug** — `toggleFollow` keys on the slug, not the uuid. */
+  onToggleFollow: (companySlug: string) => void;
   onSeeAll: () => void;
 }
 
@@ -49,7 +50,7 @@ export function SuggestedCompanies({
             <CompanySuggestionCard
               company={item}
               onPress={() => onPressCompany(item)}
-              onToggleFollow={() => onToggleFollow(item.id)}
+              onToggleFollow={() => onToggleFollow(item.slug)}
             />
           )}
         />

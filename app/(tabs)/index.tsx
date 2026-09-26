@@ -182,7 +182,7 @@ export default function HomeScreen() {
           groups={storySession.groups}
           startGroupIndex={storySession.groupIndex}
           startItemIndex={storySession.itemIndex}
-          companyById={directory.bySlug}
+          companyBySlug={directory.bySlug}
           onClose={() => setStorySession(null)}
           onSeen={markNewsSeen}
           onToggleFollow={toggleFollow}
