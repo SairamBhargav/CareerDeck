@@ -141,6 +141,48 @@ export const env = {
    * handler refuses to be.
    */
   revenuecatWebhookAuth: optional('REVENUECAT_WEBHOOK_AUTH'),
+  /**
+   * RevenueCat's *secret* REST key. Optional and used for one thing: deleting the RevenueCat
+   * customer when an account is purged (§13.2). Without it the purge still completes and logs
+   * that the billing vendor still holds an anonymous customer record.
+   */
+  revenuecatSecretKey: optional('REVENUECAT_SECRET_KEY'),
+
+  // ── phase 7: news, delivery, privacy ────────────────────────────────────────
+
+  /** The summarizer. Haiku: three sentences from a title and a blurb is not a hard task. PHASE7.md §2.3. */
+  newsModel: process.env.NEWS_MODEL ?? 'claude-haiku-4-5',
+
+  /**
+   * Where Expo's push API lives. Overridable only so `verify:phase7` can point the real sender at
+   * a local stand-in; there is no reason to change it in any deployed environment.
+   */
+  expoPushUrl: process.env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push',
+  /** Required only if "Enhanced push security" is switched on for the Expo project. */
+  expoAccessToken: optional('EXPO_ACCESS_TOKEN'),
+
+  /**
+   * This service's public origin, for links that leave it — the digest's unsubscribe link above
+   * all. Without it a digest cannot carry a working unsubscribe link, and a commercial email
+   * without one is a CAN-SPAM violation, so the digest refuses to send.
+   */
+  publicApiUrl: optional('PUBLIC_API_URL'),
+  digestFromEmail: process.env.DIGEST_FROM_EMAIL ?? 'CareerDeck <digest@example.invalid>',
+  /** CAN-SPAM requires a valid physical postal address in every commercial email. */
+  digestPostalAddress: optional('DIGEST_POSTAL_ADDRESS'),
+  /**
+   * Signs unsubscribe links. Rotating it only invalidates links in emails already sent, which is
+   * harmless — the next digest carries fresh ones. The development fallback exists so the flow is
+   * testable; production refuses to sign with it.
+   */
+  unsubscribeSecret: process.env.UNSUBSCRIBE_SECRET ?? 'careerdeck-dev-unsubscribe',
+
+  /**
+   * Whether this process runs the background jobs (push delivery, alerts, news, digest, purges).
+   * On by default in production and off in development, so a laptop running `server:dev` against
+   * the hosted project does not start summarizing news and paging real users. PHASE7.md §5.
+   */
+  backgroundJobs: (process.env.BACKGROUND_JOBS ?? (nodeEnv === 'production' ? 'on' : 'off')) === 'on',
 } as const;
 
 /**
@@ -175,4 +217,18 @@ export const capabilities = {
    */
   autoApply: env.anthropicApiKey !== undefined,
   billingWebhook: env.revenuecatWebhookAuth !== undefined,
+
+  /** Phase 7. News needs the model for summaries; push needs nothing but a network. */
+  news: env.anthropicApiKey !== undefined,
+  push: true,
+  /**
+   * The digest needs a provider, a public origin for the unsubscribe link, and — in production —
+   * a postal address and a real signing secret. Any missing piece and it does not send at all.
+   */
+  digest:
+    env.resendApiKey !== undefined &&
+    env.publicApiUrl !== undefined &&
+    (!env.isProduction ||
+      (env.digestPostalAddress !== undefined && env.unsubscribeSecret !== 'careerdeck-dev-unsubscribe')),
+  backgroundJobs: env.backgroundJobs,
 } as const;

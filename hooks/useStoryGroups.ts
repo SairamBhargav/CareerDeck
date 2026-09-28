@@ -52,7 +52,7 @@ export function useStoryGroups(): StoryGroup[] {
         logoColor: company?.logoColor,
         isIndustry,
         items,
-        hasUnseen: items.some((item) => !seen.has(item.id)),
+        hasUnseen: items.some((item) => !item.seen && !seen.has(item.id)),
       };
     });
 
@@ -63,6 +63,7 @@ export function useStoryGroups(): StoryGroup[] {
 /** Where a ring should open: its first unwatched story, or the start if it's all been seen. */
 export function firstUnseenIndex(group: StoryGroup, seenNewsIds: string[]): number {
   const seen = new Set(seenNewsIds);
-  const index = group.items.findIndex((item) => !seen.has(item.id));
+  // `item.seen` is the durable answer from `news_seen`; the set is this session's, not yet flushed.
+  const index = group.items.findIndex((item) => !item.seen && !seen.has(item.id));
   return index === -1 ? 0 : index;
 }

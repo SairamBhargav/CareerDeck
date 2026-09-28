@@ -671,8 +671,9 @@ async function main() {
    * is listed here rather than the check being loosened: a later phase's route is still one
    * somebody decided on, and the next unexplained one should still fail.
    */
-  const expected = ['/auto-apply', '/comments', '/moderation', '/resumes', '/verify', '/webhooks'];
-  check('phase 5 added no routes — the set is exactly what phases 3, 4 and 6 left',
+  // Phase 7 added `/me` (the data export) and `/unsubscribe` (the digest's opt-out).
+  const expected = ['/auto-apply', '/comments', '/me', '/moderation', '/resumes', '/unsubscribe', '/verify', '/webhooks'];
+  check('phase 5 added no routes — the set is exactly what phases 3, 4, 6 and 7 left',
     JSON.stringify([...new Set(registrations)].sort()) === JSON.stringify(expected),
     [...new Set(registrations)].sort().join(', '));
 }

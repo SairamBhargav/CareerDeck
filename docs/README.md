@@ -1561,11 +1561,24 @@ Measured: `npm run verify:phase6` passes 106 checks with one live draft on `clau
 **$0.011 per draft**. Real store purchases wait on a RevenueCat project and a development build —
 everything short of that, including the webhook's state machine, is proven with fixture events.
 
-### Phase 7 — News, notifications, polish (2–3 weeks)
+### Phase 7 — News, notifications, polish (2–3 weeks) — **built**
 `news_sources` + RSS ingestion + summarization + the link-out change from §9.
 Push notifications (job alerts, deadlines, replies). Digest emails.
 CCPA deletion and export jobs. Load testing.
 **Exit:** launch-ready.
+
+Design and outcome: [PHASE7.md](./PHASE7.md). Built and verified locally (`verify:phase7`, 78
+checks, one live news ingest at ~$0.002 per story; `load-test` inside budget at 50 readers).
+The departures from this document, each argued there:
+
+- **Background work runs inside the API service**, with every job claimed in the database, not in
+  a queue or a cron. §5.
+- **The export is returned in the response**, not parked behind a signed URL. §4.2.
+- **The tombstone account is created at runtime**, through the Auth admin API. §4.3.
+
+The load test found a phase 6 problem: `my_credits()` row-locked on every read. It's fixed in
+the phase 7 migration (p95 301 → 117 ms). "Launch-ready" now waits only on owner actions:
+migrations pushed, EAS project, digest sender, a privacy policy, a staging load run (PHASE7.md §8).
 
 **~20–26 weeks.** The estimates assume the schema decisions in §3 hold; a change to §0
 decision 1, 2, or 5 reshapes several phases.

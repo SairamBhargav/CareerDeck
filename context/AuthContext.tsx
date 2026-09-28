@@ -14,6 +14,7 @@ import {
 import { Platform } from 'react-native';
 
 import { identifyUser, reportError } from '@/lib/observability';
+import { disablePush } from '@/lib/push';
 import { queryClient } from '@/lib/query-client';
 import { supabase } from '@/lib/supabase';
 
@@ -193,6 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Before the session goes: unregistering is a signed-in call, and a device that keeps this
+    // account's push token would keep receiving its notifications after someone else signs in.
+    await disablePush();
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     // Everything cached is scoped to the account that just left. Clearing after the

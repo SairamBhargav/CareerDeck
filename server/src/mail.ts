@@ -89,7 +89,7 @@ function body(email: EduCodeEmail): { subject: string; html: string; text: strin
   return { subject, html, text };
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     switch (char) {
       case '&': return '&amp;';

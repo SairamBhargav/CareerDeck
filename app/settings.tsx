@@ -1,4 +1,6 @@
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
@@ -11,6 +13,10 @@ import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
 import { useVerification } from '@/hooks/useVerification';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
+import { Toggle } from '@/components/common/Toggle';
+import { useNotificationSettings } from '@/hooks/useNotificationSettings';
+import { exportMyData, requestAccountDeletion } from '@/lib/api';
+import { ServiceError } from '@/lib/service';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
@@ -31,12 +37,63 @@ export default function SettingsScreen() {
   const { scheme } = useTheme();
   const isDark = scheme === 'dark';
 
-  const { weeklyGoal, setWeeklyGoal, autoApplyCredits, credits } = useCareerDeck();
+  const { weeklyGoal, setWeeklyGoal, autoApplyCredits, credits, retryProfile } = useCareerDeck();
   const { session, userId, signOut } = useAuth();
   const goal = useWeeklyGoal();
   const verification = useVerification(userId);
 
   const [editingGoal, setEditingGoal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const notify = useNotificationSettings(userId);
+
+  /*
+   * §13.2's export. The service builds the whole bundle in one request; it is written to the
+   * cache and handed to the share sheet, so the reader chooses where it goes — Files, email,
+   * AirDrop — and CareerDeck keeps no copy of it anywhere.
+   */
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const bundle = await exportMyData();
+      const path = `${FileSystem.cacheDirectory}careerdeck-export-${new Date().toISOString().slice(0, 10)}.json`;
+      await FileSystem.writeAsStringAsync(path, JSON.stringify(bundle, null, 2));
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: 'Your CareerDeck data' });
+      } else {
+        Alert.alert('Export ready', `Saved to ${path}`);
+      }
+    } catch (error) {
+      Alert.alert(
+        'Could not export',
+        error instanceof ServiceError && error.code === 'rate_limited'
+          ? 'You can export once a day. Try again tomorrow.'
+          : error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Deliberately two steps and deliberately plain about what happens and what does not.
+  const confirmDelete = () =>
+    Alert.alert(
+      'Delete your account?',
+      'Your account is switched off now and permanently deleted in 30 days. Sign back in before then to change your mind. Your comments stay up with your pseudonym removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            requestAccountDeletion()
+              .then(() => retryProfile())
+              .catch((error: unknown) =>
+                Alert.alert('Could not delete', error instanceof Error ? error.message : String(error)),
+              );
+          },
+        },
+      ],
+    );
 
   // Signing out is cheap to undo but expensive to do by accident — you lose whatever
   // was mid-edit and have to wait on an email for a new code.
@@ -92,12 +149,37 @@ export default function SettingsScreen() {
     },
   ];
 
-  // Honest as "Soon": a toggle that flips is a promise that something gets delivered,
-  // and there is no notification pipeline behind it. It was local state before, which
-  // looked like it worked and didn't.
+  /*
+   * Real since phase 7 — these were "Soon" because a toggle that flips is a promise that something
+   * gets delivered. The device switch is permission plus a token; the rest are account-wide and
+   * read by the server when it decides whether to send.
+   */
+  const pushHint =
+    notify.lastOutcome === 'no_project' ? 'Needs an EAS project id — see SETUP.md'
+      : notify.lastOutcome === 'denied' ? "Allow notifications in your phone's Settings"
+        : notify.lastOutcome === 'failed' ? 'Could not register this device'
+          : notify.devicePush ? 'On for this device' : 'Off for this device';
+  const pref = (channel: 'push' | 'email', name: string, value: boolean, label: string) => (
+    <Toggle value={value} onValueChange={(v) => notify.setPref(channel, name, v)} accessibilityLabel={label} />
+  );
   const notificationRows: RowGroupItem[] = [
-    { key: 'push', icon: 'notifications-outline', label: 'Push notifications', soon: true },
-    { key: 'goal-reminder', icon: 'alarm-outline', label: 'Weekly goal reminder', soon: true },
+    {
+      key: 'push',
+      icon: 'notifications-outline',
+      label: 'Push notifications',
+      hint: pushHint,
+      right: (
+        <Toggle
+          value={notify.devicePush}
+          onValueChange={(v) => void notify.setDevicePush(v)}
+          accessibilityLabel="Push notifications on this device"
+        />
+      ),
+    },
+    { key: 'job-alerts', icon: 'briefcase-outline', label: 'New roles at companies you follow', hint: 'At most once a day', right: pref('push', 'job_alerts', notify.prefs.push.job_alerts, 'Job alerts') },
+    { key: 'deadlines', icon: 'alarm-outline', label: 'Saved roles closing soon', right: pref('push', 'deadlines', notify.prefs.push.deadlines, 'Deadline reminders') },
+    { key: 'replies', icon: 'chatbubble-outline', label: 'Replies to your comments', right: pref('push', 'replies', notify.prefs.push.replies, 'Replies') },
+    { key: 'digest', icon: 'mail-outline', label: 'Weekly email digest', hint: 'Mondays, only when there is news', right: pref('email', 'digest', notify.prefs.email.digest, 'Weekly digest') },
   ];
 
   const accountRows: RowGroupItem[] = [
@@ -132,6 +214,17 @@ export default function SettingsScreen() {
     { key: 'terms', icon: 'document-text-outline', label: 'Terms of Service', soon: true },
   ];
 
+  const privacyRows: RowGroupItem[] = [
+    {
+      key: 'export',
+      icon: 'download-outline',
+      label: exporting ? 'Preparing your data…' : 'Export my data',
+      hint: 'Everything CareerDeck holds about you, as a file',
+      onPress: exporting ? undefined : () => void exportData(),
+    },
+    { key: 'delete', icon: 'trash-outline', label: 'Delete account', hint: '30 days to change your mind', onPress: confirmDelete },
+  ];
+
   const sessionRows: RowGroupItem[] = [
     {
       key: 'sign-out',
@@ -146,6 +239,7 @@ export default function SettingsScreen() {
     { key: 'appearance', title: 'Appearance', rows: appearanceRows },
     { key: 'notifications', title: 'Notifications', rows: notificationRows },
     { key: 'account', title: 'Account', rows: accountRows },
+    { key: 'privacy', title: 'Your data', rows: privacyRows },
     { key: 'support', title: 'Support', rows: supportRows },
     { key: 'session', rows: sessionRows },
   ];

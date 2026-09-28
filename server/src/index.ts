@@ -7,6 +7,9 @@ import { logger } from 'hono/logger';
 import { adminClient, requireAuth, type AuthedUser } from './auth.ts';
 import { autoApply } from './autoapply.ts';
 import { billingWebhooks } from './billing.ts';
+import { startBackgroundJobs } from './jobs.ts';
+import { privacy } from './privacy.ts';
+import { unsubscribe } from './unsubscribe.ts';
 import { comments } from './comments.ts';
 import { capabilities, env } from './env.ts';
 import { moderation, reviewPage } from './moderation/review.ts';
@@ -40,6 +43,10 @@ import { verification, webhooks } from './verification.ts';
  * *not* here — every ledger rule turned out to be expressible as a Postgres function, so the
  * balance, the daily grant and the streak bonus are RPCs the app calls directly. PHASE6.md §3.
  *
+ * Phase 7 adds `/v1/me/export` (the sealed contact fields again), `/unsubscribe`, and the
+ * background jobs in `jobs.ts` — push delivery, alerts, news, the digest and account purges —
+ * which run in this process when `BACKGROUND_JOBS` is on. PHASE7.md §5.
+ *
  * Everything else the app does still goes straight to Supabase, because RLS still expresses it.
  * Phase 1's decision B is unchanged for *jobs*: the feed is not here, and the seam that would
  * move it is still `lib/api.ts`.
@@ -70,6 +77,9 @@ app.route('/webhooks', webhooks);
 
 /** §8's entitlement source. Also outside `/v1`: RevenueCat authenticates with its own secret. */
 app.route('/webhooks', billingWebhooks);
+
+/** Phase 7: the digest's opt-out. Outside `/v1` — the person clicking is reading email, not signed in. */
+app.route('/unsubscribe', unsubscribe);
 
 /** §10's review queue, for a human with a browser. Its own auth is inside the page. */
 app.route('/moderation', reviewPage);
@@ -116,6 +126,7 @@ v1.route('/verify', verification);
 v1.route('/moderation', moderation);
 v1.route('/resumes', resumes);
 v1.route('/auto-apply', autoApply);
+v1.route('/me', privacy);
 
 app.onError((error, c) => {
   if (error instanceof HTTPException) {
@@ -137,6 +148,7 @@ app.onError((error, c) => {
 
 serve({ fetch: app.fetch, port: env.port }, (info) => {
   console.log(`careerdeck-api listening on http://localhost:${info.port}`);
+  if (env.backgroundJobs) startBackgroundJobs();
   if (!capabilities.classifier) {
     /*
      * Loud, every boot. A deployment without a classifier still accepts comments — they post as

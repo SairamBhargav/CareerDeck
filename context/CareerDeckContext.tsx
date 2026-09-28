@@ -16,7 +16,7 @@ import { useCredits, type CreditsState } from '@/hooks/useCredits';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useProfile } from '@/hooks/useProfile';
 import { useViewerState } from '@/hooks/useViewerState';
-import { claimStreakBonus as claimStreakBonusRpc, type StreakAward } from '@/lib/api';
+import { claimStreakBonus as claimStreakBonusRpc, markNewsSeenRemote, type StreakAward } from '@/lib/api';
 import { setBillingUser } from '@/lib/billing';
 import { setImpressionsEnabled } from '@/lib/impressions';
 import { reportError } from '@/lib/observability';
@@ -210,10 +210,25 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
    */
   const isInitialLoading = isProfileLoading || viewer.isLoading || tracker.isLoading;
 
+  /*
+   * Phase 7: watched stories are `news_seen` rows, so a ring stays quiet after a restart (§3.11).
+   * Ids are buffered and flushed a couple of seconds after the last one, because this fires on
+   * every story frame and a write per frame would be one RPC per swipe.
+   */
+  const pendingSeen = useRef<Set<string>>(new Set());
+  const seenFlush = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Returning the same Set when nothing changes matters here: this fires from an effect
   // on every story frame, and a fresh Set each time would re-render the whole tree.
   const markNewsSeen = useCallback((newsId: string) => {
     setSeenNewsIds((current) => (current.has(newsId) ? current : new Set(current).add(newsId)));
+    pendingSeen.current.add(newsId);
+    if (seenFlush.current) clearTimeout(seenFlush.current);
+    seenFlush.current = setTimeout(() => {
+      const ids = [...pendingSeen.current];
+      pendingSeen.current = new Set();
+      markNewsSeenRemote(ids).catch((error) => reportError(error, { where: 'markNewsSeen' }));
+    }, 2_000);
   }, []);
 
   const setWeeklyGoal = useCallback(

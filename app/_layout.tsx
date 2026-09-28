@@ -1,17 +1,18 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { StartupError } from '@/components/common/StartupError';
+import { AccountGate } from '@/components/common/AccountGate';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { CareerDeckProvider, useCareerDeck } from '@/context/CareerDeckContext';
 import { OnboardingProvider } from '@/context/OnboardingContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { initObservability, withObservability } from '@/lib/observability';
+import { onNotificationTap, refreshPushRegistration } from '@/lib/push';
 import { queryClient } from '@/lib/query-client';
 
 // Both before first paint: the splash has to already be held when the tree mounts, or
@@ -68,11 +69,23 @@ function RootNavigator() {
     if (isReady) void SplashScreen.hideAsync();
   }, [isReady]);
 
+  /*
+   * Phase 7. A tapped push opens what it is about, and a signed-in launch quietly refreshes this
+   * device's push registration if permission was already granted — tokens rotate. Neither prompts.
+   */
+  const router = useRouter();
+  const canRoute = isReady && isSignedIn && !profileError;
+  useEffect(() => {
+    if (!canRoute) return;
+    void refreshPushRegistration().catch(() => undefined);
+    return onNotificationTap((url) => router.push(url as never));
+  }, [canRoute, router]);
+
   if (!isReady) return null;
 
   if (isSignedIn && profileError) {
     return (
-      <StartupError
+      <AccountGate
         message={profileError.message}
         onRetry={retryProfile}
         onSignOut={() => void signOut()}

@@ -1,3 +1,4 @@
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useCallback } from 'react';
 import { Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -40,7 +41,13 @@ interface StoryArticleSheetProps {
 }
 
 /**
- * The "Read more" popup: the full article, over the story it came from. Reachable the
+ * The "Read more" popup, over the story it came from.
+ *
+ * Phase 7 turned this into §9's link-out. It used to render the full article; with real feeds that
+ * would be redisplaying a publisher's work as ours. It now shows the publisher's headline with
+ * their name on it, CareerDeck's own two or three sentences — labelled as ours — and a button that
+ * opens the real article at the publisher, in the in-app browser.
+ * Reachable the
  * two ways the gesture implies — drag the sheet itself down, or scroll the article back
  * past its own top — plus a tap on the backdrop above it.
  */
@@ -136,17 +143,28 @@ export function StoryArticleSheet({ item, company, onClose, onToggleFollow }: St
 
               <Text style={styles.headline}>{item.headline}</Text>
 
-              {item.body.map((paragraph, index) => (
+              <Text style={styles.meta}>From {item.publisher}</Text>
+
+              {item.summary.map((sentence, index) => (
                 <Text key={index} style={styles.paragraph}>
-                  {paragraph}
+                  {sentence}
                 </Text>
               ))}
+              <Text style={styles.meta}>Summary by CareerDeck. Read the full story at the source.</Text>
+
+              <View style={styles.actions}>
+                <PrimaryButton
+                  label={`Read at ${item.publisher}`}
+                  onPress={() => void WebBrowser.openBrowserAsync(item.url)}
+                  accessibilityHint="Opens the original article in the browser."
+                />
+              </View>
 
               {company ? (
-                <View style={styles.actions}>
+                <View>
                   <PrimaryButton
                     label={company.isFollowing ? 'Following' : `Follow ${company.name}`}
-                    variant={company.isFollowing ? 'secondary' : 'primary'}
+                    variant={company.isFollowing ? 'ghost' : 'secondary'}
                     onPress={onToggleFollow}
                   />
                 </View>

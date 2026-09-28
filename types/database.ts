@@ -610,6 +610,106 @@ export type Database = {
           },
         ]
       }
+      data_exports: {
+        Row: {
+          bytes: number | null
+          completed_at: string | null
+          id: string
+          requested_at: string
+          user_id: string
+        }
+        Insert: {
+          bytes?: number | null
+          completed_at?: string | null
+          id?: string
+          requested_at?: string
+          user_id: string
+        }
+        Update: {
+          bytes?: number | null
+          completed_at?: string | null
+          id?: string
+          requested_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_exports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deletion_requests: {
+        Row: {
+          cancelled_at: string | null
+          completed_at: string | null
+          id: string
+          purge_after: string
+          purge_detail: Json | null
+          requested_at: string
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          id?: string
+          purge_after?: string
+          purge_detail?: Json | null
+          requested_at?: string
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          id?: string
+          purge_after?: string
+          purge_detail?: Json | null
+          requested_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      digest_sends: {
+        Row: {
+          claimed_at: string
+          error: string | null
+          provider_id: string | null
+          sent_at: string | null
+          status: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          claimed_at?: string
+          error?: string | null
+          provider_id?: string | null
+          sent_at?: string | null
+          status?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          claimed_at?: string
+          error?: string | null
+          provider_id?: string | null
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "digest_sends_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entitlements: {
         Row: {
           expires_at: string | null
@@ -1329,6 +1429,223 @@ export type Database = {
           },
         ]
       }
+      news_items: {
+        Row: {
+          accent_color: string | null
+          category: string
+          company_id: string | null
+          cost_usd: number | null
+          created_at: string
+          headline: string
+          id: string
+          image_url: string | null
+          ingested_at: string
+          model: string | null
+          prompt_version: string | null
+          published_at: string
+          publisher: string
+          relevance_score: number | null
+          source_id: string | null
+          status: string
+          subtext: string | null
+          summary: string[]
+          tag: string
+          tokens_in: number | null
+          tokens_out: number | null
+          topic: string
+          url: string
+          url_hash: string
+        }
+        Insert: {
+          accent_color?: string | null
+          category: string
+          company_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          headline: string
+          id?: string
+          image_url?: string | null
+          ingested_at?: string
+          model?: string | null
+          prompt_version?: string | null
+          published_at: string
+          publisher: string
+          relevance_score?: number | null
+          source_id?: string | null
+          status?: string
+          subtext?: string | null
+          summary?: string[]
+          tag: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          topic?: string
+          url: string
+          url_hash: string
+        }
+        Update: {
+          accent_color?: string | null
+          category?: string
+          company_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          headline?: string
+          id?: string
+          image_url?: string | null
+          ingested_at?: string
+          model?: string | null
+          prompt_version?: string | null
+          published_at?: string
+          publisher?: string
+          relevance_score?: number | null
+          source_id?: string | null
+          status?: string
+          subtext?: string | null
+          summary?: string[]
+          tag?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          topic?: string
+          url?: string
+          url_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "news_items_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "news_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_seen: {
+        Row: {
+          news_item_id: string
+          seen_at: string
+          user_id: string
+        }
+        Insert: {
+          news_item_id: string
+          seen_at?: string
+          user_id: string
+        }
+        Update: {
+          news_item_id?: string
+          seen_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_seen_news_item_id_fkey"
+            columns: ["news_item_id"]
+            isOneToOne: false
+            referencedRelation: "news_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "news_seen_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      news_sources: {
+        Row: {
+          category: string
+          company_id: string | null
+          company_slug: string | null
+          consecutive_failures: number
+          created_at: string
+          enabled: boolean
+          etag: string | null
+          id: string
+          kind: string
+          last_fetched_at: string | null
+          last_success_at: string | null
+          name: string
+          notes: string | null
+          publisher: string
+          url: string
+        }
+        Insert: {
+          category: string
+          company_id?: string | null
+          company_slug?: string | null
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          etag?: string | null
+          id?: string
+          kind?: string
+          last_fetched_at?: string | null
+          last_success_at?: string | null
+          name: string
+          notes?: string | null
+          publisher: string
+          url: string
+        }
+        Update: {
+          category?: string
+          company_id?: string | null
+          company_slug?: string | null
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          etag?: string | null
+          id?: string
+          kind?: string
+          last_fetched_at?: string | null
+          last_success_at?: string | null
+          name?: string
+          notes?: string | null
+          publisher?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "news_sources_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_state: {
+        Row: {
+          last_job_alert_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          last_job_alert_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          last_job_alert_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_id: string | null
@@ -1337,6 +1654,8 @@ export type Database = {
           id: string
           kind: Database["public"]["Enums"]["notification_kind"]
           payload: Json
+          push_state: string
+          pushed_at: string | null
           read_at: string | null
           subject_id: string | null
           subject_type: string | null
@@ -1350,6 +1669,8 @@ export type Database = {
           id?: string
           kind: Database["public"]["Enums"]["notification_kind"]
           payload?: Json
+          push_state?: string
+          pushed_at?: string | null
           read_at?: string | null
           subject_id?: string | null
           subject_type?: string | null
@@ -1363,6 +1684,8 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["notification_kind"]
           payload?: Json
+          push_state?: string
+          pushed_at?: string | null
           read_at?: string | null
           subject_id?: string | null
           subject_type?: string | null
@@ -1531,6 +1854,108 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_deliveries: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: number
+          notification_id: string | null
+          receipt_checked_at: string | null
+          receipt_error: string | null
+          receipt_status: string | null
+          status: string
+          ticket_id: string | null
+          token_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: never
+          notification_id?: string | null
+          receipt_checked_at?: string | null
+          receipt_error?: string | null
+          receipt_status?: string | null
+          status: string
+          ticket_id?: string | null
+          token_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: never
+          notification_id?: string | null
+          receipt_checked_at?: string | null
+          receipt_error?: string | null
+          receipt_status?: string | null
+          status?: string
+          ticket_id?: string | null
+          token_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_deliveries_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_deliveries_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_deliveries_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "push_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          disabled_at: string | null
+          disabled_reason: string | null
+          id: string
+          last_seen_at: string
+          platform: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          disabled_at?: string | null
+          disabled_reason?: string | null
+          id?: string
+          last_seen_at?: string
+          platform: string
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          disabled_at?: string | null
+          disabled_reason?: string | null
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1901,6 +2326,29 @@ export type Database = {
           },
           {
             foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_accounts: {
+        Row: {
+          role: string
+          user_id: string
+        }
+        Insert: {
+          role: string
+          user_id: string
+        }
+        Update: {
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_accounts_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "profiles"
@@ -2293,6 +2741,13 @@ export type Database = {
           strike_id: string
         }[]
       }
+      begin_account_purge: {
+        Args: { p_force?: boolean; p_user_id: string }
+        Returns: {
+          bucket: string
+          path: string
+        }[]
+      }
       build_feed_session: {
         Args: {
           p_experiment?: string
@@ -2302,6 +2757,7 @@ export type Database = {
         }
         Returns: string
       }
+      cancel_account_deletion: { Args: never; Returns: boolean }
       candidate_pool: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {
@@ -2312,6 +2768,26 @@ export type Database = {
       claim_daily_grant: {
         Args: { p_created_at: string; p_user_id: string }
         Returns: number
+      }
+      claim_digest_batch: {
+        Args: { p_limit?: number; p_week_start: string }
+        Returns: Database["public"]["CompositeTypes"]["digest_job"][]
+        SetofOptions: {
+          from: "*"
+          to: "digest_job"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_push_batch: {
+        Args: { p_limit?: number }
+        Returns: Database["public"]["CompositeTypes"]["push_job"][]
+        SetofOptions: {
+          from: "*"
+          to: "push_job"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       claim_streak_bonus: {
         Args: { p_week_start: string }
@@ -2360,6 +2836,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      complete_account_purge: {
+        Args: { p_user_id: string }
+        Returns: undefined
       }
       complete_auto_apply: {
         Args: { p_applied_on?: string; p_run_id: string }
@@ -2411,6 +2891,7 @@ export type Database = {
         Args: { p_keep_months?: number }
         Returns: number
       }
+      due_account_purges: { Args: { p_limit?: number }; Returns: string[] }
       encode_cursor: {
         Args: { p_id: string; p_value: string }
         Returns: string
@@ -2432,6 +2913,7 @@ export type Database = {
         Returns: number
       }
       explain_feed_rank: { Args: { p_job_id: string }; Returns: Json }
+      export_account: { Args: { p_user_id: string }; Returns: Json }
       fail_auto_apply: {
         Args: {
           p_cost_usd?: number
@@ -2474,7 +2956,12 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      generate_deadline_reminders: {
+        Args: { p_within_days?: number }
+        Returns: number
+      }
       generate_handle: { Args: never; Returns: string }
+      generate_job_alerts: { Args: { p_max_users?: number }; Returns: number }
       grant_period_at: {
         Args: { p_at: string; p_created_at: string }
         Returns: number
@@ -2526,6 +3013,7 @@ export type Database = {
         }
         Returns: number
       }
+      mark_news_seen: { Args: { p_ids: string[] }; Returns: number }
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: number }
       match_scores: {
         Args: { p_job_ids: string[] }
@@ -2574,6 +3062,16 @@ export type Database = {
           strike_severity: number
         }[]
       }
+      my_account_status: {
+        Args: never
+        Returns: Database["public"]["CompositeTypes"]["account_status"]
+        SetofOptions: {
+          from: "*"
+          to: "account_status"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       my_credits: {
         Args: never
         Returns: Database["public"]["CompositeTypes"]["credit_summary"]
@@ -2593,6 +3091,20 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      news_feed: {
+        Args: { p_days?: number; p_limit?: number }
+        Returns: Database["public"]["CompositeTypes"]["news_card"][]
+        SetofOptions: {
+          from: "*"
+          to: "news_card"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      notification_pref: {
+        Args: { p_channel: string; p_key: string; p_prefs: Json }
+        Returns: boolean
       }
       notify_moderation: {
         Args: {
@@ -2676,6 +3188,19 @@ export type Database = {
       prune_match_scores: { Args: { p_keep_days?: number }; Returns: number }
       prune_notifications: { Args: { p_keep_days?: number }; Returns: number }
       prune_pii_access_log: { Args: { p_keep_days?: number }; Returns: number }
+      prune_push_deliveries: { Args: { p_keep_days?: number }; Returns: number }
+      push_pref_key: {
+        Args: { p_kind: Database["public"]["Enums"]["notification_kind"] }
+        Returns: string
+      }
+      push_receipts_due: {
+        Args: { p_limit?: number }
+        Returns: {
+          delivery_id: number
+          ticket_id: string
+          token_id: string
+        }[]
+      }
       rank_score: {
         Args: {
           p_affinity: number
@@ -2708,6 +3233,20 @@ export type Database = {
       recency_score: { Args: { p_posted_at: string }; Returns: number }
       reconcile_comment_counts: { Args: never; Returns: number }
       reconcile_follower_counts: { Args: never; Returns: number }
+      record_digest_result: {
+        Args: {
+          p_error?: string
+          p_provider_id?: string
+          p_status: string
+          p_user_id: string
+          p_week_start: string
+        }
+        Returns: undefined
+      }
+      record_export_size: {
+        Args: { p_bytes: number; p_user_id: string }
+        Returns: undefined
+      }
       record_identity_verification: {
         Args: {
           p_identifier_hash?: string
@@ -2719,10 +3258,16 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["verification_tier"]
       }
+      record_push_receipts: { Args: { p_receipts: Json }; Returns: number }
+      record_push_results: { Args: { p_results: Json }; Returns: number }
       refresh_open_job_counts: { Args: never; Returns: number }
       refund_auto_apply: {
         Args: { p_run: Database["public"]["Tables"]["auto_apply_runs"]["Row"] }
         Returns: undefined
+      }
+      register_push_token: {
+        Args: { p_platform: string; p_token: string }
+        Returns: string
       }
       register_resume: {
         Args: {
@@ -2748,6 +3293,16 @@ export type Database = {
           p_target?: Database["public"]["Enums"]["report_target"]
         }
         Returns: string
+      }
+      request_account_deletion: {
+        Args: never
+        Returns: Database["public"]["CompositeTypes"]["account_status"]
+        SetofOptions: {
+          from: "*"
+          to: "account_status"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       resolve_report: {
         Args: {
@@ -2866,6 +3421,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      set_notification_pref: {
+        Args: {
+          p_channel: string
+          p_key: string
+          p_user_id: string
+          p_value: boolean
+        }
+        Returns: Json
+      }
       set_parse_status: {
         Args: {
           p_error?: string
@@ -2916,6 +3480,7 @@ export type Database = {
         Args: { p_sep: string; p_values: string[] }
         Returns: string
       }
+      unregister_push_token: { Args: { p_token: string }; Returns: boolean }
       urgency_score: { Args: { p_closes_at: string }; Returns: number }
       viewer_plan: {
         Args: { p_user_id: string }
@@ -3018,6 +3583,10 @@ export type Database = {
       verification_tier: "none" | "email" | "edu" | "identity"
     }
     CompositeTypes: {
+      account_status: {
+        deletion_requested_at: string | null
+        purge_after: string | null
+      }
       auto_apply_start: {
         run_id: string | null
         status: Database["public"]["Enums"]["auto_apply_status"] | null
@@ -3076,6 +3645,12 @@ export type Database = {
         next_grant_at: string | null
         granted_now: number | null
       }
+      digest_job: {
+        user_id: string | null
+        email: string | null
+        first_name: string | null
+        content: Json | null
+      }
       job_card: {
         id: string | null
         company_id: string | null
@@ -3108,6 +3683,32 @@ export type Database = {
         dedup_group_id: string | null
         page_cursor: string | null
         rank: number | null
+      }
+      news_card: {
+        id: string | null
+        category: string | null
+        company_slug: string | null
+        company_name: string | null
+        url: string | null
+        publisher: string | null
+        tag: string | null
+        headline: string | null
+        subtext: string | null
+        summary: string[] | null
+        topic: string | null
+        accent_color: string | null
+        published_at: string | null
+        seen: boolean | null
+      }
+      push_job: {
+        notification_id: string | null
+        user_id: string | null
+        kind: Database["public"]["Enums"]["notification_kind"] | null
+        subject_type: string | null
+        subject_id: string | null
+        payload: Json | null
+        token_ids: string[] | null
+        tokens: string[] | null
       }
       resume_card: {
         id: string | null

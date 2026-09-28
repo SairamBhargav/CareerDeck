@@ -41,7 +41,14 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-apple-authentication",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "color": "#7B5CFA"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

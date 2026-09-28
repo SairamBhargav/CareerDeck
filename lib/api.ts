@@ -42,6 +42,7 @@ import type {
   JobComment,
   LocationType,
   MatchScore,
+  NewsItem,
   NotificationKind,
   ReportReason,
   Resume,
@@ -1374,6 +1375,119 @@ export async function fetchResumeUrl(resumeId: string): Promise<string> {
  */
 export async function parseResume(resumeId: string): Promise<void> {
   await serviceFetch(`/v1/resumes/${resumeId}/parse`, { method: 'POST', timeoutMs: 120_000 });
+}
+
+/* ── news, push, privacy — phase 7 ────────────────────────────────────────────── */
+
+type NewsCardRow = Database['public']['CompositeTypes']['news_card'];
+
+/** The stories row: the last two weeks of published stories, with this reader's seen state. */
+export async function fetchNews(): Promise<NewsItem[]> {
+  const { data, error } = await supabase.rpc('news_feed', { p_days: 14, p_limit: 120 });
+  if (error) throw error;
+  return ((data ?? []) as NewsCardRow[]).map((row) => ({
+    id: row.id!,
+    category: row.category === 'company' ? 'company' : 'industry',
+    companyId: row.company_slug ?? undefined,
+    companyName: row.company_name ?? undefined,
+    accentColor: row.accent_color ?? '#EAF1F6',
+    tag: row.tag ?? '',
+    headline: row.headline ?? '',
+    subtext: row.subtext ?? '',
+    summary: row.summary ?? [],
+    topic: (row.topic ?? 'other') as NewsItem['topic'],
+    url: row.url ?? '',
+    publisher: row.publisher ?? '',
+    publishedAt: row.published_at ?? new Date().toISOString(),
+    seen: row.seen === true,
+  }));
+}
+
+/** Batched and idempotent — `news_seen` is one-way. */
+export async function markNewsSeenRemote(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase.rpc('mark_news_seen', { p_ids: ids });
+  if (error) throw error;
+}
+
+export async function registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void> {
+  const { error } = await supabase.rpc('register_push_token', { p_token: token, p_platform: platform });
+  if (error) throw error;
+}
+
+export async function unregisterPushToken(token: string): Promise<void> {
+  const { error } = await supabase.rpc('unregister_push_token', { p_token: token });
+  if (error) throw error;
+}
+
+/**
+ * Preference shape for `user_preferences.notification_prefs`. An absent key means on — the server
+ * reads it the same way (`notification_pref()`).
+ */
+export interface NotificationPrefs {
+  push: { replies: boolean; job_alerts: boolean; deadlines: boolean; account: boolean };
+  email: { digest: boolean };
+}
+
+export function normalizePrefs(raw: unknown): NotificationPrefs {
+  const r = (raw ?? {}) as { push?: Record<string, unknown>; email?: Record<string, unknown> };
+  const on = (v: unknown) => v !== false;
+  return {
+    push: {
+      replies: on(r.push?.replies),
+      job_alerts: on(r.push?.job_alerts),
+      deadlines: on(r.push?.deadlines),
+      account: on(r.push?.account),
+    },
+    email: { digest: on(r.email?.digest) },
+  };
+}
+
+export async function fetchNotificationPrefs(userId: string): Promise<NotificationPrefs> {
+  const { data, error } = await supabase
+    .from('user_preferences').select('notification_prefs').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return normalizePrefs(data?.notification_prefs);
+}
+
+export async function saveNotificationPrefs(userId: string, prefs: NotificationPrefs): Promise<void> {
+  const { error } = await supabase
+    .from('user_preferences')
+    .update({ notification_prefs: prefs as unknown as Database['public']['Tables']['user_preferences']['Update']['notification_prefs'] })
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export interface AccountStatus {
+  deletionRequestedAt: string | null;
+  purgeAfter: string | null;
+}
+
+/** Answerable while the profile itself is hidden by a pending deletion. */
+export async function fetchAccountStatus(): Promise<AccountStatus> {
+  const { data, error } = await supabase.rpc('my_account_status');
+  if (error) throw error;
+  const row = data as Database['public']['CompositeTypes']['account_status'];
+  return { deletionRequestedAt: row?.deletion_requested_at ?? null, purgeAfter: row?.purge_after ?? null };
+}
+
+/** §13.2: disables the account now, purges it in 30 days unless cancelled. */
+export async function requestAccountDeletion(): Promise<AccountStatus> {
+  const { data, error } = await supabase.rpc('request_account_deletion');
+  if (error) throw error;
+  const row = data as Database['public']['CompositeTypes']['account_status'];
+  return { deletionRequestedAt: row?.deletion_requested_at ?? null, purgeAfter: row?.purge_after ?? null };
+}
+
+export async function cancelAccountDeletion(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('cancel_account_deletion');
+  if (error) throw error;
+  return data === true;
+}
+
+/** §13.2's export bundle, as the JSON document the service returns. Rate-limited to one a day. */
+export async function exportMyData(): Promise<unknown> {
+  return serviceFetch<unknown>('/v1/me/export', { method: 'POST', timeoutMs: 60_000 });
 }
 
 /* ── credits, plans and Auto Apply — phase 6 ──────────────────────────────────
