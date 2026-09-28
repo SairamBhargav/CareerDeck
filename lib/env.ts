@@ -20,6 +20,19 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 export const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
 
 /**
+ * RevenueCat's public SDK keys, one per store — phase 6, §8.
+ *
+ * Public by design, like the Supabase anon key: they identify the app to RevenueCat and can
+ * start a purchase, and nothing they unlock is trusted. What a purchase *grants* arrives at
+ * `server/` by webhook and is written by a function the app cannot call.
+ *
+ * Unset, the paywall says subscriptions are not available on this build, and everything else —
+ * including the free plan's daily Auto Apply — works.
+ */
+export const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || undefined;
+export const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || undefined;
+
+/**
  * The API service — phase 3's one new piece of configuration, and deliberately optional.
  *
  * Reads still go to Postgres (PHASE1.md decision B), and phase 2's writes still go through RLS.

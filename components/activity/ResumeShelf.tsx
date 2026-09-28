@@ -4,8 +4,8 @@ import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { Skeleton } from '@/components/common/Skeleton';
 import { RESUME_BUBBLE_WIDTH, ResumeBubble } from '@/components/activity/ResumeBubble';
-import { FREE_RESUME_LIMIT } from '@/constants/limits';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useResumePreviewUrls } from '@/hooks/useResumes';
 import type { Resume } from '@/types';
@@ -38,13 +38,16 @@ interface ResumeShelfProps {
 export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShelfProps) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { credits } = useCareerDeck();
 
   /*
    * The limit is the database's (`register_resume` raises CD011 past it); this is only so the
    * tile can say so first. A user who has filled the shelf should see that, not discover it
-   * after picking a file.
+   * after picking a file. Phase 6 made it the plan's: `plans.resume_limit`, read with the
+   * balance, so a subscriber's shelf grows the moment the webhook lands.
    */
-  const full = resumes.length >= FREE_RESUME_LIMIT;
+  const limit = credits.resumeLimit;
+  const full = resumes.length >= limit;
   const addDisabled = busy || full;
 
   /*
@@ -64,7 +67,7 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
         */}
         {resumes.length > 0 ? (
           <Text style={[styles.count, full ? styles.countFull : null]}>
-            {resumes.length} of {FREE_RESUME_LIMIT}
+            {resumes.length} of {limit}
           </Text>
         ) : null}
       </View>

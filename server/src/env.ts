@@ -121,6 +121,26 @@ export const env = {
    * the layout and the rotation path it leaves room for.
    */
   resumeEncryptionKey: optional('RESUME_ENCRYPTION_KEY'),
+
+  // ── auto apply (§6) and billing (§8) ─────────────────────────────────────────
+
+  /**
+   * The drafter's model. Sonnet 5 by default, and unlike the two above this one was chosen on
+   * purpose: drafting is text in and text out with no PDF to read, it is §14's largest variable
+   * cost, and `cost_usd` is logged per run so the choice can be revisited with numbers rather
+   * than defended without them. PHASE6.md §5.4.
+   */
+  autoApplyModel: process.env.AUTO_APPLY_MODEL ?? 'claude-sonnet-5',
+  autoApplyTimeoutMs: integer('AUTO_APPLY_TIMEOUT_MS', 60_000),
+
+  /**
+   * The value RevenueCat sends in the webhook's `Authorization` header. RevenueCat does not sign
+   * its webhooks — it echoes a static header configured in its dashboard — so this is a shared
+   * secret compared in constant time. Unset, the webhook refuses every delivery: an
+   * unauthenticated endpoint that grants a paid plan is the billing twin of the one Persona's
+   * handler refuses to be.
+   */
+  revenuecatWebhookAuth: optional('REVENUECAT_WEBHOOK_AUTH'),
 } as const;
 
 /**
@@ -148,4 +168,11 @@ export const capabilities = {
    * fields phase 6 will want are missing.
    */
   resumeEncryption: env.resumeEncryptionKey !== undefined,
+
+  /**
+   * Phase 6. Drafting needs the model. It does not strictly need the encryption key — without
+   * one a draft still arrives, with name, email and phone left for the reader to type.
+   */
+  autoApply: env.anthropicApiKey !== undefined,
+  billingWebhook: env.revenuecatWebhookAuth !== undefined,
 } as const;

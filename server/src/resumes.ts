@@ -84,7 +84,7 @@ async function ownedResume(resumeId: string, userId: string): Promise<ServiceRes
 }
 
 /** One `pii_access_log` row. Never throws — a failed log must not fail the request it describes. */
-async function logAccess(input: {
+export async function logAccess(input: {
   actorType: 'user' | 'service' | 'staff';
   actorId: string | null;
   subject: string;

@@ -6,6 +6,11 @@
  * the kind of thing that only settles once real users are hitting it, so nothing else
  * in the app hard-codes any of it.
  *
+ * Phase 6 moved the authority server-side: `AUTO_APPLY_ECONOMY` below now mirrors the `free`
+ * row of the `plans` table, which is what the ledger actually enforces. It stays here because
+ * the goal sheet's copy and `streakBonusFor`'s quote are rendered before any network answer,
+ * and a quote is allowed to be a copy. Change a number in `plans` and change it here.
+ *
  * The economy is deliberately small. The tracker is self-reported, so a determined
  * user can always claim a week they didn't work — the defence isn't detection, it's
  * that three extra Auto Applies aren't worth the lie.

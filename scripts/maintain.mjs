@@ -60,6 +60,8 @@ const KEEP_MONTHS = 13;
 const VERIFICATION_GRACE_DAYS = 30;
 /** How long a read notification is kept. Long enough to answer "what did that reply say". */
 const NOTIFICATION_KEEP_DAYS = 90;
+/** How long an unopened Auto Apply draft holds its credit before it is handed back. */
+const AUTO_APPLY_READY_DAYS = 7;
 
 let failed = false;
 
@@ -92,6 +94,15 @@ await run('school verifications expired', () =>
 
 await run('read notifications pruned', () =>
   admin.rpc('prune_notifications', { p_keep_days: NOTIFICATION_KEEP_DAYS }),
+);
+
+/*
+ * Phase 6. Drafts that died mid-write (the service restarted) are failed and refunded, and
+ * drafts nobody opened in a week are abandoned and refunded. Reviewed drafts are never touched:
+ * their credit is committed and the reader may still come back to say they applied.
+ */
+await run('auto apply runs closed and refunded', () =>
+  admin.rpc('expire_auto_apply_runs', { p_ready_days: AUTO_APPLY_READY_DAYS, p_stuck_minutes: 15 }),
 );
 
 // A failed partition creation is the one that matters: it is a silent outage a month from

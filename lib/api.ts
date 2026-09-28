@@ -1375,6 +1375,202 @@ export async function fetchResumeUrl(resumeId: string): Promise<string> {
 export async function parseResume(resumeId: string): Promise<void> {
   await serviceFetch(`/v1/resumes/${resumeId}/parse`, { method: 'POST', timeoutMs: 120_000 });
 }
+
+/* ── credits, plans and Auto Apply — phase 6 ──────────────────────────────────
+ *
+ * The balance, the daily grant and the streak bonus are Postgres functions the app calls
+ * directly, because every rule in them is expressible in SQL and none needs a secret. Starting
+ * a draft and reading one back go through the service: the first needs a model and the second
+ * opens the sealed contact fields. Review, complete and abandon are back to plain RPCs.
+ */
+
+export interface Credits {
+  balance: number;
+  plan: string;
+  dailyGrant: number;
+  bankCap: number;
+  resumeLimit: number;
+  nextGrantAt: string | null;
+  /** What opening the app just paid, so the UI can say "+1 Auto Apply". */
+  grantedNow: number;
+}
+
+/**
+ * The balance and the plan's numbers — and, because the daily grant is lazy, the call that
+ * pays today's. It is a write dressed as a read, on purpose. PHASE6.md §3.1.
+ */
+export async function fetchCredits(): Promise<Credits> {
+  const { data, error } = await supabase.rpc('my_credits');
+  if (error) throw error;
+  const row = data as Database['public']['CompositeTypes']['credit_summary'];
+  return {
+    balance: row.balance ?? 0,
+    plan: row.plan ?? 'free',
+    dailyGrant: row.daily_grant ?? 0,
+    bankCap: row.bank_cap ?? 0,
+    resumeLimit: row.resume_limit ?? 0,
+    nextGrantAt: row.next_grant_at,
+    grantedNow: row.granted_now ?? 0,
+  };
+}
+
+export interface StreakAward {
+  weekKey: string;
+  /** What reached the balance. Less than `earned` when the bank was nearly full. */
+  amount: number;
+  earned: number;
+  outcome: 'paid' | 'already_paid' | 'not_met' | 'held';
+}
+
+/**
+ * Asks the server to pay a week. The server decides whether the week was met and what it is
+ * worth from the tracker it holds — the amount is not an argument, because a client that can
+ * name the amount can name the maximum.
+ */
+export async function claimStreakBonus(weekKey: string): Promise<StreakAward> {
+  const { data, error } = await supabase.rpc('claim_streak_bonus', { p_week_start: weekKey });
+  if (error) throw error;
+  const row = data as Database['public']['CompositeTypes']['streak_award'];
+  return {
+    weekKey,
+    amount: row.awarded ?? 0,
+    earned: row.earned ?? 0,
+    outcome: (row.outcome ?? 'not_met') as StreakAward['outcome'],
+  };
+}
+
+export interface Plan {
+  id: string;
+  dailyGrant: number;
+  bankCap: number;
+  resumeLimit: number;
+}
+
+/** Every plan's numbers — the paywall's comparison, straight from the table the gates read. */
+export async function fetchPlans(): Promise<Plan[]> {
+  const { data, error } = await supabase
+    .from('plans')
+    .select('id, daily_grant, bank_cap, resume_limit')
+    .order('rank');
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    dailyGrant: row.daily_grant,
+    bankCap: row.bank_cap,
+    resumeLimit: row.resume_limit,
+  }));
+}
+
+export interface Subscription {
+  tier: string;
+  status: 'active' | 'grace' | 'on_hold' | 'paused' | 'expired' | 'refunded';
+  periodEnd: string | null;
+  autoRenew: boolean | null;
+  provider: string;
+}
+
+/** The reader's store subscription, if they have ever had one. Display only — gates read the plan. */
+export async function fetchSubscription(): Promise<Subscription | null> {
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('tier, status, period_end, auto_renew, provider')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    tier: data.tier,
+    status: data.status as Subscription['status'],
+    periodEnd: data.period_end,
+    autoRenew: data.auto_renew,
+    provider: data.provider,
+  };
+}
+
+export type AutoApplyStatus = 'pending' | 'ready' | 'reviewed' | 'used' | 'abandoned' | 'failed';
+export type DraftFieldRole = 'contact' | 'attachment' | 'answer' | 'self_identify';
+export type DraftSource = 'resume' | 'profile' | 'job' | 'inferred' | 'contact' | 'reader';
+
+/** One question on the form and the drafted answer beside it. */
+export interface DraftField {
+  key: string;
+  label: string;
+  description: string | null;
+  required: boolean;
+  kind: 'text' | 'long_text' | 'select' | 'multi_select' | 'file';
+  options: string[] | null;
+  role: DraftFieldRole;
+  value: string | string[] | null;
+  confidence: 'high' | 'medium' | 'low' | null;
+  source: DraftSource;
+  /** What the reader needs to supply or check. Present on every null and every inferred answer. */
+  prompt: string | null;
+}
+
+export interface AutoApplyRun {
+  id: string;
+  jobId: string;
+  resumeId: string;
+  status: AutoApplyStatus;
+  formSource: 'greenhouse' | 'standard' | null;
+  error: string | null;
+  createdAt: string;
+  fields: DraftField[];
+}
+
+export interface StartedAutoApply {
+  run: AutoApplyRun;
+  /** False when an earlier run for this posting was resumed instead of a new one charged. */
+  charged: boolean;
+  balance: number;
+}
+
+/**
+ * Reserves a credit and drafts the form. Slow — a model is writing — so the timeout is long and
+ * the sheet shows a drafting state. Failure codes the sheet handles: `no_credits`, `no_resume`,
+ * `already_applied`, `job_closed`, `unavailable`.
+ */
+export async function startAutoApply(jobId: string, resumeId?: string | null): Promise<StartedAutoApply> {
+  return serviceFetch<StartedAutoApply>('/v1/auto-apply', {
+    method: 'POST',
+    body: { jobId, resumeId: resumeId ?? null },
+    timeoutMs: 90_000,
+  });
+}
+
+export async function fetchAutoApplyRun(runId: string): Promise<AutoApplyRun> {
+  const { run } = await serviceFetch<{ run: AutoApplyRun }>(`/v1/auto-apply/${runId}`, { method: 'GET' });
+  return run;
+}
+
+/**
+ * §6's review step, and the moment the credit is committed. `seen` must list every field key
+ * the sheet showed; the database refuses a review that skipped one.
+ */
+export async function reviewAutoApply(runId: string, seen: string[], edited: string[]): Promise<void> {
+  const { error } = await supabase.rpc('review_auto_apply', {
+    p_run_id: runId,
+    p_seen: seen,
+    p_edited: edited,
+  });
+  if (error) throw error;
+}
+
+/** "I applied" — writes the tracker row, linked to the run. Returns the application id. */
+export async function completeAutoApply(runId: string, appliedOn: string): Promise<string> {
+  const { data, error } = await supabase.rpc('complete_auto_apply', {
+    p_run_id: runId,
+    p_applied_on: appliedOn,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Closes a run. Returns whether the credit came back — it does only before the hand-off. */
+export async function abandonAutoApply(runId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('abandon_auto_apply', { p_run_id: runId });
+  if (error) throw error;
+  return data === true;
+}
 /* ── onboarding ───────────────────────────────────────────────────────────────
  *
  * The one write that happens *because* an account just came into existence, rather than

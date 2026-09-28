@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/common/EmptyState';
 import { CommentSheet } from '@/components/comments/CommentSheet';
 import { ApplicationModal } from '@/components/jobs/ApplicationModal';
+import { AutoApplySheet } from '@/components/jobs/AutoApplySheet';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
@@ -59,7 +60,7 @@ const END_REACHED_THRESHOLD = 2;
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { user, toggleLike, autoApplyCredits, spendAutoApplyCredit } = useCareerDeck();
+  const { user, toggleLike, autoApplyCredits } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   /*
    * §5, finally wired up. "For You" is the ranked feed; it was `'recent'` — phase 1's
@@ -84,6 +85,7 @@ export default function ReelsScreen() {
   const [feed, setFeed] = useState<ReelFeed>('forYou');
   const [pageHeight, setPageHeight] = useState(0);
   const [applyJob, setApplyJob] = useState<Job | null>(null);
+  const [autoApplyJob, setAutoApplyJob] = useState<Job | null>(null);
   const [detailsJob, setDetailsJob] = useState<Job | null>(null);
   const [commentsJob, setCommentsJob] = useState<Job | null>(null);
 
@@ -272,21 +274,17 @@ export default function ReelsScreen() {
   // Shared by the rail's Auto Apply button and the details modal's, so the "strong
   // buzz" only needs to be defined once: a heavy impact immediately, followed by a
   // notification pulse a beat later so it reads as a buzz rather than a single thud.
-  // Spends a credit where there is one. An empty balance still opens the sheet: nothing
-  // here submits anything on the user's behalf yet, so there is no work to withhold —
-  // the credit buys the pre-filled shortcut, and the button says how many are left.
-  const handleAutoApply = useCallback(
-    (job: Job) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      autoApplyTimer.current = setTimeout(
-        () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
-        90,
-      );
-      spendAutoApplyCredit();
-      setApplyJob(job);
-    },
-    [spendAutoApplyCredit],
-  );
+  // Opens the draft sheet. The credit is not spent here — the server reserves it when it
+  // starts the draft, and an empty balance becomes the sheet's own "none left" state with a
+  // plain hand-off beside it, so the button never goes dead. §6.
+  const handleAutoApply = useCallback((job: Job) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    autoApplyTimer.current = setTimeout(
+      () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+      90,
+    );
+    setAutoApplyJob(job);
+  }, []);
 
   // Each reel fills the tab content area; the toggle floats above it and the floating
   // tab bar floats below it, so both ends reserve space for their overlay.
@@ -396,6 +394,15 @@ export default function ReelsScreen() {
         job={commentsJob}
         visible={commentsJob !== null}
         onClose={() => setCommentsJob(null)}
+      />
+
+      <AutoApplySheet
+        // Keyed so a second posting never inherits the first one's answers.
+        key={autoApplyJob?.id ?? 'no-auto-apply'}
+        job={autoApplyJob}
+        visible={autoApplyJob !== null}
+        onClose={() => setAutoApplyJob(null)}
+        onApplyWithoutDraft={(job) => setApplyJob(job)}
       />
 
       <ApplicationModal

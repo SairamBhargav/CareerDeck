@@ -105,6 +105,9 @@ function RootNavigator() {
             options={{ presentation: 'modal', headerShown: false }}
           />
           <Stack.Screen name="collection/[type]" options={{ headerShown: false }} />
+          {/* Phase 6. A modal for the same reason as resume-review: it is reached from inside a
+              flow (an empty Auto Apply balance), and closing it should land back in that flow. */}
+          <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="job/[id]" options={{ presentation: 'modal', title: 'Job details' }} />
           <Stack.Screen name="company/[id]" options={{ title: '' }} />
         </Stack.Protected>

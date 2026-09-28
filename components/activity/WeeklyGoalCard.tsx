@@ -30,15 +30,15 @@ interface WeeklyGoalCardProps {
 export function WeeklyGoalCard({ goal, onEditGoal }: WeeklyGoalCardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const { autoApplyCredits, awardStreakBonus, lastStreakAward } = useCareerDeck();
+  const { autoApplyCredits, claimStreakBonus, lastStreakAward } = useCareerDeck();
 
-  // The bonus is paid the moment the goal is reached rather than on Monday: the reward
-  // has to land while the user is looking at the thing they just finished.
-  // awardStreakBonus is idempotent per week, so re-renders can't pay it twice.
+  // The bonus is claimed the moment the goal is reached rather than on Monday: the reward
+  // has to land while the user is looking at the thing they just finished. The server
+  // decides what the week is worth and pays it once, however many times this asks.
   const currentWeekKey = goal.history[goal.history.length - 1]?.key;
   useEffect(() => {
-    if (goal.met && currentWeekKey) awardStreakBonus(currentWeekKey, goal.bonusThisWeek);
-  }, [goal.met, goal.bonusThisWeek, currentWeekKey, awardStreakBonus]);
+    if (goal.met && currentWeekKey) claimStreakBonus(currentWeekKey);
+  }, [goal.met, currentWeekKey, claimStreakBonus]);
 
   // What this week actually paid, which a full bank can cut short. Any other week's
   // receipt is somebody else's news.

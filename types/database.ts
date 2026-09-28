@@ -47,6 +47,7 @@ export type Database = {
       applications: {
         Row: {
           applied_at: string
+          auto_apply_run_id: string | null
           created_at: string
           id: string
           job_id: string
@@ -60,6 +61,7 @@ export type Database = {
         }
         Insert: {
           applied_at?: string
+          auto_apply_run_id?: string | null
           created_at?: string
           id?: string
           job_id: string
@@ -73,6 +75,7 @@ export type Database = {
         }
         Update: {
           applied_at?: string
+          auto_apply_run_id?: string | null
           created_at?: string
           id?: string
           job_id?: string
@@ -85,6 +88,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "applications_auto_apply_run_id_fkey"
+            columns: ["auto_apply_run_id"]
+            isOneToOne: false
+            referencedRelation: "auto_apply_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "applications_job_id_fkey"
             columns: ["job_id"]
@@ -101,6 +111,136 @@ export type Database = {
           },
           {
             foreignKeyName: "applications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      auto_apply_runs: {
+        Row: {
+          completed_at: string | null
+          cost_usd: number | null
+          created_at: string
+          draft: Json | null
+          edited_fields: string[] | null
+          error: string | null
+          form: Json | null
+          form_source: string | null
+          id: string
+          job_id: string
+          model: string | null
+          prompt_version: string | null
+          resume_id: string
+          reviewed_at: string | null
+          status: Database["public"]["Enums"]["auto_apply_status"]
+          tokens_in: number | null
+          tokens_out: number | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          draft?: Json | null
+          edited_fields?: string[] | null
+          error?: string | null
+          form?: Json | null
+          form_source?: string | null
+          id?: string
+          job_id: string
+          model?: string | null
+          prompt_version?: string | null
+          resume_id: string
+          reviewed_at?: string | null
+          status?: Database["public"]["Enums"]["auto_apply_status"]
+          tokens_in?: number | null
+          tokens_out?: number | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          draft?: Json | null
+          edited_fields?: string[] | null
+          error?: string | null
+          form?: Json | null
+          form_source?: string | null
+          id?: string
+          job_id?: string
+          model?: string | null
+          prompt_version?: string | null
+          resume_id?: string
+          reviewed_at?: string | null
+          status?: Database["public"]["Enums"]["auto_apply_status"]
+          tokens_in?: number | null
+          tokens_out?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_apply_runs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auto_apply_runs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auto_apply_runs_resume_id_fkey"
+            columns: ["resume_id"]
+            isOneToOne: false
+            referencedRelation: "resumes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auto_apply_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_events: {
+        Row: {
+          app_user_id: string | null
+          id: string
+          outcome: string | null
+          payload: Json
+          received_at: string
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          app_user_id?: string | null
+          id: string
+          outcome?: string | null
+          payload: Json
+          received_at?: string
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          app_user_id?: string | null
+          id?: string
+          outcome?: string | null
+          payload?: Json
+          received_at?: string
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_events_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -422,6 +562,85 @@ export type Database = {
             columns: ["source_id"]
             isOneToOne: false
             referencedRelation: "job_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          grant_period: number | null
+          id: number
+          idempotency_key: string
+          kind: Database["public"]["Enums"]["credit_kind"]
+          ref_id: string | null
+          ref_type: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          grant_period?: number | null
+          id?: never
+          idempotency_key: string
+          kind: Database["public"]["Enums"]["credit_kind"]
+          ref_id?: string | null
+          ref_type?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          grant_period?: number | null
+          id?: never
+          idempotency_key?: string
+          kind?: Database["public"]["Enums"]["credit_kind"]
+          ref_id?: string | null
+          ref_type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      entitlements: {
+        Row: {
+          expires_at: string | null
+          feature: string
+          source: string
+          updated_at: string
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          expires_at?: string | null
+          feature: string
+          source: string
+          updated_at?: string
+          user_id: string
+          value?: Json
+        }
+        Update: {
+          expires_at?: string | null
+          feature?: string
+          source?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entitlements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1203,6 +1422,45 @@ export type Database = {
         }
         Relationships: []
       }
+      plans: {
+        Row: {
+          bank_cap: number
+          daily_grant: number
+          id: string
+          long_streak_bonus: number
+          long_streak_weeks: number
+          max_weekly_bonus: number
+          notes: string | null
+          rank: number
+          resume_limit: number
+          streak_bonus: number
+        }
+        Insert: {
+          bank_cap: number
+          daily_grant: number
+          id: string
+          long_streak_bonus: number
+          long_streak_weeks: number
+          max_weekly_bonus: number
+          notes?: string | null
+          rank: number
+          resume_limit: number
+          streak_bonus: number
+        }
+        Update: {
+          bank_cap?: number
+          daily_grant?: number
+          id?: string
+          long_streak_bonus?: number
+          long_streak_weeks?: number
+          max_weekly_bonus?: number
+          notes?: string | null
+          rank?: number
+          resume_limit?: number
+          streak_bonus?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_color: string
@@ -1590,6 +1848,66 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          auto_renew: boolean | null
+          environment: string
+          last_event_at: string
+          original_transaction_id: string
+          period_end: string | null
+          product_id: string
+          provider: string
+          revenuecat_id: string | null
+          status: string
+          tier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_renew?: boolean | null
+          environment?: string
+          last_event_at: string
+          original_transaction_id: string
+          period_end?: string | null
+          product_id: string
+          provider: string
+          revenuecat_id?: string | null
+          status: string
+          tier: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_renew?: boolean | null
+          environment?: string
+          last_event_at?: string
+          original_transaction_id?: string
+          period_end?: string | null
+          product_id?: string
+          provider?: string
+          revenuecat_id?: string | null
+          status?: string
+          tier?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_tier_fkey"
+            columns: ["tier"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           min_salary_annual: number | null
@@ -1953,8 +2271,14 @@ export type Database = {
       }
     }
     Functions: {
+      abandon_auto_apply: { Args: { p_run_id: string }; Returns: boolean }
       accept_content_policy: { Args: { p_version: string }; Returns: string }
       active_weights: { Args: never; Returns: Json }
+      applications_in_week: {
+        Args: { p_user_id: string; p_week_start: string }
+        Returns: number
+      }
+      apply_revenuecat_event: { Args: { p_event: Json }; Returns: string }
       apply_strike: {
         Args: {
           p_comment_id?: string
@@ -1984,6 +2308,20 @@ export type Database = {
           job_id: string
           source: string
         }[]
+      }
+      claim_daily_grant: {
+        Args: { p_created_at: string; p_user_id: string }
+        Returns: number
+      }
+      claim_streak_bonus: {
+        Args: { p_week_start: string }
+        Returns: Database["public"]["CompositeTypes"]["streak_award"]
+        SetofOptions: {
+          from: "*"
+          to: "streak_award"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       close_stale_jobs: { Args: { p_unseen_hours?: number }; Returns: number }
       comment_card_of: {
@@ -2023,6 +2361,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      complete_auto_apply: {
+        Args: { p_applied_on?: string; p_run_id: string }
+        Returns: string
+      }
       compute_match: {
         Args: {
           p_job_city: string
@@ -2061,6 +2403,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      credit_balance: { Args: { p_user_id: string }; Returns: number }
       decode_cursor: { Args: { p_cursor: string }; Returns: Json }
       delete_own_comment: { Args: { p_comment_id: string }; Returns: boolean }
       delete_resume: { Args: { p_resume_id: string }; Returns: boolean }
@@ -2080,11 +2423,26 @@ export type Database = {
         Args: { p_experiment: string; p_user_id: string }
         Returns: Database["public"]["Enums"]["feed_arm"]
       }
+      expire_auto_apply_runs: {
+        Args: { p_ready_days?: number; p_stuck_minutes?: number }
+        Returns: number
+      }
       expire_edu_verifications: {
         Args: { p_grace_days?: number }
         Returns: number
       }
       explain_feed_rank: { Args: { p_job_id: string }; Returns: Json }
+      fail_auto_apply: {
+        Args: {
+          p_cost_usd?: number
+          p_model?: string
+          p_reason: string
+          p_run_id: string
+          p_tokens_in?: number
+          p_tokens_out?: number
+        }
+        Returns: undefined
+      }
       feed_experiment_results: {
         Args: { p_experiment?: string; p_since?: string }
         Returns: {
@@ -2117,6 +2475,10 @@ export type Database = {
         }
       }
       generate_handle: { Args: never; Returns: string }
+      grant_period_at: {
+        Args: { p_at: string; p_created_at: string }
+        Returns: number
+      }
       ingest_upsert_job: { Args: { p: Json }; Returns: string }
       ingest_upsert_jobs: { Args: { p_rows: Json }; Returns: Json }
       invalidate_match_scores: { Args: { p_user_id: string }; Returns: number }
@@ -2150,6 +2512,7 @@ export type Database = {
         }
         Returns: number
       }
+      lock_ledger: { Args: { p_user_id: string }; Returns: string }
       log_impressions: { Args: { p_rows: Json }; Returns: number }
       log_pii_access: {
         Args: {
@@ -2211,6 +2574,16 @@ export type Database = {
           strike_severity: number
         }[]
       }
+      my_credits: {
+        Args: never
+        Returns: Database["public"]["CompositeTypes"]["credit_summary"]
+        SetofOptions: {
+          from: "*"
+          to: "credit_summary"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       my_resumes: {
         Args: never
         Returns: Database["public"]["CompositeTypes"]["resume_card"][]
@@ -2230,6 +2603,35 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      owned_run: {
+        Args: { p_run_id: string }
+        Returns: {
+          completed_at: string | null
+          cost_usd: number | null
+          created_at: string
+          draft: Json | null
+          edited_fields: string[] | null
+          error: string | null
+          form: Json | null
+          form_source: string | null
+          id: string
+          job_id: string
+          model: string | null
+          prompt_version: string | null
+          resume_id: string
+          reviewed_at: string | null
+          status: Database["public"]["Enums"]["auto_apply_status"]
+          tokens_in: number | null
+          tokens_out: number | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "auto_apply_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       post_comment: {
         Args: {
@@ -2318,6 +2720,10 @@ export type Database = {
         Returns: Database["public"]["Enums"]["verification_tier"]
       }
       refresh_open_job_counts: { Args: never; Returns: number }
+      refund_auto_apply: {
+        Args: { p_run: Database["public"]["Tables"]["auto_apply_runs"]["Row"] }
+        Returns: undefined
+      }
       register_resume: {
         Args: {
           p_content_hash?: string
@@ -2370,6 +2776,24 @@ export type Database = {
           storage_path: string
           user_id: string
         }[]
+      }
+      review_auto_apply: {
+        Args: { p_edited?: string[]; p_run_id: string; p_seen: string[] }
+        Returns: Database["public"]["Enums"]["auto_apply_status"]
+      }
+      save_auto_apply_draft: {
+        Args: {
+          p_cost_usd: number
+          p_draft: Json
+          p_form: Json
+          p_form_source: string
+          p_model: string
+          p_prompt_version: string
+          p_run_id: string
+          p_tokens_in: number
+          p_tokens_out: number
+        }
+        Returns: Database["public"]["Enums"]["auto_apply_status"]
       }
       save_resume_profile: {
         Args: {
@@ -2454,6 +2878,16 @@ export type Database = {
         Args: { p_left: string[]; p_right: string[] }
         Returns: number
       }
+      start_auto_apply: {
+        Args: { p_job_id: string; p_resume_id?: string; p_user_id: string }
+        Returns: Database["public"]["CompositeTypes"]["auto_apply_start"]
+        SetofOptions: {
+          from: "*"
+          to: "auto_apply_start"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       start_edu_verification: {
         Args: {
           p_email: string
@@ -2483,6 +2917,27 @@ export type Database = {
         Returns: string
       }
       urgency_score: { Args: { p_closes_at: string }; Returns: number }
+      viewer_plan: {
+        Args: { p_user_id: string }
+        Returns: {
+          bank_cap: number
+          daily_grant: number
+          id: string
+          long_streak_bonus: number
+          long_streak_weeks: number
+          max_weekly_bonus: number
+          notes: string | null
+          rank: number
+          resume_limit: number
+          streak_bonus: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       viewer_state: {
         Args: { p_limit?: number }
         Returns: Database["public"]["CompositeTypes"]["viewer_sets"]
@@ -2510,6 +2965,21 @@ export type Database = {
         | "smartrecruiters"
         | "company_site"
         | "feed"
+      auto_apply_status:
+        | "pending"
+        | "ready"
+        | "reviewed"
+        | "used"
+        | "abandoned"
+        | "failed"
+      credit_kind:
+        | "daily_grant"
+        | "streak_bonus"
+        | "spend"
+        | "refund"
+        | "purchase"
+        | "subscription_grant"
+        | "adjustment"
       employment_type: "Internship" | "Full-time" | "Part-time" | "Contract"
       feed_arm: "ranked" | "recency"
       feed_surface:
@@ -2548,6 +3018,12 @@ export type Database = {
       verification_tier: "none" | "email" | "edu" | "identity"
     }
     CompositeTypes: {
+      auto_apply_start: {
+        run_id: string | null
+        status: Database["public"]["Enums"]["auto_apply_status"] | null
+        charged: boolean | null
+        balance: number | null
+      }
       comment_card: {
         id: string | null
         job_id: string | null
@@ -2590,6 +3066,15 @@ export type Database = {
         follower_count: number | null
         open_job_count: number | null
         rank: number | null
+      }
+      credit_summary: {
+        balance: number | null
+        plan: string | null
+        daily_grant: number | null
+        bank_cap: number | null
+        resume_limit: number | null
+        next_grant_at: string | null
+        granted_now: number | null
       }
       job_card: {
         id: string | null
@@ -2643,6 +3128,13 @@ export type Database = {
         user_confirmed_at: string | null
         created_at: string | null
         updated_at: string | null
+      }
+      streak_award: {
+        week_start: string | null
+        awarded: number | null
+        earned: number | null
+        streak_weeks: number | null
+        outcome: string | null
       }
       viewer_sets: {
         liked_job_ids: string[] | null
@@ -2792,6 +3284,23 @@ export const Constants = {
         "smartrecruiters",
         "company_site",
         "feed",
+      ],
+      auto_apply_status: [
+        "pending",
+        "ready",
+        "reviewed",
+        "used",
+        "abandoned",
+        "failed",
+      ],
+      credit_kind: [
+        "daily_grant",
+        "streak_bonus",
+        "spend",
+        "refund",
+        "purchase",
+        "subscription_grant",
+        "adjustment",
       ],
       employment_type: ["Internship", "Full-time", "Part-time", "Contract"],
       feed_arm: ["ranked", "recency"],

@@ -665,8 +665,14 @@ async function main() {
    * than a count, so a route added later is named in the failure rather than showing up as
    * an off-by-one.
    */
-  const expected = ['/comments', '/moderation', '/resumes', '/verify', '/webhooks'];
-  check('phase 5 added no routes — the set is exactly what phases 3 and 4 left',
+  /*
+   * Phase 6 then added `/auto-apply` (a model and the sealed contact fields) and a second
+   * `/webhooks` mount (RevenueCat), and this check named it the day it landed, as intended. It
+   * is listed here rather than the check being loosened: a later phase's route is still one
+   * somebody decided on, and the next unexplained one should still fail.
+   */
+  const expected = ['/auto-apply', '/comments', '/moderation', '/resumes', '/verify', '/webhooks'];
+  check('phase 5 added no routes — the set is exactly what phases 3, 4 and 6 left',
     JSON.stringify([...new Set(registrations)].sort()) === JSON.stringify(expected),
     [...new Set(registrations)].sort().join(', '));
 }

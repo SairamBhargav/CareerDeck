@@ -9,13 +9,17 @@ import {
   type ReactNode,
 } from 'react';
 
-import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
+import { DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { useAuth } from '@/context/AuthContext';
 import { useApplicationRecords } from '@/hooks/useApplicationRecords';
+import { useCredits, type CreditsState } from '@/hooks/useCredits';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useProfile } from '@/hooks/useProfile';
 import { useViewerState } from '@/hooks/useViewerState';
+import { claimStreakBonus as claimStreakBonusRpc, type StreakAward } from '@/lib/api';
+import { setBillingUser } from '@/lib/billing';
 import { setImpressionsEnabled } from '@/lib/impressions';
+import { reportError } from '@/lib/observability';
 import { setOutboxUser } from '@/lib/outbox';
 import type {
   AppNotification,
@@ -41,14 +45,15 @@ import type {
  * unread badge needs it and the tab bar is nowhere near Activity.
  *
  * What is left in this file is what Appendix A says should be left — "the existing context,
- * slimmed to hold only session/viewer state" — plus the two things later phases own and that
- * therefore still live in memory:
+ * slimmed to hold only session/viewer state".
  *
- *  - **Auto Apply credits** (phase 6's `credit_transactions` ledger).
- *
- * It is a fixture behind a real-looking interface, and it becomes a hook of its own the way
- * applications and comments did. Nothing above this file knows the difference, which is the
- * point of the facade.
+ * **Phase 6 took the last fixture.** Auto Apply credits were a `useState` seeded with one credit
+ * and a `useRef<Set>` of paid weeks that forgot everything on restart. They are
+ * `credit_transactions` now, read by `useCredits`, and the prediction held: the balance is
+ * still `autoApplyCredits` to every screen. What did change shape is the two writes.
+ * `spendAutoApplyCredit` is gone — a credit is spent by the server when it reserves a draft, not
+ * by the client when a button is tapped — and the streak bonus no longer takes an amount,
+ * because the server works out what a week was worth. §7.
  *
  * **Resumes were the other one, and phase 4 collected on the prediction.** `resumes`,
  * `defaultResumeId` and `setDefaultResume` are gone from here into `hooks/useResumes.ts`,
@@ -121,18 +126,16 @@ interface CareerDeckState {
   weeklyGoal: number;
   /** Clamped to the picker's range — a goal of zero would make the ring meaningless. */
   setWeeklyGoal: (target: number) => void;
-  /** Auto Applies available to spend right now. */
+  /** Auto Applies available to spend right now — `sum(amount)` over the ledger. */
   autoApplyCredits: number;
+  /** The plan and its numbers, and a way to re-read them after a spend, refund or purchase. */
+  credits: CreditsState;
   /**
-   * Spends one. Returns false when the balance is empty so the caller can say so
-   * rather than silently doing nothing.
+   * Asks the server to pay the bonus for a week that reached the goal. The server decides
+   * whether it was met and what it was worth; paying twice is impossible there, and this only
+   * avoids asking twice.
    */
-  spendAutoApplyCredit: () => boolean;
-  /**
-   * Pays the bonus for a week that reached the goal, at most once per week. Returns
-   * what was actually added, which is zero for a week already paid or a full bank.
-   */
-  awardStreakBonus: (weekKey: string, amount: number) => number;
+  claimStreakBonus: (weekKey: string) => void;
   /**
    * Receipt for the most recent bonus — what was paid, and for which week. Kept here
    * rather than recomputed by the card, because a full bank can pay less than a week
@@ -153,11 +156,6 @@ interface CareerDeckState {
   updateIdentity: (edit: UserIdentityEdit) => void;
 }
 
-export interface StreakAward {
-  weekKey: string;
-  amount: number;
-}
-
 const CareerDeckContext = createContext<CareerDeckState | null>(null);
 
 export function CareerDeckProvider({ children }: { children: ReactNode }) {
@@ -174,6 +172,7 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   const viewer = useViewerState(userId);
   const tracker = useApplicationRecords(userId);
   const inbox = useNotifications(userId);
+  const credits = useCredits(userId);
 
   /*
    * The two module-level singletons that need to know who is signed in.
@@ -186,20 +185,17 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setOutboxUser(userId);
     setImpressionsEnabled(userId !== null);
+    // RevenueCat's customer is the Supabase account, so the webhook can find who paid.
+    void setBillingUser(userId);
   }, [userId]);
 
   const [seenNewsIds, setSeenNewsIds] = useState<Set<string>>(() => new Set<string>());
-  // Seeded with a single day's grant. Accrual across days, and the balance surviving a
-  // restart, both need the credit ledger in §7, which phase 6 builds.
-  const [autoApplyCredits, setAutoApplyCredits] = useState<number>(AUTO_APPLY_ECONOMY.dailyGrant);
   /**
-   * The balance again, readable synchronously. Spending and awarding both need to
-   * report what happened to their caller, and a state setter's callback can't be read
-   * back in time to answer that.
+   * Week keys already *asked about* this session. Not a correctness guard any more — the
+   * server's idempotency key is that — just a way not to send the same RPC on every render
+   * of a card whose goal is met.
    */
-  const creditsRef = useRef(autoApplyCredits);
-  /** Week keys already paid, so a re-render or a tab revisit can't pay twice. */
-  const paidWeeks = useRef<Set<string>>(new Set());
+  const askedWeeks = useRef<Set<string>>(new Set());
   const [lastStreakAward, setLastStreakAward] = useState<StreakAward | null>(null);
 
   const user = profile?.user ?? null;
@@ -214,10 +210,6 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
    */
   const isInitialLoading = isProfileLoading || viewer.isLoading || tracker.isLoading;
 
-  const setCredits = useCallback((next: number) => {
-    creditsRef.current = next;
-    setAutoApplyCredits(next);
-  }, []);
   // Returning the same Set when nothing changes matters here: this fires from an effect
   // on every story frame, and a fresh Set each time would re-render the whole tree.
   const markNewsSeen = useCallback((newsId: string) => {
@@ -236,24 +228,26 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     [updatePreferences],
   );
 
-  const spendAutoApplyCredit = useCallback(() => {
-    if (creditsRef.current <= 0) return false;
-    setCredits(creditsRef.current - 1);
-    return true;
-  }, [setCredits]);
+  const refreshCredits = credits.refresh;
 
-  const awardStreakBonus = useCallback(
-    (weekKey: string, amount: number) => {
-      if (amount <= 0 || paidWeeks.current.has(weekKey)) return 0;
-      paidWeeks.current.add(weekKey);
+  const claimStreakBonus = useCallback(
+    (weekKey: string) => {
+      if (askedWeeks.current.has(weekKey)) return;
+      askedWeeks.current.add(weekKey);
 
-      const next = Math.min(creditsRef.current + amount, AUTO_APPLY_ECONOMY.bankCap);
-      const awarded = next - creditsRef.current;
-      if (awarded > 0) setCredits(next);
-      setLastStreakAward({ weekKey, amount: awarded });
-      return awarded;
+      claimStreakBonusRpc(weekKey)
+        .then((award) => {
+          // `already_paid` still carries the amount, so the receipt survives a restart.
+          if (award.outcome === 'paid' || award.outcome === 'already_paid') setLastStreakAward(award);
+          if (award.outcome === 'paid') void refreshCredits();
+        })
+        .catch((error) => {
+          // Let the next render ask again — a dropped connection must not cost a week's bonus.
+          askedWeeks.current.delete(weekKey);
+          reportError(error, { where: 'claimStreakBonus', weekKey });
+        });
     },
-    [setCredits],
+    [refreshCredits],
   );
 
   const setPreferredRoles = useCallback(
@@ -307,9 +301,9 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       markAllNotificationsRead: inbox.markAllRead,
       weeklyGoal,
       setWeeklyGoal,
-      autoApplyCredits,
-      spendAutoApplyCredit,
-      awardStreakBonus,
+      autoApplyCredits: credits.balance,
+      credits,
+      claimStreakBonus,
       lastStreakAward,
       preferredRoles: user?.preferredRoles ?? [],
       preferredLocations: user?.preferredLocations ?? [],
@@ -342,9 +336,8 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     markNewsSeen,
     weeklyGoal,
     setWeeklyGoal,
-    autoApplyCredits,
-    spendAutoApplyCredit,
-    awardStreakBonus,
+    credits,
+    claimStreakBonus,
     lastStreakAward,
     user,
     setPreferredRoles,

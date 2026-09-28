@@ -5,6 +5,8 @@ import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 
 import { adminClient, requireAuth, type AuthedUser } from './auth.ts';
+import { autoApply } from './autoapply.ts';
+import { billingWebhooks } from './billing.ts';
 import { comments } from './comments.ts';
 import { capabilities, env } from './env.ts';
 import { moderation, reviewPage } from './moderation/review.ts';
@@ -33,6 +35,11 @@ import { verification, webhooks } from './verification.ts';
  * is here anyway, because §3.9 requires every read of a resume to be logged and a read the
  * client performs against storage by itself cannot be. PHASE4.md §4.2.
  *
+ * Phase 6 adds the last two §2.1 predicted: `/v1/auto-apply` (a model, and the sealed contact
+ * fields) and `/webhooks/revenuecat` (a vendor secret). The credit ledger it also predicted is
+ * *not* here — every ledger rule turned out to be expressible as a Postgres function, so the
+ * balance, the daily grant and the streak bonus are RPCs the app calls directly. PHASE6.md §3.
+ *
  * Everything else the app does still goes straight to Supabase, because RLS still expresses it.
  * Phase 1's decision B is unchanged for *jobs*: the feed is not here, and the seam that would
  * move it is still `lib/api.ts`.
@@ -60,6 +67,9 @@ app.get('/health', (c) =>
 
 /** §3.2's ID path calls back here. Outside `/v1` because a vendor has no Supabase session. */
 app.route('/webhooks', webhooks);
+
+/** §8's entitlement source. Also outside `/v1`: RevenueCat authenticates with its own secret. */
+app.route('/webhooks', billingWebhooks);
 
 /** §10's review queue, for a human with a browser. Its own auth is inside the page. */
 app.route('/moderation', reviewPage);
@@ -105,6 +115,7 @@ v1.route('/comments', comments);
 v1.route('/verify', verification);
 v1.route('/moderation', moderation);
 v1.route('/resumes', resumes);
+v1.route('/auto-apply', autoApply);
 
 app.onError((error, c) => {
   if (error instanceof HTTPException) {

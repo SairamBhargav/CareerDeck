@@ -17,7 +17,8 @@
  * past this count. Phase 4's original cap was 10, chosen as an abuse ceiling rather than a
  * product limit — see that migration for why the two are different questions.
  *
- * When a paid tier exists this becomes a function of the viewer's plan, and the database's
- * `max_live` becomes a select against it. Until then a single constant is the honest shape.
+ * Phase 6 made both halves of that prediction true: `max_live` reads `plans.resume_limit` for
+ * the viewer's plan, and the shelf reads the same number from `my_credits()`. This constant is
+ * now only the fallback `useCredits` shows before that answer arrives — the `free` row's value.
  */
 export const FREE_RESUME_LIMIT = 3;

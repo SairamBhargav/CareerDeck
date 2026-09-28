@@ -1539,10 +1539,27 @@ Measured: `npm run verify:phase5` passes 51 checks with no API service running, 
 one of the assertions. Three test bugs it caught in itself — each of which would have produced a
 green run that proved nothing — are recorded in PHASE5.md §8.
 
-### Phase 6 — Money and Auto Apply (3–4 weeks)
+### Phase 6 — Money and Auto Apply (3–4 weeks) — **built**
 `credit_transactions` + grant/streak/spend/refund jobs. RevenueCat + entitlements.
 `auto_apply_runs` + draft generation + review sheet.
 **Exit:** a user subscribes, generates a draft, reviews it, applies, and the ledger balances.
+
+Design and outcome: [PHASE6.md](./PHASE6.md). Four decisions there depart from this document and
+are argued in it:
+
+- **The ledger is in Postgres, not the API service.** §2.1 predicted otherwise; every ledger rule
+  is a one-user transaction needing no secret, so the balance, grant and streak bonus are RPCs.
+  Only drafting (a model) and reading a draft (sealed contact fields) go through the service. §3.
+- **The daily grant is lazy, in 24-hour periods since sign-up**, not a nightly job keyed by date.
+  No timezone, nothing for a client to spoof, and it provably pays what a nightly job would. §3.1.
+- **A credit commits at the hand-off, not at "I applied".** §6 taken literally makes every draft
+  free to anyone who never confirms. §5.3.
+- **Real application forms come only from Greenhouse.** Ashby, Lever and Workday publish none
+  through a documented API, and §4.3 rules out the undocumented ones. §5.1.
+
+Measured: `npm run verify:phase6` passes 106 checks with one live draft on `claude-sonnet-5` at
+**$0.011 per draft**. Real store purchases wait on a RevenueCat project and a development build —
+everything short of that, including the webhook's state machine, is proven with fixture events.
 
 ### Phase 7 — News, notifications, polish (2–3 weeks)
 `news_sources` + RSS ingestion + summarization + the link-out change from §9.

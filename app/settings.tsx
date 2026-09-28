@@ -11,7 +11,6 @@ import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
 import { useVerification } from '@/hooks/useVerification';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
-import { AUTO_APPLY_ECONOMY } from '@/constants/goal';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
@@ -32,7 +31,7 @@ export default function SettingsScreen() {
   const { scheme } = useTheme();
   const isDark = scheme === 'dark';
 
-  const { weeklyGoal, setWeeklyGoal, autoApplyCredits } = useCareerDeck();
+  const { weeklyGoal, setWeeklyGoal, autoApplyCredits, credits } = useCareerDeck();
   const { session, userId, signOut } = useAuth();
   const goal = useWeeklyGoal();
   const verification = useVerification(userId);
@@ -69,9 +68,17 @@ export default function SettingsScreen() {
       icon: 'flash-outline',
       label: 'Auto Apply',
       // Spells out the whole economy rather than just the balance: a currency the user
-      // can't predict the supply of is one they hoard instead of spending.
-      hint: `${AUTO_APPLY_ECONOMY.dailyGrant} a day, up to ${AUTO_APPLY_ECONOMY.maxWeeklyBonus} more for a week at goal`,
+      // can't predict the supply of is one they hoard instead of spending. The numbers are
+      // the plan's, from the server — a subscriber's row says five a day, not one.
+      hint: `${credits.dailyGrant} a day, banks up to ${credits.bankCap}, more for a week at goal`,
       value: `${autoApplyCredits} left`,
+    },
+    {
+      key: 'plan',
+      icon: 'sparkles-outline',
+      label: credits.isPro ? 'CareerDeck Pro' : 'Get Pro',
+      hint: credits.isPro ? 'Manage your subscription' : 'More Auto Applies and resume slots',
+      onPress: () => router.push('/paywall'),
     },
   ];
 

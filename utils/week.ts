@@ -61,3 +61,13 @@ export function formatWeekLabel(date: Date): string {
 export function daysLeftInWeek(date: Date): number {
   return 7 - ((date.getDay() + 6) % 7);
 }
+
+/**
+ * Today as the reader's own `YYYY-MM-DD` — what `applications.applied_at` stores. Not
+ * `toISOString()`, which is UTC and files an evening application under tomorrow.
+ */
+export function localDateKey(date: Date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
