@@ -167,7 +167,16 @@ generator, where it can be stated in words rather than expressed as a missing bu
 
 ## 4. Verification
 
-`npm run verify:phase6` does not exist yet.
+`npm run verify:phase6` exists and has never been run, because there is no local stack
+here to run it against. It needs `npm run db:start` and `npm run db:reset` first, and no
+API service — phase 6 adds no routes.
+
+Forty-seven checks. The ones that matter most are the replay checks: every idempotency
+key is exercised twice, because a second call that pays out again is the most expensive
+bug this phase could ship. Four assert what a client cannot do, and four assert *scope*
+rather than behaviour — no subscriptions table, no entitlements table, nothing writing a
+draft, and nothing marking a run `used`. That last one is decision B written as a test:
+if it ever fails, something has started claiming an application was submitted.
 
 **None of this SQL has ever executed.** There is no local Supabase on this machine — no
 Docker — and the seven migrations before it have never been applied here either. The
@@ -184,4 +193,3 @@ by running. First `db:reset` should be treated as the real first test of this fi
 - The ATS form-schema fetch. Greenhouse, Lever and Ashby each publish the question set for
   a posting; this is the part with no design yet.
 - The review sheet, and whatever the button ends up being called.
-- `scripts/verify-phase6.mjs`.
