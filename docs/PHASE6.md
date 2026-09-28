@@ -1,7 +1,7 @@
 # Phase 6 — Money and Auto Apply
 
-**Status:** in progress. The ledger and the run schema are built; draft generation, the
-review sheet and the client migration are not.
+**Status:** in progress. The ledger, the run schema and the client migration are built;
+draft generation and the review sheet are not.
 
 Design doc for §6 (Auto Apply), §7 (the credit ledger) and §8 (subscriptions) of
 [README.md](./README.md). Where this document and that one disagree, this one is what was
@@ -17,6 +17,8 @@ built and the disagreement is argued below.
 | **B** | Auto Apply produces a draft the user carries to the employer. Nothing submits. | §2 |
 | **C** | The daily grant happens lazily on read, not from a scheduled job. | §3.1 |
 | **D** | Refunds ignore the bank cap. Every other grant respects it. | §3.2 |
+| **E** | Credit writes await the server. They are not optimistic, unlike every other mutation. | §3.3 |
+| **F** | `auto_apply_runs.resume_id` is nullable, against §6. | §3.4 |
 
 ---
 
@@ -131,6 +133,36 @@ what the review step exists for.
 A refund only returns what a spend actually took. No spend row, no refund; otherwise the
 function mints credits from nothing.
 
+### 3.3 Credit writes are not optimistic — decision E
+
+Phase 2 established the opposite rule for likes and follows: write the cache first,
+reconcile later, because a like that flickers feels broken (Appendix A). Credits get the
+opposite treatment, and the difference is worth naming.
+
+A like is a claim the user is making. A balance is a number *we* are telling them about
+their account, and the server is the only thing that knows it — the daily grant may have
+landed, a cap may have clamped a bonus, a second device may have spent one. Showing a
+guess and then correcting it means showing "2 left" and a moment later "1 left", which
+reads as having been charged twice.
+
+So every mutation in `useCredits` awaits the server and takes what it says. The cost is a
+tap's worth of latency on the one number in the app that behaves like money.
+
+The single exception: a `startRun` that comes back `null` writes 0 locally, because the
+server has just said there was nothing to spend and the stale number on screen is the
+thing that is wrong.
+
+### 3.4 `resume_id` is nullable — decision F
+
+§6 writes `resume_id uuid not null references resumes(id)`.
+
+Generation needs a parsed resume to produce anything worth reviewing, so §6 is right about
+what a *useful* run requires. But a required column makes the violet button conditional on
+having uploaded one — a product change §6 never discusses, and resume upload only started
+working on 2026-09-25, so almost nobody has. A run without a resume still records honestly
+what happened: a credit was spent on this posting. The requirement belongs in the
+generator, where it can be stated in words rather than expressed as a missing button.
+
 ---
 
 ## 4. Verification
@@ -152,6 +184,4 @@ by running. First `db:reset` should be treated as the real first test of this fi
 - The ATS form-schema fetch. Greenhouse, Lever and Ashby each publish the question set for
   a posting; this is the part with no design yet.
 - The review sheet, and whatever the button ends up being called.
-- The client migration: `autoApplyCredits`, `creditsRef` and `paidWeeks` come out of
-  `CareerDeckContext` and become reads against `credit_balance()`.
 - `scripts/verify-phase6.mjs`.

@@ -459,7 +459,18 @@ create table public.auto_apply_runs (
   -- `restrict` for the same reason applications uses it: a run is a record of what the
   -- user did, and it must not evaporate because a crawler decided a posting closed.
   job_id       uuid not null references public.jobs (id) on delete restrict,
-  resume_id    uuid not null references public.resumes (id) on delete restrict,
+  /*
+   * Nullable, departing from §6 which writes `not null`.
+   *
+   * Generation needs a parsed resume to produce anything worth reviewing, so §6 is right
+   * about what a *useful* run requires. But making the column required makes the violet
+   * button conditional on having uploaded one, which is a product change §6 never
+   * discusses — and resume upload only started working three days ago, so almost nobody
+   * has. A run with no resume still records honestly what happened: a credit was spent on
+   * this posting. The generator is where the requirement belongs, and it can say so in
+   * words rather than by the button being missing.
+   */
+  resume_id    uuid references public.resumes (id) on delete restrict,
   status       public.auto_apply_status not null default 'pending',
 
   /*
@@ -514,3 +525,133 @@ alter table public.auto_apply_runs enable row level security;
 create policy auto_apply_runs_select_own on public.auto_apply_runs
   for select to authenticated
   using (user_id = (select auth.uid()));
+
+-- ── the client's entry points ─────────────────────────────────────────────────
+
+/*
+ * One call: take today's grant if it is owed, then report the balance.
+ *
+ * This is where §3.1's lazy grant actually happens. Splitting it into two round trips
+ * would mean the balance the client renders is the one from *before* the grant it just
+ * triggered, so the first open of the day would always show a number one too low and
+ * correct itself on the next refetch.
+ *
+ * Safe to call on every focus. `grant_daily_credit` is keyed by date, so the second call
+ * of the day grants nothing and this is a plain read.
+ */
+create or replace function public.credit_state(p_daily_grant integer, p_cap integer)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+begin
+  perform public.grant_daily_credit(p_daily_grant, p_cap);
+  return public.credit_balance();
+end;
+$fn$;
+
+/*
+ * §6's first two steps, made atomic: reserve a credit and create the run it is reserved
+ * against. Returns the run id, or null when the balance is zero.
+ *
+ * One function rather than two calls because the alternative has no good failure mode. A
+ * client that reserves and then fails to create the run has burned a credit against
+ * nothing, and a client that creates the run and then fails to reserve has a run nobody
+ * paid for. Here the insert and the ledger row are in one statement's transaction: either
+ * both exist or neither does.
+ *
+ * The run id is generated first so the spend's idempotency key can name it, which is what
+ * makes a retried tap free rather than a second charge.
+ */
+create or replace function public.start_auto_apply_run(p_job_id uuid, p_resume_id uuid default null)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_user   uuid := (select auth.uid());
+  v_run_id uuid;
+  v_live   uuid;
+begin
+  if v_user is null then
+    raise exception 'start_auto_apply_run requires a session' using errcode = '28000';
+  end if;
+
+  -- An existing live run for this posting is handed back rather than re-charged. This is
+  -- the same idea as the spend key, one level up: tapping twice is one run.
+  select id into v_live
+    from public.auto_apply_runs
+   where user_id = v_user
+     and job_id = p_job_id
+     and status in ('pending', 'ready', 'reviewed')
+   limit 1;
+
+  if v_live is not null then
+    return v_live;
+  end if;
+
+  if p_resume_id is not null and not exists (
+    select 1 from public.resumes where id = p_resume_id and user_id = v_user
+  ) then
+    raise exception 'that resume does not belong to this user' using errcode = '42501';
+  end if;
+
+  v_run_id := gen_random_uuid();
+
+  if not public.reserve_credit(v_run_id) then
+    return null;
+  end if;
+
+  insert into public.auto_apply_runs (id, user_id, job_id, resume_id)
+  values (v_run_id, v_user, p_job_id, p_resume_id);
+
+  return v_run_id;
+end;
+$fn$;
+
+/*
+ * The user backed out, or generation failed. Refund and mark it.
+ *
+ * `p_failed` separates the two so the cost report can tell "people change their minds"
+ * from "we could not produce a draft" — the first is a product signal, the second is an
+ * outage. Both refund, because neither is the user's fault.
+ */
+create or replace function public.close_auto_apply_run(p_run_id uuid, p_failed boolean default false)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_user uuid := (select auth.uid());
+  v_rows integer;
+begin
+  update public.auto_apply_runs
+     set status = case when p_failed then 'failed' else 'abandoned' end,
+         completed_at = now()
+   where id = p_run_id
+     and user_id = v_user
+     and status in ('pending', 'ready', 'reviewed');
+
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then
+    return false;
+  end if;
+
+  -- Keyed by run, so a retried close cannot pay the credit back twice.
+  return public.refund_credit(p_run_id);
+end;
+$fn$;
+
+revoke all on function public.credit_state(integer, integer)              from public, anon;
+revoke all on function public.start_auto_apply_run(uuid, uuid)            from public, anon;
+revoke all on function public.close_auto_apply_run(uuid, boolean)         from public, anon;
+
+grant execute on function public.credit_state(integer, integer)      to authenticated;
+grant execute on function public.start_auto_apply_run(uuid, uuid)    to authenticated;
+grant execute on function public.close_auto_apply_run(uuid, boolean) to authenticated;
+
+comment on table public.auto_apply_runs is
+  'One draft-generation attempt. Never submits to an employer — README §6, PHASE6.md §2.';

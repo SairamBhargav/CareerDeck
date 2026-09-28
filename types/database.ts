@@ -1996,6 +1996,49 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      award_streak_bonus: {
+        Args: { p_week_key: string; p_amount: number; p_cap: number; p_max_weekly: number }
+        Returns: number
+      }
+      close_auto_apply_run: {
+        Args: { p_run_id: string; p_failed?: boolean }
+        Returns: boolean
+      }
+      credit_balance: {
+        Args: never
+        Returns: number
+      }
+      credit_history: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: number
+          kind: Database["public"]["Enums"]["credit_kind"]
+          amount: number
+          ref_type: string | null
+          ref_id: string | null
+          created_at: string
+        }[]
+      }
+      credit_state: {
+        Args: { p_daily_grant: number; p_cap: number }
+        Returns: number
+      }
+      grant_daily_credit: {
+        Args: { p_amount: number; p_cap: number }
+        Returns: number
+      }
+      refund_credit: {
+        Args: { p_run_id: string }
+        Returns: boolean
+      }
+      reserve_credit: {
+        Args: { p_run_id: string }
+        Returns: boolean
+      }
+      start_auto_apply_run: {
+        Args: { p_job_id: string; p_resume_id?: string | null }
+        Returns: string | null
+      }
       comment_counts: {
         Args: { p_job_ids: string[] }
         Returns: {
@@ -2502,6 +2545,21 @@ export type Database = {
         | "ashby"
         | "company"
       application_status: "applied" | "interview" | "offer" | "closed"
+      auto_apply_status:
+        | "pending"
+        | "ready"
+        | "reviewed"
+        | "used"
+        | "abandoned"
+        | "failed"
+      credit_kind:
+        | "daily_grant"
+        | "streak_bonus"
+        | "spend"
+        | "refund"
+        | "purchase"
+        | "subscription_grant"
+        | "adjustment"
       ats_kind:
         | "greenhouse"
         | "lever"
@@ -2784,6 +2842,23 @@ export const Constants = {
         "company",
       ],
       application_status: ["applied", "interview", "offer", "closed"],
+      auto_apply_status: [
+        "pending",
+        "ready",
+        "reviewed",
+        "used",
+        "abandoned",
+        "failed",
+      ],
+      credit_kind: [
+        "daily_grant",
+        "streak_bonus",
+        "spend",
+        "refund",
+        "purchase",
+        "subscription_grant",
+        "adjustment",
+      ],
       ats_kind: [
         "greenhouse",
         "lever",

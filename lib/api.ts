@@ -1442,3 +1442,78 @@ export async function flushOnboarding(userId: string, draft: OnboardingFlush): P
     }
   }
 }
+
+/* ── credits ──────────────────────────────────────────────────────────────────
+ *
+ * The ledger in README §7. Every one of these is an RPC rather than a table read,
+ * because `credit_transactions` has no grants at all — see PHASE6.md §3.
+ */
+
+/**
+ * The balance, after taking today's grant if it is owed.
+ *
+ * One call rather than grant-then-read: the two-call version renders the balance from
+ * before the grant it just caused, so the first open of the day always shows a number one
+ * too low and then corrects itself. Safe to call on every focus — the grant is keyed by
+ * date, so every call after the first is a plain read.
+ */
+export async function fetchCreditState(dailyGrant: number, bankCap: number): Promise<number> {
+  const { data, error } = await supabase.rpc('credit_state', {
+    p_daily_grant: dailyGrant,
+    p_cap: bankCap,
+  });
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
+}
+
+/**
+ * Pay a week's streak bonus. Returns what was actually awarded, which a nearly-full bank
+ * can cut short — that number is the receipt, not the amount asked for.
+ *
+ * Idempotent per week key: this is the durable replacement for the `paidWeeks` ref, so a
+ * re-render, a tab revisit or a reinstall cannot pay the same week twice.
+ */
+export async function awardStreakBonusRemote(
+  weekKey: string,
+  amount: number,
+  bankCap: number,
+  maxWeekly: number,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('award_streak_bonus', {
+    p_week_key: weekKey,
+    p_amount: amount,
+    p_cap: bankCap,
+    p_max_weekly: maxWeekly,
+  });
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
+}
+
+/**
+ * §6's first two steps: reserve a credit and open the run it is reserved against.
+ *
+ * Returns the run id, or `null` when the balance is zero — which the caller treats as
+ * "no credit", not as an error. A live run for the same posting is handed back rather
+ * than charged again, so a double tap is one run.
+ */
+export async function startAutoApplyRun(
+  jobId: string,
+  resumeId: string | null = null,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('start_auto_apply_run', {
+    p_job_id: jobId,
+    p_resume_id: resumeId,
+  });
+  if (error) throw error;
+  return typeof data === 'string' ? data : null;
+}
+
+/** Back out of a run and get the credit back. `failed` marks generation's fault, not the user's. */
+export async function closeAutoApplyRun(runId: string, failed = false): Promise<boolean> {
+  const { data, error } = await supabase.rpc('close_auto_apply_run', {
+    p_run_id: runId,
+    p_failed: failed,
+  });
+  if (error) throw error;
+  return data === true;
+}

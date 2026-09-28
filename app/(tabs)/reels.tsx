@@ -282,7 +282,10 @@ export default function ReelsScreen() {
         () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
         90,
       );
-      spendAutoApplyCredit();
+      // Fire and forget: the sheet opens either way. An empty balance is not a reason to
+      // withhold the handoff — nothing here submits anything, so there is no work to hold
+      // back, and the rail already says how many are left.
+      void spendAutoApplyCredit(job.id).catch(() => {});
       setApplyJob(job);
     },
     [spendAutoApplyCredit],
