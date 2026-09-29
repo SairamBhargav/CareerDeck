@@ -1,18 +1,21 @@
 /*
- * One-off: remove jobs outside the US and Canada (decision 2026-09-29).
+ * Remove jobs the app no longer lists (decisions of 2026-09-29): outside the US and Canada,
+ * or Senior / Staff+ level.
  *
- *   node --env-file=server/.env scripts/prune-out-of-market.mjs            dry run, prints counts
- *   node --env-file=server/.env scripts/prune-out-of-market.mjs --apply    does it
+ *   node --env-file=server/.env scripts/prune-out-of-scope.mjs            dry run, prints counts
+ *   node --env-file=server/.env scripts/prune-out-of-scope.mjs --apply    does it
  *
- * The crawler now skips these postings before storing them (postingInMarket in
- * server/src/ingest/pipeline.ts). This clears out what was stored before that.
+ * The crawler now skips these postings before storing them (postingInScope in
+ * server/src/ingest/pipeline.ts). This clears out what was stored before that, and is safe
+ * to re-run whenever a scope rule changes.
  *
- * Two passes, because a job can be foreign in two ways:
- *   1. The whole posting is foreign. Read from raw_postings with the source's own adapter,
- *      so "Remote - EMEA" is judged from what the employer wrote, not from the "Remote"
- *      label it was stored under. Its raw_postings rows go too.
- *   2. One fan-out row of a posting that is also in the market ("London / New York"): judged
- *      from the row's own stored location.
+ * Two passes, because a job can be out of scope in two ways:
+ *   1. The whole posting is. Read from raw_postings with the source's own adapter, so
+ *      "Remote - EMEA" is judged from what the employer wrote, not from the "Remote" label it
+ *      was stored under. Its raw_postings rows go too.
+ *   2. One fan-out row of a posting that is otherwise in scope ("London / New York"): judged
+ *      from the row's own stored location. Seniority is per posting, so it is also read from
+ *      the row for jobs whose raw payload is gone.
  *
  * A job a user has touched (saved, applied to, commented on, drafted with Auto Apply) is
  * closed, never deleted: those tables cascade or restrict, and the phase 2 rule is that jobs
@@ -21,7 +24,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { adapterFor } from '../server/src/ingest/sources/index.ts';
-import { postingInMarket } from '../server/src/ingest/pipeline.ts';
+import { postingInMarket, postingInScope, EXCLUDED_SENIORITY } from '../server/src/ingest/pipeline.ts';
 import { parseLocations, MARKET_COUNTRIES } from '../server/src/ingest/normalize/location.ts';
 import { writeBatches } from '../server/src/ingest/batches.ts';
 
@@ -50,15 +53,15 @@ for (const source of sources) {
   const raws = await pages(() => db.from('raw_postings')
     .select('id, external_id, payload').eq('source_id', source.id).order('id'), 200);
   for (const raw of raws) {
-    let inMarket;
+    let inScope;
     if (adapter) {
-      inMarket = postingInMarket(adapter.parse({ externalId: raw.external_id, payload: raw.payload }));
+      inScope = postingInScope(adapter.parse({ externalId: raw.external_id, payload: raw.payload }));
     } else {
-      // The Simplify feed stores its listing's locations directly.
+      // The Simplify feed stores its listing's locations directly, and lists internships only.
       const [first, ...rest] = Array.isArray(raw.payload?.locations) ? raw.payload.locations : [];
-      inMarket = postingInMarket({ locationRaw: first ?? null, extraLocations: rest, workplaceHint: null });
+      inScope = postingInMarket({ locationRaw: first ?? null, extraLocations: rest, workplaceHint: null });
     }
-    if (!inMarket) {
+    if (!inScope) {
       foreignRawIds.push(raw.id);
       foreignPostings.add(`${source.id}|${raw.external_id}`);
     }
@@ -67,11 +70,11 @@ for (const source of sources) {
 
 // ── 2. individual rows ────────────────────────────────────────────────────────
 const jobs = await pages(() => db.from('jobs')
-  .select('id, source_id, external_id, location_raw, location_country, location_type, status').order('id'), 1000);
+  .select('id, source_id, external_id, location_raw, location_country, location_type, seniority, status').order('id'), 1000);
 
 const foreignJobIds = [];
 for (const job of jobs) {
-  if (foreignPostings.has(`${job.source_id}|${job.external_id}`)) {
+  if (foreignPostings.has(`${job.source_id}|${job.external_id}`) || EXCLUDED_SENIORITY.has(job.seniority ?? '')) {
     foreignJobIds.push(job.id);
     continue;
   }
@@ -96,8 +99,8 @@ const toClose = foreignJobIds.filter((id) => touched.has(id));
 const toDelete = foreignJobIds.filter((id) => !touched.has(id));
 
 console.log(`jobs scanned              ${jobs.length}`);
-console.log(`foreign postings (raw)    ${foreignPostings.size}  (${foreignRawIds.length} raw row(s))`);
-console.log(`foreign job rows          ${foreignJobIds.length}`);
+console.log(`out-of-scope postings    ${foreignPostings.size}  (${foreignRawIds.length} raw row(s))`);
+console.log(`out-of-scope job rows    ${foreignJobIds.length}`);
 console.log(`  delete (untouched)      ${toDelete.length}`);
 console.log(`  close (a user has them) ${toClose.length}`);
 console.log(`jobs left                 ${jobs.length - toDelete.length}`);

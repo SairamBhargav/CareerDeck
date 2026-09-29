@@ -33,7 +33,7 @@ import {
 import { compileDictionary, extractSkills } from '../server/src/ingest/normalize/skills.ts';
 import { scoreQuality } from '../server/src/ingest/normalize/quality.ts';
 import { extractRequirements, htmlToText } from '../server/src/ingest/normalize/html.ts';
-import { contentHash, postingInMarket } from '../server/src/ingest/pipeline.ts';
+import { contentHash, postingInMarket, postingInScope } from '../server/src/ingest/pipeline.ts';
 import { ashby, greenhouse, lever } from '../server/src/ingest/sources/index.ts';
 import { crawlSimplifyFeed } from '../server/src/ingest/aggregators/simplify.ts';
 import { SKILLS } from './skills-dictionary.ts';
@@ -362,6 +362,23 @@ check('a remote posting open to EMEA and the US is kept',
   parseLocations('Remote - EMEA', ['Remote - US'], 'Remote').some((l) => !l.abroad));
 check('a foreign posting produces no jobs',
   !postingInMarket({ locationRaw: 'Bengaluru', extraLocations: ['Hyderabad'], workplaceHint: null }));
+
+section('scope: student-level roles only');
+
+const scoped = (title) => postingInScope({
+  title, locationRaw: 'San Francisco, CA', extraLocations: [], workplaceHint: null,
+  descriptionText: 'Build things with the team.', descriptionHtml: null,
+});
+for (const [title, expected] of [
+  ['Senior Software Engineer', false],
+  ['Staff Engineer, Infrastructure', false],
+  ['Principal Product Manager', false],
+  ['Software Engineer Intern, Summer 2027', true],
+  ['New Grad Software Engineer', true],
+  ['Software Engineer', true],                 // unranked stays: most are open to new grads
+]) {
+  check(`scope: ${title} → ${expected ? 'kept' : 'skipped'}`, scoped(title) === expected);
+}
 
 section('salaries');
 

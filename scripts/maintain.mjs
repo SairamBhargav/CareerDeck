@@ -74,7 +74,9 @@ async function run(label, fn) {
     console.log(`ok    ${label}  — ${data ?? 0}`);
   } catch (error) {
     failed = true;
-    console.error(`FAIL  ${label}  — ${error instanceof Error ? error.message : String(error)}`);
+    // A Supabase error is a plain object, not an Error: String() on it prints "[object Object]".
+    const message = error instanceof Error ? error.message : (error?.message ?? JSON.stringify(error));
+    console.error(`FAIL  ${label}  — ${error?.code ? `[${error.code}] ` : ''}${message}`);
   }
 }
 

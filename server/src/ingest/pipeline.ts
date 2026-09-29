@@ -163,6 +163,35 @@ export interface NormalizeContext {
   boardSize: number;
 }
 
+/** Whether any of a posting's locations is in the market (MARKET_COUNTRIES) or unknown. */
+export function postingInMarket(posting: Pick<ParsedPosting, 'locationRaw' | 'extraLocations' | 'workplaceHint'>): boolean {
+  return parseLocations(posting.locationRaw, posting.extraLocations, posting.workplaceHint)
+    .some((location) => !location.abroad);
+}
+
+/**
+ * Seniority the app does not list (decision 2026-09-29). The audience is students, and
+ * README §4.4 already says a student "should essentially never see a Staff Engineer role".
+ * Unranked titles ("Software Engineer") stay: most of them are open to new grads.
+ */
+export const EXCLUDED_SENIORITY = new Set(['senior', 'staff_plus']);
+
+function descriptionText(posting: Pick<ParsedPosting, 'descriptionText' | 'descriptionHtml'>): string {
+  // The adapter's plain text is preferred where the vendor supplies one — it is their own
+  // rendering, and it keeps list structure that a generic HTML strip would flatten.
+  return posting.descriptionText?.trim() ? posting.descriptionText.trim() : htmlToText(posting.descriptionHtml);
+}
+
+/**
+ * Whether a posting belongs in the corpus at all: in the market, and at a level the app
+ * lists. Checked before a posting is stored, so one that is not wanted costs no storage and
+ * no Disk IO; normalize() applies the same two rules for a replay of older raw rows.
+ */
+export function postingInScope(posting: ParsedPosting): boolean {
+  if (!postingInMarket(posting)) return false;
+  return !EXCLUDED_SENIORITY.has(extractSeniority(posting.title, descriptionText(posting)) ?? '');
+}
+
 /**
  * One posting → one `jobs` row per location (§4.4's fan-out).
  *
@@ -170,21 +199,12 @@ export interface NormalizeContext {
  * locations" later and what stops the near-miss detector filing its own siblings as
  * suspected duplicates.
  */
-/** Whether any of a posting's locations is in the market (MARKET_COUNTRIES) or unknown. */
-export function postingInMarket(posting: Pick<ParsedPosting, 'locationRaw' | 'extraLocations' | 'workplaceHint'>): boolean {
-  return parseLocations(posting.locationRaw, posting.extraLocations, posting.workplaceHint)
-    .some((location) => !location.abroad);
-}
-
 export function normalize(posting: ParsedPosting, context: NormalizeContext): NormalizedJob[] {
-  // The adapter's plain text is preferred where the vendor supplies one — it is their own
-  // rendering, and it keeps list structure that a generic HTML strip would flatten.
-  const text = posting.descriptionText?.trim()
-    ? posting.descriptionText.trim()
-    : htmlToText(posting.descriptionHtml);
+  const text = descriptionText(posting);
 
-  const requirements = extractRequirements(text);
   const seniority = extractSeniority(posting.title, text);
+  if (EXCLUDED_SENIORITY.has(seniority ?? '')) return [];
+  const requirements = extractRequirements(text);
   const employmentType = extractEmploymentType(posting.employmentTypeHint, posting.title, seniority);
   const skills = extractSkills(context.dictionary, posting.title, requirements, text);
   /*
@@ -439,12 +459,12 @@ export async function crawlSource(
 
     const listed = await readBoard(adapter, request, response.body);
     const hydrated = await hydrate(adapter, listed, (message) => log(`      ${label} — ${message}`));
-    // Filtered before landing, so a foreign posting costs no storage and no Disk IO at all —
+    // Filtered before landing, so an unwanted posting costs no storage and no Disk IO at all —
     // landing it and discarding it later would re-store its payload on every crawl.
-    const postings = hydrated.filter((posting) => postingInMarket(adapter.parse(posting)));
+    const postings = hydrated.filter((posting) => postingInScope(adapter.parse(posting)));
     totals.postingsSeen = postings.length;
     if (postings.length < hydrated.length) {
-      log(`      ${label} — ${hydrated.length - postings.length} posting(s) outside the US and Canada skipped`);
+      log(`      ${label} — ${hydrated.length - postings.length} posting(s) outside the US/Canada or above new-grad level skipped`);
     }
 
     const changed = options.dryRun
