@@ -945,9 +945,16 @@ async function main() {
 
       await trigger();
 
+      /*
+       * 20 seconds, not 8. A database-originated broadcast leaves through Realtime's replication
+       * stream, and when phase 2's volume test has just bulk-inserted impressions the stream
+       * can be several seconds behind: run alone this passed 3 of 3, run straight after phase 2
+       * it missed an 8-second window twice (2026-09-29). The check is that the comment
+       * arrives, not how fast a loaded local stack delivers it.
+       */
       const payload = await Promise.race([
         received,
-        new Promise((resolve) => setTimeout(() => resolve(null), 8_000)),
+        new Promise((resolve) => setTimeout(() => resolve(null), 20_000)),
       ]);
 
       await client.removeChannel(channel);
@@ -991,7 +998,7 @@ async function main() {
     } else {
       check('a signed-in reader is authorized on a posting’s private comment topic', true);
       check('and a comment posted while they listen reaches them',
-        asReader.payload !== null, asReader.payload === null ? 'nothing arrived in 8s' : '');
+        asReader.payload !== null, asReader.payload === null ? 'nothing arrived in 20s' : '');
       check('the broadcast carries the pseudonym the thread renders',
         typeof asReader.payload?.author_handle === 'string', asReader.payload?.author_handle ?? '');
       check('and is the public projection, not the row',
