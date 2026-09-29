@@ -10,13 +10,16 @@ import { useVerification } from '@/hooks/useVerification';
 import { useAuth } from '@/context/AuthContext';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { SkillChip } from '@/components/common/SkillChip';
+import { ApplicationAnswersSheet } from '@/components/profile/ApplicationAnswersSheet';
 import { EditProfileSheet } from '@/components/profile/EditProfileSheet';
 import { PreferencesSheet } from '@/components/profile/PreferencesSheet';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useApplicationAnswers } from '@/hooks/useApplicationAnswers';
 import { useResumes } from '@/hooks/useResumes';
+import type { ApplicationAnswers } from '@/lib/api';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 
 /** How many preference chips the Profile row previews before it stops counting them out. */
@@ -51,8 +54,11 @@ export default function ProfileScreen() {
   const { userId } = useAuth();
   const verification = useVerification(userId);
 
+  const applicationAnswers = useApplicationAnswers(user?.id ?? null);
+
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingPreferences, setEditingPreferences] = useState(false);
+  const [editingAnswers, setEditingAnswers] = useState(false);
 
   // The root layout holds the splash until the profile has loaded and shows an error
   // screen if it can't, so this screen is never reached without one. Narrowing the type
@@ -85,6 +91,8 @@ export default function ProfileScreen() {
       value: resumes.length === 1 ? '1 saved' : `${resumes.length} saved`,
     },
   ];
+
+  const answerRows = applicationAnswerRows(applicationAnswers.answers, () => setEditingAnswers(true));
 
   const collectionRows: RowGroupItem[] = [
     {
@@ -167,6 +175,11 @@ export default function ProfileScreen() {
           <RowGroup items={lookingRows} />
         </Animated.View>
 
+        <Animated.View entering={FadeInDown.duration(300).delay(180)}>
+          <SectionHeader title="Application answers" actionLabel="Edit" onActionPress={() => setEditingAnswers(true)} />
+          <RowGroup items={answerRows} />
+        </Animated.View>
+
         <Animated.View entering={FadeInDown.duration(300).delay(210)}>
           <SectionHeader title="Your collections" />
           <RowGroup items={collectionRows} />
@@ -186,6 +199,17 @@ export default function ProfileScreen() {
         />
       ) : null}
 
+      {editingAnswers ? (
+        <ApplicationAnswersSheet
+          answers={applicationAnswers.answers}
+          onSave={(next) => {
+            applicationAnswers.save(next);
+            setEditingAnswers(false);
+          }}
+          onClose={() => setEditingAnswers(false)}
+        />
+      ) : null}
+
       {editingProfile ? (
         <EditProfileSheet
           user={user}
@@ -198,6 +222,42 @@ export default function ProfileScreen() {
       ) : null}
     </SafeAreaView>
   );
+}
+
+/**
+ * Three rows summarizing the answers, each opening the sheet. A summary rather than the answers
+ * themselves: the sheet is where they are read in full, and a sponsorship answer does not need
+ * to sit on a screen someone might hand their phone over on.
+ */
+function applicationAnswerRows(answers: ApplicationAnswers, onPress: () => void): RowGroupItem[] {
+  const education = [answers.degree, answers.fieldOfStudy].filter(Boolean).join(', ');
+  const eligibilityAnswered = [answers.workAuthorizedUs, answers.needsSponsorship].filter((v) => v !== null).length;
+  const links = [answers.linkedinUrl, answers.githubUrl, answers.portfolioUrl].filter(Boolean).length;
+  return [
+    {
+      key: 'education',
+      icon: 'school-outline',
+      label: 'Education',
+      hint: education
+        ? `${education}${answers.fromResume.length > 0 ? ' · from your resume' : ''}`
+        : 'Filled from your resume, or add it',
+      onPress,
+    },
+    {
+      key: 'eligibility',
+      icon: 'shield-checkmark-outline',
+      label: 'Work eligibility',
+      hint: eligibilityAnswered === 2 ? 'Answered' : eligibilityAnswered === 1 ? '1 of 2 answered' : 'Not answered',
+      onPress,
+    },
+    {
+      key: 'links',
+      icon: 'link-outline',
+      label: 'Links and availability',
+      hint: `${links} of 3 links${answers.earliestStart ? ` · starts ${answers.earliestStart}` : ''}`,
+      onPress,
+    },
+  ];
 }
 
 /** "3 postings", "1 company" — a figure that reads as a sentence rather than a tally. */

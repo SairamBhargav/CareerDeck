@@ -72,6 +72,22 @@ export interface DraftInput {
     graduationYear: number | null;
     preferredRoles: string[];
     preferredLocations: string[];
+    /**
+     * What the person saved on Profile → Application answers (docs/PHASE8.md §5). Their own
+     * statements, so the drafter may copy them — including work authorization and sponsorship,
+     * which it otherwise must never answer. Null means they have not said.
+     */
+    applicationAnswers: {
+      degree: string | null;
+      fieldOfStudy: string | null;
+      authorizedToWorkInUS: boolean | null;
+      requiresVisaSponsorship: boolean | null;
+      linkedinUrl: string | null;
+      githubUrl: string | null;
+      portfolioUrl: string | null;
+      earliestStartDate: string | null;
+      willingToRelocate: boolean | null;
+    };
   };
 }
 
@@ -121,8 +137,17 @@ Always null, with a prompt, unless the provided data states it outright:
 - Start dates, availability, notice periods.
 - Salary expectations.
 - Years of experience with a specific technology, unless dated roles make it exact.
-- Links (LinkedIn, GitHub, portfolio) — the resume data you are given contains none.
+- Links (LinkedIn, GitHub, portfolio).
 - Anything asking the person to attest, certify or agree to something.
+
+## The person's saved answers
+
+\`profile.applicationAnswers\` holds answers the person typed in themselves. They **are** the
+provided data stating it outright: when one answers a question — work authorization,
+sponsorship, a link, a start date, relocation, degree — use it, with \`source\` "profile" and
+\`confidence\` "high". Map a yes/no answer onto the form's own options (a sponsorship question
+worded "Will you require sponsorship?" is answered by \`requiresVisaSponsorship\`). A null there
+means they have not said, and the rules above still apply.
 
 ## What you may write
 

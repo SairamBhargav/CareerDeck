@@ -76,10 +76,17 @@ privacy.post('/export', async (c) => {
     throw error;
   }
 
+  // docs/PHASE8.md §5. Read here rather than added to export_account(), which would mean
+  // restating that whole function for one key; the bundle is assembled here anyway.
+  const answers = await adminClient
+    .from('application_answers').select('*').eq('user_id', user.id).maybeSingle();
+  if (answers.error) throw answers.error;
+
   const bundle = {
     ...(data as Record<string, unknown>),
     email: user.email,
     resume_contact_details: await contactDetails(user),
+    application_answers: answers.data,
   };
   const body = JSON.stringify(bundle, null, 2);
   await adminClient.rpc('record_export_size', { p_user_id: user.id, p_bytes: Buffer.byteLength(body) });

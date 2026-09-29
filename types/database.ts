@@ -12,6 +12,59 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      application_answers: {
+        Row: {
+          degree: string | null
+          earliest_start: string | null
+          field_of_study: string | null
+          github_url: string | null
+          linkedin_url: string | null
+          needs_sponsorship: boolean | null
+          portfolio_url: string | null
+          sources: Json
+          updated_at: string
+          user_id: string
+          willing_to_relocate: boolean | null
+          work_authorized_us: boolean | null
+        }
+        Insert: {
+          degree?: string | null
+          earliest_start?: string | null
+          field_of_study?: string | null
+          github_url?: string | null
+          linkedin_url?: string | null
+          needs_sponsorship?: boolean | null
+          portfolio_url?: string | null
+          sources?: Json
+          updated_at?: string
+          user_id: string
+          willing_to_relocate?: boolean | null
+          work_authorized_us?: boolean | null
+        }
+        Update: {
+          degree?: string | null
+          earliest_start?: string | null
+          field_of_study?: string | null
+          github_url?: string | null
+          linkedin_url?: string | null
+          needs_sponsorship?: boolean | null
+          portfolio_url?: string | null
+          sources?: Json
+          updated_at?: string
+          user_id?: string
+          willing_to_relocate?: boolean | null
+          work_authorized_us?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_answers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       application_events: {
         Row: {
           application_id: string
@@ -1269,6 +1322,7 @@ export type Database = {
           external_id: string | null
           first_seen_at: string
           id: string
+          job_family: string | null
           last_seen_at: string
           location_city: string | null
           location_country: string | null
@@ -1310,6 +1364,7 @@ export type Database = {
           external_id?: string | null
           first_seen_at?: string
           id?: string
+          job_family?: string | null
           last_seen_at?: string
           location_city?: string | null
           location_country?: string | null
@@ -1351,6 +1406,7 @@ export type Database = {
           external_id?: string | null
           first_seen_at?: string
           id?: string
+          job_family?: string | null
           last_seen_at?: string
           location_city?: string | null
           location_country?: string | null
@@ -1399,6 +1455,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      major_families: {
+        Row: {
+          family: string
+          pattern: string
+        }
+        Insert: {
+          family: string
+          pattern: string
+        }
+        Update: {
+          family?: string
+          pattern?: string
+        }
+        Relationships: []
       }
       moderators: {
         Row: {
@@ -2262,6 +2333,21 @@ export type Database = {
         }
         Relationships: []
       }
+      sector_families: {
+        Row: {
+          family: string
+          sector_key: string
+        }
+        Insert: {
+          family: string
+          sector_key: string
+        }
+        Update: {
+          family?: string
+          sector_key?: string
+        }
+        Relationships: []
+      }
       skills: {
         Row: {
           aliases: string[]
@@ -2374,6 +2460,7 @@ export type Database = {
       }
       user_preferences: {
         Row: {
+          career_stage: string | null
           min_salary_annual: number | null
           notification_prefs: Json
           open_to_remote: boolean
@@ -2386,6 +2473,7 @@ export type Database = {
           weekly_goal: number
         }
         Insert: {
+          career_stage?: string | null
           min_salary_annual?: number | null
           notification_prefs?: Json
           open_to_remote?: boolean
@@ -2398,6 +2486,7 @@ export type Database = {
           weekly_goal?: number
         }
         Update: {
+          career_stage?: string | null
           min_salary_annual?: number | null
           notification_prefs?: Json
           open_to_remote?: boolean
@@ -3098,6 +3187,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      my_deck_profile: { Args: never; Returns: Json }
       my_resumes: {
         Args: never
         Returns: Database["public"]["CompositeTypes"]["resume_card"][]
@@ -3161,6 +3251,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      personal_candidate_pool: {
+        Args: { p_limit?: number; p_user_id: string }
+        Returns: {
+          job_id: string
+          source: string
+        }[]
+      }
       post_comment: {
         Args: {
           p_author_id: string
@@ -3222,6 +3319,7 @@ export type Database = {
         Args: {
           p_affinity: number
           p_cohort: number
+          p_field?: number
           p_popularity: number
           p_pref: number
           p_quality: number
@@ -3494,12 +3592,17 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      target_seniorities: {
+        Args: { p_user_id: string }
+        Returns: Database["public"]["Enums"]["seniority_level"][]
+      }
       text_array_to_string: {
         Args: { p_sep: string; p_values: string[] }
         Returns: string
       }
       unregister_push_token: { Args: { p_token: string }; Returns: boolean }
       urgency_score: { Args: { p_closes_at: string }; Returns: number }
+      user_job_families: { Args: { p_user_id: string }; Returns: string[] }
       viewer_plan: {
         Args: { p_user_id: string }
         Returns: {

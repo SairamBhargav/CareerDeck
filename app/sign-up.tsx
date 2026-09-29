@@ -107,6 +107,7 @@ export default function SignUpScreen() {
                 : null,
             industries: onboarding.industries,
             employmentTypes: onboarding.roleOption?.employmentTypes ?? [],
+            careerStage: onboarding.roleOption?.careerStage ?? null,
             followedCompanySlugs: onboarding.followedCompanySlugs,
           });
           onboarding.clear();

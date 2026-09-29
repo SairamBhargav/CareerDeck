@@ -37,6 +37,11 @@ export interface RoleOption {
   employmentTypes: EmploymentType[];
   /** What the feed leads with. Phase 5's ranker is the first thing to read it. */
   seniority: Seniority[];
+  /**
+   * Stored as `user_preferences.career_stage`, which the deck's `target_seniorities()` reads —
+   * docs/PHASE8.md §3.2. Kept beside `seniority` so the two cannot be edited apart.
+   */
+  careerStage: 'student_intern' | 'graduating' | 'recent_grad' | 'early_career';
   /** Whether sign-up asks for a school and graduation year. */
   asksSchool: boolean;
 }
@@ -47,6 +52,7 @@ export const ROLE_OPTIONS: RoleOption[] = [
     label: 'Student, looking for an internship',
     employmentTypes: ['Internship'],
     seniority: ['intern'],
+    careerStage: 'student_intern',
     asksSchool: true,
   },
   {
@@ -54,6 +60,7 @@ export const ROLE_OPTIONS: RoleOption[] = [
     label: 'Graduating soon, looking for new-grad roles',
     employmentTypes: ['Full-time', 'Internship'],
     seniority: ['new_grad', 'intern'],
+    careerStage: 'graduating',
     asksSchool: true,
   },
   {
@@ -61,13 +68,21 @@ export const ROLE_OPTIONS: RoleOption[] = [
     label: 'Recent grad, looking for my first full-time',
     employmentTypes: ['Full-time'],
     seniority: ['new_grad'],
+    careerStage: 'recent_grad',
     asksSchool: true,
   },
   {
+    /*
+     * Was "Already working", targeting mid and senior. Senior and Staff+ roles stopped being
+     * stored on 2026-09-29, so it now means what the product can serve: someone a year or two
+     * in, switching fields or companies. The key stays `working` so a draft saved on a device
+     * before the rename still resolves.
+     */
     key: 'working',
-    label: 'Already working, looking for what’s next',
+    label: 'Early in my career, looking to switch',
     employmentTypes: ['Full-time', 'Contract'],
-    seniority: ['mid', 'senior'],
+    seniority: ['new_grad', 'mid'],
+    careerStage: 'early_career',
     asksSchool: false,
   },
 ];

@@ -37,6 +37,7 @@ import {
 } from './normalize/seniority.ts';
 import { extractSkills, type SkillDictionary } from './normalize/skills.ts';
 import { scoreQuality } from './normalize/quality.ts';
+import { classifyFamily, type JobFamily } from './normalize/family.ts';
 import { adapterFor } from './sources/index.ts';
 import type { ParsedPosting, RawPosting, SourceAdapter, SourceRequest } from './sources/types.ts';
 
@@ -149,6 +150,8 @@ export interface NormalizedJob {
   closes_at: string | null;
   dedup_group_id: string;
   quality_score: number;
+  /** docs/PHASE8.md §2. Null when the title and skills name no field. */
+  job_family: JobFamily | null;
 }
 
 export interface NormalizeContext {
@@ -207,6 +210,7 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
   const requirements = extractRequirements(text);
   const employmentType = extractEmploymentType(posting.employmentTypeHint, posting.title, seniority);
   const skills = extractSkills(context.dictionary, posting.title, requirements, text);
+  const family = classifyFamily(posting.title, skills);
   /*
    * Only a salary the app can label honestly is stored. `job_card` carries no currency and the
    * card prints `$`, so a non-USD range would display as dollars — 226,000 złoty (≈ $57k) shown as
@@ -305,6 +309,7 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
     closes_at: posting.closesAt,
     dedup_group_id: groupId,
     quality_score: quality,
+    job_family: family,
   }));
 }
 

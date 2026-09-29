@@ -48,6 +48,7 @@ import { writeBatches } from '../batches.ts';
 import { politeFetch } from '../http.ts';
 import { parseLocations } from '../normalize/location.ts';
 import { normalizeTitle } from '../normalize/seniority.ts';
+import { classifyFamily } from '../normalize/family.ts';
 import { extractSkills, type SkillDictionary } from '../normalize/skills.ts';
 import { scoreQuality } from '../normalize/quality.ts';
 import { isoDate, type RawPosting } from '../sources/types.ts';
@@ -336,6 +337,7 @@ export async function crawlSimplifyFeed(
       });
       const requirements = p.degrees.length > 0 ? [`Open to ${p.degrees.join(', ')} students`] : [];
       const skills = extractSkills(options.dictionary, p.title, requirements, '');
+      const family = classifyFamily(p.title, skills);
 
       const quality = scoreQuality({
         title: p.title,
@@ -387,6 +389,7 @@ export async function crawlSimplifyFeed(
           closes_at: null,
           dedup_group_id: groupId,
           quality_score: quality,
+          job_family: family,
         });
       }
     }

@@ -1458,6 +1458,97 @@ export async function saveNotificationPrefs(userId: string, prefs: NotificationP
   if (error) throw error;
 }
 
+/**
+ * What a student answers on every application, stated once — docs/PHASE8.md §5.
+ *
+ * `fromResume` lists the fields the resume filled, so Profile can say so. Editing one moves it
+ * to the student's own answer, and a later resume will not fill it again.
+ */
+export interface ApplicationAnswers {
+  degree: string | null;
+  fieldOfStudy: string | null;
+  workAuthorizedUs: boolean | null;
+  needsSponsorship: boolean | null;
+  linkedinUrl: string | null;
+  githubUrl: string | null;
+  portfolioUrl: string | null;
+  earliestStart: string | null;
+  willingToRelocate: boolean | null;
+  fromResume: ('degree' | 'fieldOfStudy')[];
+}
+
+export const EMPTY_APPLICATION_ANSWERS: ApplicationAnswers = {
+  degree: null,
+  fieldOfStudy: null,
+  workAuthorizedUs: null,
+  needsSponsorship: null,
+  linkedinUrl: null,
+  githubUrl: null,
+  portfolioUrl: null,
+  earliestStart: null,
+  willingToRelocate: null,
+  fromResume: [],
+};
+
+export async function fetchApplicationAnswers(userId: string): Promise<ApplicationAnswers> {
+  const { data, error } = await supabase
+    .from('application_answers').select('*').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  if (!data) return EMPTY_APPLICATION_ANSWERS;
+  const sources = (data.sources ?? {}) as Record<string, string>;
+  return {
+    degree: data.degree,
+    fieldOfStudy: data.field_of_study,
+    workAuthorizedUs: data.work_authorized_us,
+    needsSponsorship: data.needs_sponsorship,
+    linkedinUrl: data.linkedin_url,
+    githubUrl: data.github_url,
+    portfolioUrl: data.portfolio_url,
+    earliestStart: data.earliest_start,
+    willingToRelocate: data.willing_to_relocate,
+    fromResume: [
+      ...(sources.degree === 'resume' ? (['degree'] as const) : []),
+      ...(sources.field_of_study === 'resume' ? (['fieldOfStudy'] as const) : []),
+    ],
+  };
+}
+
+/** A blank text answer is no answer: stored as null, never as an empty string. */
+function blankToNull(value: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * A link typed without a scheme ("linkedin.com/in/ada") gets https:// rather than a
+ * constraint error — the table only accepts http(s) URLs.
+ */
+function normalizeLink(value: string | null): string | null {
+  const link = blankToNull(value);
+  if (!link) return null;
+  return /^https?:\/\//i.test(link) ? link : `https://${link}`;
+}
+
+export async function saveApplicationAnswers(userId: string, answers: ApplicationAnswers): Promise<void> {
+  const { error } = await supabase.from('application_answers').upsert({
+    user_id: userId,
+    degree: blankToNull(answers.degree),
+    field_of_study: blankToNull(answers.fieldOfStudy),
+    work_authorized_us: answers.workAuthorizedUs,
+    needs_sponsorship: answers.needsSponsorship,
+    linkedin_url: normalizeLink(answers.linkedinUrl),
+    github_url: normalizeLink(answers.githubUrl),
+    portfolio_url: normalizeLink(answers.portfolioUrl),
+    earliest_start: blankToNull(answers.earliestStart),
+    willing_to_relocate: answers.willingToRelocate,
+    sources: {
+      ...(answers.fromResume.includes('degree') ? { degree: 'resume' } : {}),
+      ...(answers.fromResume.includes('fieldOfStudy') ? { field_of_study: 'resume' } : {}),
+    },
+  });
+  if (error) throw error;
+}
+
 export interface AccountStatus {
   deletionRequestedAt: string | null;
   purgeAfter: string | null;
@@ -1708,6 +1799,8 @@ export interface OnboardingFlush {
   /** Sector keys — see constants/industries.ts. */
   industries: string[];
   employmentTypes: EmploymentType[];
+  /** Onboarding step 1, which the deck reads to pick levels — docs/PHASE8.md §3.2. */
+  careerStage: 'student_intern' | 'graduating' | 'recent_grad' | 'early_career' | null;
   followedCompanySlugs: string[];
 }
 
@@ -1744,6 +1837,7 @@ export async function flushOnboarding(userId: string, draft: OnboardingFlush): P
     .update({
       preferred_industries: draft.industries,
       preferred_employment_types: draft.employmentTypes,
+      ...(draft.careerStage ? { career_stage: draft.careerStage } : {}),
     })
     .eq('user_id', userId);
   if (preferencesError) reportError(preferencesError, { where: 'flushOnboarding.preferences' });

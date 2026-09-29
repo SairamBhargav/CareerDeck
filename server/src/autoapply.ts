@@ -221,7 +221,7 @@ async function ownedRun(runId: string, userId: string): Promise<RunRow> {
 
 /** Everything the drafter reads, gathered for one run. The reader's identity is not in it. */
 async function draftInputs(run: RunRow, user: AuthedUser) {
-  const [job, resume, resumeProfile, profile, prefs] = await Promise.all([
+  const [job, resume, resumeProfile, profile, prefs, answers] = await Promise.all([
     adminClient
       .from('jobs')
       .select('id, title, company_name, location_raw, description_text, apply_url, external_id, source_id')
@@ -243,7 +243,13 @@ async function draftInputs(run: RunRow, user: AuthedUser) {
       .select('preferred_roles, preferred_locations')
       .eq('user_id', run.user_id)
       .maybeSingle(),
+    adminClient
+      .from('application_answers')
+      .select('degree, field_of_study, work_authorized_us, needs_sponsorship, linkedin_url, github_url, portfolio_url, earliest_start, willing_to_relocate')
+      .eq('user_id', run.user_id)
+      .maybeSingle(),
   ]);
+  if (answers.error) throw answers.error;
 
   if (job.error) throw job.error;
   if (resume.error) throw resume.error;
@@ -286,6 +292,19 @@ async function draftInputs(run: RunRow, user: AuthedUser) {
         graduationYear: (profile.data?.graduation_year as number | null) ?? null,
         preferredRoles: (prefs.data?.preferred_roles as string[]) ?? [],
         preferredLocations: (prefs.data?.preferred_locations as string[]) ?? [],
+        // The student's own saved answers — PHASE8.md §5. Renamed to what each one answers, so
+        // the model maps "Will you require sponsorship?" without guessing at column names.
+        applicationAnswers: {
+          degree: answers.data?.degree ?? null,
+          fieldOfStudy: answers.data?.field_of_study ?? null,
+          authorizedToWorkInUS: answers.data?.work_authorized_us ?? null,
+          requiresVisaSponsorship: answers.data?.needs_sponsorship ?? null,
+          linkedinUrl: answers.data?.linkedin_url ?? null,
+          githubUrl: answers.data?.github_url ?? null,
+          portfolioUrl: answers.data?.portfolio_url ?? null,
+          earliestStartDate: answers.data?.earliest_start ?? null,
+          willingToRelocate: answers.data?.willing_to_relocate ?? null,
+        },
       },
     },
   };
