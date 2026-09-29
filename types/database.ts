@@ -1802,6 +1802,7 @@ export type Database = {
           major: string | null
           onboarding_completed_at: string | null
           school_id: string | null
+          school_id_claimed: string | null
           school_name_raw: string | null
           updated_at: string
           verification_tier: Database["public"]["Enums"]["verification_tier"]
@@ -1823,6 +1824,7 @@ export type Database = {
           major?: string | null
           onboarding_completed_at?: string | null
           school_id?: string | null
+          school_id_claimed?: string | null
           school_name_raw?: string | null
           updated_at?: string
           verification_tier?: Database["public"]["Enums"]["verification_tier"]
@@ -1844,11 +1846,19 @@ export type Database = {
           major?: string | null
           onboarding_completed_at?: string | null
           school_id?: string | null
+          school_id_claimed?: string | null
           school_name_raw?: string | null
           updated_at?: string
           verification_tier?: Database["public"]["Enums"]["verification_tier"]
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_school_id_claimed_fkey"
+            columns: ["school_id_claimed"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_school_id_fkey"
             columns: ["school_id"]
@@ -2225,24 +2235,30 @@ export type Database = {
           created_at: string
           email_domains: string[]
           id: string
+          ipeds_id: number | null
           name: string
           short_name: string | null
+          state: string | null
         }
         Insert: {
           country?: string
           created_at?: string
           email_domains?: string[]
           id?: string
+          ipeds_id?: number | null
           name: string
           short_name?: string | null
+          state?: string | null
         }
         Update: {
           country?: string
           created_at?: string
           email_domains?: string[]
           id?: string
+          ipeds_id?: number | null
           name?: string
           short_name?: string | null
+          state?: string | null
         }
         Relationships: []
       }
@@ -3405,6 +3421,7 @@ export type Database = {
         Args: { p_comment_id: string; p_on: boolean }
         Returns: boolean
       }
+      set_claimed_school: { Args: { p_ipeds_id: number }; Returns: string }
       set_comment_like: {
         Args: { p_comment_id: string; p_on: boolean }
         Returns: boolean
