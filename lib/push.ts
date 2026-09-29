@@ -102,7 +102,11 @@ export async function pushPermissionGranted(): Promise<boolean> {
  * cold app. The server puts the route in `data.url` (`server/src/notify/push.ts`).
  */
 export function onNotificationTap(navigate: (url: string) => void): () => void {
-  const route = (response: Notifications.NotificationResponse | null) => {
+  // No push on web, and expo-notifications throws from both calls below there — which, from the
+  // root layout, took down the whole web build rather than just this feature.
+  if (Platform.OS === 'web') return () => {};
+
+  const route =(response: Notifications.NotificationResponse | null) => {
     const url = response?.notification.request.content.data?.url;
     if (typeof url === 'string' && url.startsWith('/')) navigate(url);
   };
