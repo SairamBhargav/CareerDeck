@@ -312,6 +312,38 @@ async function main() {
     .from('application_answers').select('*');
   check('and signed-out readers see nothing', Boolean(anonRead.error) || (anonRead.data ?? []).length === 0);
 
+  // ── closed jobs do not accumulate ────────────────────────────────────────────
+
+  section('closed-job retention (20261005000000)');
+
+  // Inserted closed and backdated: an insert does not fire the updated_at trigger.
+  const aged = (label, closedDaysAgo) => ({
+    ...job(`P8 Closed ${label}`, 'software', 'intern', closedDaysAgo + 10),
+    status: 'closed',
+    external_id: `p8-closed-${label}-${stamp}`,
+    updated_at: new Date(Date.now() - closedDaysAgo * DAY).toISOString(),
+  });
+  const closedRows = await admin.from('jobs')
+    .insert([aged('old', 40), aged('recent', 5), aged('touched', 40)])
+    .select('id, title, external_id');
+  check('three closed postings exist', !closedRows.error && closedRows.data.length === 3, closedRows.error?.message);
+  const closed = Object.fromEntries((closedRows.data ?? []).map((j) => [j.title.split(' ').pop(), j]));
+  for (const j of closedRows.data ?? []) cleanup.push(() => admin.from('jobs').delete().eq('id', j.id));
+
+  // Someone saved the one that should survive.
+  await admin.from('job_interactions').insert({ user_id: cs.id, job_id: closed.touched.id, kind: 'save' });
+
+  const pruned = await admin.rpc('prune_closed_jobs', { p_closed_days: 30 });
+  check('the prune runs', !pruned.error, pruned.error?.message);
+  const left = await admin.from('jobs').select('id').in('id', (closedRows.data ?? []).map((j) => j.id));
+  const leftIds = new Set((left.data ?? []).map((j) => j.id));
+  check('a posting closed 40 days ago that nobody touched is gone', !leftIds.has(closed.old.id));
+  check('one closed 5 days ago is kept (a mistaken close can still be undone)', leftIds.has(closed.recent.id));
+  check('one a student saved is kept, however old — it is their history', leftIds.has(closed.touched.id));
+  const pruneAnon = await createClient(API, ANON, { auth: { persistSession: false } })
+    .rpc('prune_closed_jobs', { p_closed_days: 0 });
+  check('and nobody outside the service can run it', Boolean(pruneAnon.error), pruneAnon.error?.code ?? 'callable');
+
   // ── ingest carries the family ────────────────────────────────────────────────
 
   section('ingest (ingest_upsert_job)');

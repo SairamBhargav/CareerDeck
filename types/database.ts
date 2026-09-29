@@ -3290,6 +3290,7 @@ export type Database = {
         }
         Returns: number
       }
+      prune_closed_jobs: { Args: { p_closed_days?: number }; Returns: number }
       prune_deleted_resumes: {
         Args: { p_grace_days?: number }
         Returns: {

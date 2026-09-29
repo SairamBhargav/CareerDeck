@@ -64,6 +64,8 @@ const NOTIFICATION_KEEP_DAYS = 90;
 const AUTO_APPLY_READY_DAYS = 7;
 /** How long a closed posting's payload is kept, so a mistaken close can still be replayed. */
 const RAW_CLOSED_KEEP_DAYS = 30;
+/** How long a closed posting nobody touched is kept, so a mistaken close can still be undone. */
+const CLOSED_JOB_KEEP_DAYS = 30;
 
 let failed = false;
 
@@ -107,6 +109,14 @@ await run('read notifications pruned', () =>
  */
 await run('auto apply runs closed and refunded', () =>
   admin.rpc('expire_auto_apply_runs', { p_ready_days: AUTO_APPLY_READY_DAYS, p_stuck_minutes: 15 }),
+);
+
+/*
+ * Closed postings nobody touched, a month after closing, with their stored payloads. Before
+ * the raw-posting prune, which then only has superseded versions left to find.
+ */
+await run('closed jobs removed', () =>
+  admin.rpc('prune_closed_jobs', { p_closed_days: CLOSED_JOB_KEEP_DAYS }),
 );
 
 /*

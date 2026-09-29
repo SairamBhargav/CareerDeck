@@ -59,6 +59,8 @@ function section(title) {
 
 const stamp = Date.now();
 const cleanup = [];
+/** What the experiment's `is_running` was before this run turned it on, restored at the end. */
+let experimentWasRunning = null;
 
 async function main() {
   // ── fixtures ─────────────────────────────────────────────────────────────────
@@ -504,6 +506,15 @@ async function main() {
 
   section('the A/B harness');
 
+  /*
+   * This section tests the harness, which has to work whether or not the experiment is live.
+   * 20261005000001 stops `ranked_feed_v1` before launch, and a stopped experiment assigns
+   * everybody to `ranked` — so run it for the duration and put back what was there.
+   */
+  const shipped = await admin.from('feed_experiments').select('is_running').eq('name', 'ranked_feed_v1').single();
+  experimentWasRunning = shipped.data?.is_running ?? null;
+  await admin.from('feed_experiments').update({ is_running: true }).eq('name', 'ranked_feed_v1');
+
   const armOnce = await admin.rpc('experiment_arm', { p_user_id: alice.id, p_experiment: 'ranked_feed_v1' });
   const armTwice = await admin.rpc('experiment_arm', { p_user_id: alice.id, p_experiment: 'ranked_feed_v1' });
   check('assignment is sticky', armOnce.data === armTwice.data, String(armOnce.data));
@@ -690,7 +701,10 @@ try {
    * of anything measures a one-armed experiment.
    */
   try {
-    await admin.from('feed_experiments').update({ treatment_pct: 50 }).eq('name', 'ranked_feed_v1');
+    await admin.from('feed_experiments').update({
+      treatment_pct: 50,
+      ...(experimentWasRunning === null ? {} : { is_running: experimentWasRunning }),
+    }).eq('name', 'ranked_feed_v1');
   } catch {
     // Best effort.
   }
