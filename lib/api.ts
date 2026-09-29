@@ -1382,8 +1382,24 @@ export async function parseResume(resumeId: string): Promise<void> {
 type NewsCardRow = Database['public']['CompositeTypes']['news_card'];
 
 /** The stories row: the last two weeks of published stories, with this reader's seen state. */
+/**
+ * How far back the stories row reaches.
+ *
+ * A week, down from the fortnight this shipped with. A story is a thing that just
+ * happened, and at fourteen days the row still carried items from before the reader's
+ * last two visits — which makes the whole strip feel stale rather than the individual
+ * item feel old. Seven days is also the cadence somebody actually opens the app on.
+ *
+ * `news_feed` clamps this to 1..60 server-side, so the number here is a request rather
+ * than a guarantee.
+ */
+const NEWS_WINDOW_DAYS = 7;
+
 export async function fetchNews(): Promise<NewsItem[]> {
-  const { data, error } = await supabase.rpc('news_feed', { p_days: 14, p_limit: 120 });
+  const { data, error } = await supabase.rpc('news_feed', {
+    p_days: NEWS_WINDOW_DAYS,
+    p_limit: 120,
+  });
   if (error) throw error;
   return ((data ?? []) as NewsCardRow[]).map((row) => ({
     id: row.id!,
