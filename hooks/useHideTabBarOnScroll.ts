@@ -24,14 +24,14 @@ export function useHideTabBarOnScroll(totalTabBarHeight: number) {
       const delta = y - lastOffsetY.value;
 
       if (y <= TOP_THRESHOLD) {
-        hiddenOffset.value = withTiming(0, { duration: ANIMATION_DURATION });
+        hiddenOffset.set(withTiming(0, { duration: ANIMATION_DURATION }));
       } else if (delta > DIRECTION_THRESHOLD) {
-        hiddenOffset.value = withTiming(totalTabBarHeight, { duration: ANIMATION_DURATION });
+        hiddenOffset.set(withTiming(totalTabBarHeight, { duration: ANIMATION_DURATION }));
       } else if (delta < -DIRECTION_THRESHOLD) {
-        hiddenOffset.value = withTiming(0, { duration: ANIMATION_DURATION });
+        hiddenOffset.set(withTiming(0, { duration: ANIMATION_DURATION }));
       }
 
-      lastOffsetY.value = y;
+      lastOffsetY.set(y);
     },
   });
 }

@@ -65,20 +65,20 @@ export function StoryArticleSheet({ item, company, onClose, onToggleFollow }: St
 
   // Slides up once, on mount — the parent unmounts this entirely when it closes.
   useEffect(() => {
-    translateY.value = withTiming(0, OPEN);
+    translateY.set(withTiming(0, OPEN));
   }, [translateY]);
 
   const dismiss = useCallback(() => {
-    translateY.value = withTiming(sheetHeight, CLOSE, (finished) => {
+    translateY.set(withTiming(sheetHeight, CLOSE, (finished) => {
       'worklet';
       if (finished) runOnJS(onClose)();
-    });
+    }));
   }, [translateY, sheetHeight, onClose]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       'worklet';
-      scrollY.value = event.contentOffset.y;
+      scrollY.set(event.contentOffset.y);
     },
     onEndDrag: (event) => {
       'worklet';
@@ -102,14 +102,14 @@ export function StoryArticleSheet({ item, company, onClose, onToggleFollow }: St
     .simultaneousWithExternalGesture(scrollGesture)
     .onUpdate((event) => {
       'worklet';
-      if (scrollY.value <= 0) translateY.value = Math.max(0, event.translationY);
+      if (scrollY.value <= 0) translateY.set(Math.max(0, event.translationY));
     })
     .onEnd((event) => {
       'worklet';
       if (translateY.value > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY) {
         runOnJS(dismiss)();
       } else {
-        translateY.value = withTiming(0, OPEN);
+        translateY.set(withTiming(0, OPEN));
       }
     });
 

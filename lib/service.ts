@@ -96,7 +96,7 @@ export async function serviceFetch<T>(path: string, options: RequestOptions = {}
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
     });
-  } catch (cause) {
+  } catch {
     /*
      * A dropped connection, a wrong LAN address, a service that is not running. All of them look
      * the same from here and all of them mean the same thing to the user, so they get one

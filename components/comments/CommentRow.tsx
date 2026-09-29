@@ -89,7 +89,7 @@ export function CommentRow({
   // A short pop on the way in only — liking should feel like a tap landing, and a
   // spring here reads as bouncy next to the still text around it.
   useEffect(() => {
-    if (liked) scale.value = withSequence(withTiming(1.25, POP), withTiming(1, POP));
+    if (liked) scale.set(withSequence(withTiming(1.25, POP), withTiming(1, POP)));
   }, [liked, scale]);
 
   const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -100,8 +100,8 @@ export function CommentRow({
   }));
 
   const handleDelete = () => {
-    translateX.value = withTiming(0, SLIDE);
-    offsetX.value = 0;
+    translateX.set(withTiming(0, SLIDE));
+    offsetX.set(0);
     onDelete?.();
   };
 
@@ -113,13 +113,13 @@ export function CommentRow({
     .failOffsetY([-12, 12])
     .onUpdate((event) => {
       'worklet';
-      translateX.value = Math.min(0, Math.max(-DELETE_WIDTH, offsetX.value + event.translationX));
+      translateX.set(Math.min(0, Math.max(-DELETE_WIDTH, offsetX.value + event.translationX)));
     })
     .onEnd(() => {
       'worklet';
       const open = translateX.value < -OPEN_THRESHOLD;
-      translateX.value = withTiming(open ? -DELETE_WIDTH : 0, SLIDE);
-      offsetX.value = open ? -DELETE_WIDTH : 0;
+      translateX.set(withTiming(open ? -DELETE_WIDTH : 0, SLIDE));
+      offsetX.set(open ? -DELETE_WIDTH : 0);
     });
 
   const replyTargetLabel = comment.isYou ? 'your comment' : comment.authorHandle;

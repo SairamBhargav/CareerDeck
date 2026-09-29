@@ -157,7 +157,8 @@ export function useJobComments(jobId: string | undefined): UseJobCommentsResult 
       }),
     // `query.dataUpdatedAt` is in here on purpose: the replies live in a different cache entry, and
     // without a dependency that changes when it does, an opened thread would render empty until
-    // something else re-rendered the sheet.
+    // something else re-rendered the sheet. The rule cannot see that link, hence the disable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [roots, openThreadIds, queryClient, query.dataUpdatedAt],
   );
 

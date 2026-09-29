@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { fontSize, spacing } from '@/constants/theme';

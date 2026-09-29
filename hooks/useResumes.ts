@@ -219,16 +219,19 @@ export function useResumePreviewUrls(
     })),
   });
 
+  // `queries` is a new array every render; the URLs inside it are what matter. Serialised
+  // once, so the memo depends on a plain string rather than on the wrapper.
+  const urls = JSON.stringify(queries.map((query) => (typeof query.data === 'string' ? query.data : null)));
+
   return useMemo(() => {
+    const byIndex = JSON.parse(urls) as (string | null)[];
     const map = new Map<string, string>();
     resumes.forEach((resume, index) => {
-      const url = queries[index]?.data;
-      if (typeof url === 'string') map.set(resume.id, url);
+      const url = byIndex[index];
+      if (url) map.set(resume.id, url);
     });
     return map;
-    // `queries` is a new array every render; the URLs inside it are what matter, so the
-    // dependency is their joined value rather than the wrapper.
-  }, [resumes, queries.map((query) => query.data).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [resumes, urls]);
 }
 
 /**

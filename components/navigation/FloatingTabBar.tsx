@@ -86,7 +86,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
   // just as much as a tap, since both land here as a state.index change. Skip the tick on
   // mount, since that's not a switch the user actually made.
   useEffect(() => {
-    hiddenOffset.value = withTiming(0, { duration: 200 });
+    hiddenOffset.set(withTiming(0, { duration: 200 }));
     if (isFirstActiveTab.current) {
       isFirstActiveTab.current = false;
     } else {
@@ -100,10 +100,10 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
     if (rowWidth === 0) return;
     const target = state.index * tabWidth + INDICATOR_INSET;
     if (!hasMeasuredIndicator.current) {
-      indicatorX.value = target;
+      indicatorX.set(target);
       hasMeasuredIndicator.current = true;
     } else {
-      indicatorX.value = withSpring(target, INDICATOR_SPRING);
+      indicatorX.set(withSpring(target, INDICATOR_SPRING));
     }
   }, [state.index, rowWidth, tabWidth, indicatorX]);
 
@@ -190,7 +190,7 @@ function TabBarButton({ focused, icon, label, iconColor, onPress }: TabBarButton
   const scale = useSharedValue(1);
 
   useEffect(() => {
-    scale.value = withSpring(focused ? 1.08 : 1, PRESS_SPRING);
+    scale.set(withSpring(focused ? 1.08 : 1, PRESS_SPRING));
   }, [focused, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({

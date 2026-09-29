@@ -99,14 +99,14 @@ export function StoryPage({
     .failOffsetX([-HORIZONTAL_SLOP, HORIZONTAL_SLOP])
     .onUpdate((event) => {
       'worklet';
-      dragY.value = Math.max(0, event.translationY);
+      dragY.set(Math.max(0, event.translationY));
     })
     .onEnd((event) => {
       'worklet';
       if (event.translationY > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY) {
         runOnJS(onClose)();
       }
-      dragY.value = withTiming(0, { duration: 180 });
+      dragY.set(withTiming(0, { duration: 180 }));
     });
 
   const gesture = Gesture.Race(dismissPan, Gesture.Exclusive(longPress, tap));

@@ -224,9 +224,9 @@ export default function ReelsScreen() {
     isRefreshing.current = true;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    active.value = withSpring(1, { damping: 15, stiffness: 180 });
-    spin.value = withRepeat(withTiming(360, { duration: 850, easing: Easing.linear }), -1, false);
-    pulse.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }), -1, false);
+    active.set(withSpring(1, { damping: 15, stiffness: 180 }));
+    spin.set(withRepeat(withTiming(360, { duration: 850, easing: Easing.linear }), -1, false));
+    pulse.set(withRepeat(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }), -1, false));
 
     refetchActive();
 
@@ -236,11 +236,11 @@ export default function ReelsScreen() {
 
       cancelAnimation(spin);
       cancelAnimation(pulse);
-      pulse.value = 0;
-      active.value = withTiming(0, { duration: 260 }, (finished) => {
+      pulse.set(0);
+      active.set(withTiming(0, { duration: 260 }, (finished) => {
         'worklet';
-        if (finished) spin.value = 0;
-      });
+        if (finished) spin.set(0);
+      }));
 
       isRefreshing.current = false;
     }, REFRESH_DURATION);
@@ -249,14 +249,14 @@ export default function ReelsScreen() {
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       'worklet';
-      scrollY.value = event.contentOffset.y;
-      pull.value = Math.max(0, -event.contentOffset.y) / PULL_THRESHOLD;
+      scrollY.set(event.contentOffset.y);
+      pull.set(Math.max(0, -event.contentOffset.y) / PULL_THRESHOLD);
 
       if (pull.value >= 1 && armed.value === 0) {
-        armed.value = 1;
+        armed.set(1);
         runOnJS(notifyArmed)();
       } else if (pull.value < 1) {
-        armed.value = 0;
+        armed.set(0);
       }
     },
     onEndDrag: () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppState, type ViewToken } from 'react-native';
 
 import type { FeedSurface } from '@/lib/api';
@@ -63,16 +63,23 @@ export interface ListImpressionOptions {
  * referentially stable — React Native throws "Changing viewabilityConfigCallbackPairs on
  * the fly is not supported" otherwise — which is why the callback reads everything it
  * needs out of refs rather than closing over it.
+ *
+ * The pairs are created once by a lazy `useState`, not held in a ref: a ref's `.current`
+ * cannot be read during render under the React Compiler's rules, and state can. The refs the
+ * callback reads are brought up to date in a layout effect, which runs before any
+ * viewability event from the commit it belongs to — never during render.
  */
 export function useListImpressions(surface: FeedSurface, options: ListImpressionOptions = {}) {
   const { enabled = true, resetKey = '' } = options;
 
   const config = useRef({ surface, enabled });
-  config.current = { surface, enabled };
+  useLayoutEffect(() => {
+    config.current = { surface, enabled };
+  }, [surface, enabled]);
 
   const seen = useRef<Set<string>>(new Set());
 
-  const pairs = useRef([
+  const [pairs] = useState(() => [
     {
       viewabilityConfig: VIEWABILITY,
       onViewableItemsChanged: ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -92,7 +99,7 @@ export function useListImpressions(surface: FeedSurface, options: ListImpression
     seen.current = new Set();
   }, [surface, resetKey]);
 
-  return { viewabilityConfigCallbackPairs: pairs.current };
+  return { viewabilityConfigCallbackPairs: pairs };
 }
 
 interface ActivePage {
@@ -117,7 +124,9 @@ interface ActivePage {
 export function useDwellImpressions(surface: FeedSurface = 'reels') {
   const active = useRef<ActivePage | null>(null);
   const surfaceRef = useRef(surface);
-  surfaceRef.current = surface;
+  useLayoutEffect(() => {
+    surfaceRef.current = surface;
+  }, [surface]);
 
   const settle = useCallback((next: { jobId: string; position: number } | null) => {
     const previous = active.current;
@@ -143,9 +152,11 @@ export function useDwellImpressions(surface: FeedSurface = 'reels') {
   // The stable callback below needs the latest `settle`; `settle` is stable itself, but
   // going through a ref keeps that an implementation detail rather than a requirement.
   const settleRef = useRef(settle);
-  settleRef.current = settle;
+  useLayoutEffect(() => {
+    settleRef.current = settle;
+  }, [settle]);
 
-  const pairs = useRef([
+  const [pairs] = useState(() => [
     {
       viewabilityConfig: PAGE_VIEWABILITY,
       onViewableItemsChanged: ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -176,7 +187,7 @@ export function useDwellImpressions(surface: FeedSurface = 'reels') {
     };
   }, []);
 
-  return { viewabilityConfigCallbackPairs: pairs.current, settle };
+  return { viewabilityConfigCallbackPairs: pairs, settle };
 }
 
 /**

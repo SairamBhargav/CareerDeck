@@ -101,15 +101,15 @@ export function StoryViewer({
   const runProgress = useCallback(
     (from: number) => {
       cancelAnimation(progress);
-      progress.value = from;
-      progress.value = withTiming(
+      progress.set(from);
+      progress.set(withTiming(
         1,
         { duration: STORY_DURATION * (1 - from), easing: Easing.linear },
         (finished) => {
           'worklet';
           if (finished) runOnJS(fireAdvance)();
         },
-      );
+      ));
     },
     [progress, fireAdvance],
   );

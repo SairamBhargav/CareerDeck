@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -54,10 +54,14 @@ export function ApplicationModal({ job, resumeName, visible, onClose }: Applicat
   const { logApplication, hasApplied } = useCareerDeck();
   const [handedOff, setHandedOff] = useState(false);
 
-  // Reset the step whenever a different job opens the sheet.
-  useEffect(() => {
+  // Reset the step whenever the sheet closes, so the next job opens on step one. Adjusted
+  // during render rather than in an effect: an effect would paint one frame of the stale
+  // step before correcting it, and React re-runs this render immediately instead.
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (!visible) setHandedOff(false);
-  }, [visible]);
+  }
 
   if (!job) return null;
 
