@@ -18,6 +18,7 @@
     "db:maintain": "node --env-file-if-exists=server/.env scripts/maintain.mjs",
     "seed:generate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/generate-seed.ts",
     "types:generate": "node scripts/generate-types.mjs",
+    "import:ipeds": "node scripts/import-ipeds.mjs",
     "verify:phase0": "node scripts/verify-phase0.mjs",
     "verify:phase1": "node scripts/verify-phase1.mjs",
     "verify:phase2": "node scripts/verify-phase2.mjs",
