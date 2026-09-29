@@ -14,6 +14,7 @@
 
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { writeBatches } from './batches.ts';
 
 import {
   chunk,
@@ -180,7 +181,15 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
   const seniority = extractSeniority(posting.title, text);
   const employmentType = extractEmploymentType(posting.employmentTypeHint, posting.title, seniority);
   const skills = extractSkills(context.dictionary, posting.title, requirements, text);
-  const salary = parseSalary(posting.salary, text);
+  /*
+   * Only a salary the app can label honestly is stored. `job_card` carries no currency and the
+   * card prints `$`, so a non-USD range would display as dollars — 226,000 złoty (≈ $57k) shown as
+   * $226k/yr, the same shape of error as the ×12 bug this was found alongside. §0 decision 10 is
+   * US-only first; when the card grows a currency this becomes `parseSalary(...)` again and a
+   * `npm run ingest -- --replay` restores every one from `raw_postings`.
+   */
+  const parsedSalary = parseSalary(posting.salary, text);
+  const salary = parsedSalary?.currency === 'USD' ? parsedSalary : null;
 
   const quality = scoreQuality({
     title: posting.title,
@@ -255,7 +264,8 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
     // A posting with a genuinely empty description still exists and can still be applied
     // to; quality.ts has already scored it down to near the feed's floor.
     description_text: text === '' ? posting.title : text,
-    description_html: posting.descriptionHtml,
+    // Not stored since 20261002000000: nothing reads it, and raw_postings keeps the source.
+    description_html: null,
     requirements,
     skills,
     apply_url: posting.applyUrl,
@@ -399,9 +409,12 @@ export async function crawlSource(
 
   try {
     const request = adapter.request(source);
+    const unprocessed = options.dryRun ? null : await client.from('raw_postings')
+      .select('id').eq('source_id', source.id).is('processed_at', null).limit(1);
+    if (unprocessed?.error) throw unprocessed.error;
     const response = await politeFetch({
       ...request,
-      etag: options.ignoreEtag ? null : source.etag,
+      etag: options.ignoreEtag || source.consecutiveFailures > 0 || unprocessed?.data?.length ? null : source.etag,
     });
 
     if (response.body === null) {
@@ -409,7 +422,7 @@ export async function crawlSource(
       if (runId) await finishRun(client, runId, 'not_modified', { httpStatus: 304 });
       // A 304 is a success: the board answered, and answered that nothing moved. Recording
       // it as one is what keeps the staleness sweep's "source succeeded recently" guard true.
-      await recordSourceOutcome(client, source, { ok: true });
+      if (!options.dryRun) await recordSourceOutcome(client, source, { ok: true });
       return { source: label, status: 'not_modified', ...totals };
     }
 
@@ -459,7 +472,7 @@ export async function crawlSource(
     // Batched because a full pass produces low six figures of rows and one round trip
     // each would make the crawl's runtime a function of network latency. Reconciliation
     // is still per row inside the function — see ingest_upsert_jobs in the migration.
-    for (const batch of chunk(pending, UPSERT_BATCH)) {
+    await writeBatches(pending, UPSERT_BATCH, 'reconcile jobs', async (batch) => {
       const { data, error } = await client.rpc('ingest_upsert_jobs', { p_rows: batch });
       if (error) throw error;
       const counts = (data ?? {}) as {
@@ -472,7 +485,8 @@ export async function crawlSource(
       totals.jobsUpdated += counts.updated ?? 0;
       totals.collapsed += counts.collapsed ?? 0;
       totals.duplicates += counts.duplicate ?? 0;
-    }
+    });
+    if (!options.dryRun) await markRawProcessed(client, changed);
 
     log(
       `ok    ${label} — ${totals.postingsSeen} seen, ${totals.rawInserted} changed, ` +
@@ -517,9 +531,9 @@ export async function crawlSource(
 }
 
 /**
- * Lands every posting and returns only the ones that were not already stored byte for
- * byte. `ignoreDuplicates` makes PostgREST return just the inserted rows, which is
- * exactly the set that needs normalizing.
+ * Lands every posting and returns current versions that have not finished reconciliation.
+ * An existing raw row is not proof that its job was written: an earlier crawl may have
+ * failed after landing it. Only processed_at acknowledges a completed import.
  *
  * Exported for the aggregator sources (server/src/ingest/aggregators/), which use the
  * exact same landing and content-hash dedup as the per-company crawlers — a feed source
@@ -531,7 +545,7 @@ export async function landRawPostings(
   runId: string | null,
   postings: RawPosting[],
   totals: RunTotals,
-): Promise<RawPosting[]> {
+): Promise<(RawPosting & { rawId: number })[]> {
   const byHash = new Map<string, RawPosting>();
   const rows = postings.map((posting) => {
     const hash = contentHash(posting.payload);
@@ -545,23 +559,50 @@ export async function landRawPostings(
     };
   });
 
-  const changed: RawPosting[] = [];
+  const changed = new Map<string, RawPosting & { rawId: number }>();
 
-  for (const batch of chunk(rows, 200)) {
+  await writeBatches(rows, 200, 'land raw postings', async (batch) => {
     const { data, error } = await client
       .from('raw_postings')
       .upsert(batch, { onConflict: 'source_id,external_id,content_hash', ignoreDuplicates: true })
       .select('external_id, content_hash');
     if (error) throw error;
 
-    for (const row of data ?? []) {
-      const posting = byHash.get(`${row.external_id as string}:${row.content_hash as string}`);
-      if (posting) changed.push(posting);
+    totals.rawInserted += data?.length ?? 0;
+  });
+
+  // Filter against this fetch's hashes so an obsolete version is never replayed over
+  // the current posting. Page each query: historical versions can exceed max_rows.
+  for (const ids of chunk([...new Set(postings.map((posting) => posting.externalId))])) {
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await client.from('raw_postings')
+        .select('id, external_id, content_hash').eq('source_id', sourceId)
+        .in('external_id', ids).is('processed_at', null).order('id')
+        .range(offset, offset + 499);
+      if (error) throw error;
+      for (const row of data ?? []) {
+        const key = `${row.external_id}:${row.content_hash}`;
+        const posting = byHash.get(key);
+        if (posting) changed.set(key, { ...posting, rawId: row.id as number });
+      }
+      if (!data || data.length < 500) break;
     }
   }
 
-  totals.rawInserted = changed.length;
-  return changed;
+  return [...changed.values()];
+}
+
+/** Called only after every location of these postings has reconciled successfully. */
+export async function markRawProcessed(
+  client: SupabaseClient,
+  postings: (RawPosting & { rawId?: number })[],
+): Promise<void> {
+  const ids = postings.flatMap((posting) => posting.rawId === undefined ? [] : [posting.rawId]);
+  await writeBatches(ids, 80, 'acknowledge raw postings', async (batch) => {
+    const { error } = await client.from('raw_postings')
+      .update({ processed_at: new Date().toISOString() }).in('id', batch);
+    if (error) throw error;
+  });
 }
 
 // ── replay ─────────────────────────────────────────────────────────────────────
@@ -570,18 +611,15 @@ export async function landRawPostings(
  * Re-normalizes stored postings without touching the network — the path the module
  * comment at the top of this file promises and that a normalizer bugfix actually needs.
  *
- * `landRawPostings` deliberately skips re-normalizing a payload it has already stored
- * byte-for-byte (that's the whole point of the content-hash dedup: an unchanged posting
- * does no downstream work). That means a normalizer fix does not propagate just by
+ * `landRawPostings` skips an unchanged payload once its import is acknowledged. That
+ * means a normalizer fix does not propagate just by
  * re-running `crawlSource` — the ATS payload hasn't changed, so nothing is ever marked
  * `changed`, and every already-landed row is silently skipped forever. Replay is the
  * other half of that design: it reads `raw_postings` directly and reprocesses every row
  * through the *current* adapter.parse + normalize, regardless of whether the payload
  * changed.
  *
- * Each row's `processed_at` is stamped once replay has reconciled it, so
- * `raw_postings_unprocessed_idx` reflects rows this pass has actually touched rather than
- * being permanently empty (nothing else in the pipeline writes this column).
+ * Each row's `processed_at` is stamped once replay has reconciled it, just as in a fresh crawl.
  */
 export interface ReplayOptions {
   dictionary: SkillDictionary;
@@ -644,8 +682,7 @@ export async function replaySource(
   let processedIds: number[] = [];
 
   const flush = async () => {
-    if (pending.length === 0) return;
-    for (const batch of chunk(pending, UPSERT_BATCH)) {
+    await writeBatches(pending, UPSERT_BATCH, 'replay jobs', async (batch) => {
       const { data, error } = await client.rpc('ingest_upsert_jobs', { p_rows: batch });
       if (error) throw error;
       const counts = (data ?? {}) as {
@@ -658,7 +695,7 @@ export async function replaySource(
       outcome.jobsUpdated += counts.updated ?? 0;
       outcome.collapsed += counts.collapsed ?? 0;
       outcome.duplicates += counts.duplicate ?? 0;
-    }
+    });
     pending = [];
 
     if (processedIds.length > 0) {

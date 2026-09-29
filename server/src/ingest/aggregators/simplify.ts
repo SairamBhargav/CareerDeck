@@ -34,16 +34,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  chunk,
   getOrCreateFeedSource,
   recordSourceOutcome,
   resolveCompaniesByName,
   startRun,
   finishRun,
+  touchSeen,
   type RunTotals,
   type SourceRow,
 } from '../db.ts';
-import { describeError, landRawPostings, type NormalizedJob } from '../pipeline.ts';
+import { describeError, landRawPostings, markRawProcessed, type NormalizedJob } from '../pipeline.ts';
+import { writeBatches } from '../batches.ts';
 import { politeFetch } from '../http.ts';
 import { parseLocations } from '../normalize/location.ts';
 import { normalizeTitle } from '../normalize/seniority.ts';
@@ -149,7 +150,7 @@ export interface AggregatorOptions {
 
 export interface AggregatorOutcome {
   source: string;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'skipped';
   listingsSeen: number;
   rawInserted: number;
   jobsCreated: number;
@@ -161,6 +162,17 @@ export interface AggregatorOutcome {
 }
 
 const UPSERT_BATCH = 50;
+
+type JobIdentity = Pick<NormalizedJob, 'company_id' | 'title_normalized' | 'location_city' | 'seniority'>;
+const identityKey = (job: JobIdentity) => JSON.stringify([
+  job.company_id, job.title_normalized, job.location_city ?? '*', job.seniority ?? '*',
+]);
+
+/** A link-only feed must not overwrite an employer's full description or salary. */
+export function withoutDirectDuplicates(rows: NormalizedJob[], direct: JobIdentity[]): NormalizedJob[] {
+  const keys = new Set(direct.map(identityKey));
+  return rows.filter((row) => !keys.has(identityKey(row)));
+}
 
 export async function crawlSimplifyFeed(
   client: SupabaseClient,
@@ -194,7 +206,6 @@ export async function crawlSimplifyFeed(
     companyDomain: null,
   };
 
-  const runId = options.dryRun ? null : await startRun(client, source.id);
   const totals: RunTotals & { listingsSeen: number; companiesCreated: number } = {
     postingsSeen: 0,
     listingsSeen: 0,
@@ -205,6 +216,11 @@ export async function crawlSimplifyFeed(
     duplicates: 0,
     companiesCreated: 0,
   };
+  if (source.enabled === false) {
+    log(`skip  ${label} — source disabled`);
+    return { source: label, status: 'skipped', ...totals };
+  }
+  const runId = options.dryRun ? null : await startRun(client, source.id);
 
   try {
     // A single ~13MB GET, not a per-company fetch — still routed through politeFetch for
@@ -271,6 +287,13 @@ export async function crawlSimplifyFeed(
     const changed = options.dryRun
       ? rawPostings
       : await landRawPostings(client, source.id, runId, rawPostings, totals);
+    if (!options.dryRun) await touchSeen(client, source.id, rawPostings.map((posting) => posting.externalId));
+
+    const companySizes = new Map<string, number>();
+    for (const listing of listings) {
+      const name = str(listing.company_name);
+      if (name) companySizes.set(name, (companySizes.get(name) ?? 0) + 1);
+    }
 
     const pending: NormalizedJob[] = [];
     for (const posting of changed) {
@@ -285,7 +308,10 @@ export async function crawlSimplifyFeed(
       };
 
       const companyId = companyIds.get(p.company_name);
-      if (!companyId) continue; // resolution failed for this name; skip rather than guess
+      if (!companyId) {
+        if (options.dryRun) continue;
+        throw new Error(`Could not resolve company: ${p.company_name}`);
+      }
 
       const titleNormalized = normalizeTitle(p.title);
       const [primaryLocation, ...extraLocations] = p.locations;
@@ -308,7 +334,7 @@ export async function crawlSimplifyFeed(
         // This source's own postings-per-company count, not the corpus-wide count — a
         // company this feed lists three internships for reads as a real program the same
         // way it would from a direct crawl.
-        companyOpenPostings: listings.filter((entry) => str(entry.company_name) === p.company_name).length,
+        companyOpenPostings: companySizes.get(p.company_name) ?? 0,
         // Hard-set, not classified: the repo's whole scope is internships, so trusting
         // the source is more accurate than running title-based inference meant for
         // sources that mix seniority levels.
@@ -318,7 +344,8 @@ export async function crawlSimplifyFeed(
       });
 
       const groupId = crypto.randomUUID();
-      for (const location of locations) {
+      const distinctLocations = new Map(locations.map((location) => [location.city ?? '*', location]));
+      for (const location of distinctLocations.values()) {
         pending.push({
           company_id: companyId,
           company_name: p.company_name,
@@ -353,7 +380,19 @@ export async function crawlSimplifyFeed(
     }
 
     if (!options.dryRun) {
-      for (const batch of chunk(pending, UPSERT_BATCH)) {
+      const direct: JobIdentity[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await client.from('jobs')
+          .select('company_id, title_normalized, location_city, seniority')
+          .eq('status', 'open').eq('seniority', 'intern').neq('source_id', source.id)
+          .order('id').range(offset, offset + 499);
+        if (error) throw error;
+        direct.push(...(data ?? []) as JobIdentity[]);
+        if (!data || data.length < 500) break;
+      }
+      const feedOnly = withoutDirectDuplicates(pending, direct);
+      totals.duplicates += pending.length - feedOnly.length;
+      await writeBatches(feedOnly, UPSERT_BATCH, 'reconcile internship feed', async (batch) => {
         const { data, error } = await client.rpc('ingest_upsert_jobs', { p_rows: batch });
         if (error) throw error;
         const counts = (data ?? {}) as { created?: number; updated?: number; collapsed?: number; duplicate?: number };
@@ -361,7 +400,8 @@ export async function crawlSimplifyFeed(
         totals.jobsUpdated += counts.updated ?? 0;
         totals.collapsed += counts.collapsed ?? 0;
         totals.duplicates += counts.duplicate ?? 0;
-      }
+      });
+      await markRawProcessed(client, changed);
     } else {
       for (const row of pending.slice(0, 20)) {
         log(

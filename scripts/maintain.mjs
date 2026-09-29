@@ -62,6 +62,8 @@ const VERIFICATION_GRACE_DAYS = 30;
 const NOTIFICATION_KEEP_DAYS = 90;
 /** How long an unopened Auto Apply draft holds its credit before it is handed back. */
 const AUTO_APPLY_READY_DAYS = 7;
+/** How long a closed posting's payload is kept, so a mistaken close can still be replayed. */
+const RAW_CLOSED_KEEP_DAYS = 30;
 
 let failed = false;
 
@@ -103,6 +105,15 @@ await run('read notifications pruned', () =>
  */
 await run('auto apply runs closed and refunded', () =>
   admin.rpc('expire_auto_apply_runs', { p_ready_days: AUTO_APPLY_READY_DAYS, p_stuck_minutes: 15 }),
+);
+
+/*
+ * Superseded payload versions and postings closed a month ago. raw_postings is the second
+ * largest table and otherwise grows by a full payload every time an employer edits a posting;
+ * on the free plan's 500 MB that is the difference between fitting and read-only mode.
+ */
+await run('raw posting versions pruned', () =>
+  admin.rpc('prune_raw_postings', { p_closed_days: RAW_CLOSED_KEEP_DAYS }),
 );
 
 // A failed partition creation is the one that matters: it is a silent outage a month from

@@ -330,7 +330,44 @@ const SALARY_CASES = [
   ['We raised $500,000,000 in Series C funding.', null, null, null],
   ['You will work 40 hours per week alongside 200 employees.', null, null, null],
   ['Applications close in 2026. Summer 2026 internship.', null, null, null],
+
+  // Regressions from the first real crawl (2026-09-28). Betterment's payroll posting: the pay
+  // range is annual, and "semi-monthly payroll" one line later made it ×12 → $840k–$996k.
+  ['Below is the base salary range for this position. New York City: $70,000 - $83,000 A Day in the Life Payroll Processing • Prepare semi-monthly payroll for exempt employees', 70000, 83000, 'year'],
+  // A cadence word elsewhere in the paragraph does not relabel a range stated without one.
+  ['Our salary range is $95,000 - $120,000. We also employ hourly staff in our warehouses.', 95000, 120000, 'year'],
+  // A real monthly figure still converts.
+  ['The pay range for this internship is $6,000 per month.', 72000, 72000, 'year'],
+  // European grouping (Algolia's EU postings), which read as $139/hour before the fix.
+  ['On-Target Earnings Pay Range €139.000—€170.000 EUR FLEXIBLE WORKPLACE', 139000, 170000, 'year'],
+  ['Base Salary Pay Range €69.768—€96.900 EUR', 69768, 96900, 'year'],
+  // Retirement plans and equity are not salary (Alloy, Affirm).
+  ['Pay range for this role: $130,000 to $160,000. Benefits include a 401(k) match.', 130000, 160000, 'year'],
+  ['Base pay range: $120,000 - $140,000. New hire equity: $16,000-$24,000', 120000, 140000, 'year'],
+  // The first cue has no figures; the second does (Affirm's shape).
+  ['We share the base pay range for every role. Details follow. ' + 'x'.repeat(500) + ' USA base pay range per year: $195,000 - 255,000', 195000, 255000, 'year'],
+  // …while a decimal stays a decimal.
+  ['The hourly pay range is $58.50 - $62.75 per hour.', 58.5, 62.75, 'hour'],
+  // A monthly cue next to an annual-sized number is not believed.
+  ['Salary range: $90,000 - $110,000 monthly bonus eligible', 90000, 110000, 'year'],
 ];
+
+/*
+ * Algolia's shape: the pay figures sit just past the fixed 400-character window after the cue,
+ * which cut "$130,500" into "$130,50" and stored $130 an hour. Built to put the cut mid-number.
+ */
+{
+  // "Pay Range " (10) + filler + " " + "$130,5" ends at 399, so the 400-char cut lands between
+  // the 5 and the 00. Asserted, so a change to the window size cannot quietly defuse this check.
+  const filler = 'x'.repeat(400 - 10 - 1 - '$130,5'.length);
+  const text = `Pay Range ${filler} $130,500 - $196,000 USD`;
+  const cutAt = text.indexOf('Pay Range') + 400;
+  const parsed = parseSalary(null, text);
+  check('(fixture) the cut really lands inside "$130,500"', text.slice(cutAt - 6, cutAt) === '$130,5', text.slice(cutAt - 6, cutAt + 3));
+  check('a window never ends inside a number, nor inside a range',
+    parsed !== null && parsed.period === 'year' && parsed.min === 130500 && parsed.max === 196000,
+    parsed ? `${parsed.min}-${parsed.max}/${parsed.period}` : 'null');
+}
 
 for (const [text, min, max, period] of SALARY_CASES) {
   const parsed = parseSalary(null, text);
@@ -340,6 +377,26 @@ for (const [text, min, max, period] of SALARY_CASES) {
       : parsed !== null && parsed.min === min && parsed.max === max && parsed.period === period;
   check(`salary: ${text.slice(0, 52)}`, ok, parsed ? `${parsed.min}-${parsed.max}/${parsed.period}` : 'null');
 }
+
+check('a currency written after the figure is read — złoty is not dollars',
+  parseSalary(null, 'Base Pay Grade - K 226,000 zł - 346,000 zł')?.currency === 'PLN',
+  parseSalary(null, 'Base Pay Grade - K 226,000 zł - 346,000 zł')?.currency ?? 'null');
+check('a code after a $ figure wins — Canadian postings use $ too',
+  parseSalary(null, 'The salary range is $100,000 - $120,000 CAD.')?.currency === 'CAD');
+check('US dollars stay USD', parseSalary(null, 'The salary range is $100,000 - $120,000.')?.currency === 'USD');
+// Coinbase Manila: pesos were stored as $849,800 a year.
+check('an unlisted currency sign is not dollars — ₱ is pesos',
+  parseSalary(null, 'Annual base salary range (excluding bonus): ₱849,800 — ₱849,800 PHP')?.currency === 'PHP');
+check('a sign with no mapping still is not USD',
+  !['USD', undefined].includes(parseSalary(null, 'Salary range: ₴90,000 - ₴120,000')?.currency));
+// SambaNova's form filler.
+check('a $1 — $999,999 placeholder is no salary',
+  parseSalary(null, 'Base Salary Range: Base Pay Range $1 — $999,999 USD') === null,
+  JSON.stringify(parseSalary(null, 'Base Salary Range: Base Pay Range $1 — $999,999 USD')));
+check('a structured placeholder is no salary either',
+  parseSalary({ min: 0, max: 9999999, period: 'year', currency: 'USD' }, '') === null);
+check('a real range with nines in it survives',
+  parseSalary(null, 'The salary range is $99,000 - $129,999.')?.max === 129999);
 
 check('a structured range beats the description', parseSalary({ min: 90, max: 110, period: 'hour', currency: 'USD' }, 'Base pay range is $1 - $2 per year.')?.min === 90);
 check('salary_is_estimated is never true in phase 1', parseSalary(null, 'The base pay range is $120,000 - $150,000.')?.isEstimated === false);

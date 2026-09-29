@@ -3189,6 +3189,7 @@ export type Database = {
       prune_notifications: { Args: { p_keep_days?: number }; Returns: number }
       prune_pii_access_log: { Args: { p_keep_days?: number }; Returns: number }
       prune_push_deliveries: { Args: { p_keep_days?: number }; Returns: number }
+      prune_raw_postings: { Args: { p_closed_days?: number }; Returns: number }
       push_pref_key: {
         Args: { p_kind: Database["public"]["Enums"]["notification_kind"] }
         Returns: string

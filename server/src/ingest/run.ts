@@ -79,7 +79,7 @@ function parseArgs(argv: string[]): Args {
     // Board hosts are shared — ~80 Greenhouse boards live on one hostname — so real
     // pacing is enforced per host in http.ts. This only bounds how many boards are in
     // flight at once, which mostly bounds memory: a big board response is tens of MB.
-    concurrency: concurrency ? Math.max(1, Number.parseInt(concurrency, 10)) : 4,
+    concurrency: concurrency ? Math.max(1, Number.parseInt(concurrency, 10)) : 2,
   };
 }
 
@@ -285,11 +285,11 @@ async function main(): Promise<void> {
     await sweep(client, { log: (message) => console.log(message) });
   }
 
-  // A run where every source failed is a failed run, and CI should see that. A run where
-  // one board 404s is not — boards get renamed and the source's failure counter handles it.
+  // A partial crawl is still incomplete. Do not let a handful of successful boards
+  // hide database failures across the rest of the corpus from CI.
   const allOutcomes = [...outcomes.map((o) => o.status), ...aggregatorOutcomes.map((o) => o.status)];
   const failures = allOutcomes.filter((status) => status === 'failed').length;
-  if (failures === allOutcomes.length && allOutcomes.length > 0) {
+  if (failures > 0) {
     process.exitCode = 1;
   }
 }

@@ -47,7 +47,21 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   '¥': 'JPY',
   C$: 'CAD',
   A$: 'AUD',
+  R$: 'BRL',
+  '₱': 'PHP',
+  '₩': 'KRW',
+  '₪': 'ILS',
+  '₺': 'TRY',
+  '₫': 'VND',
+  '₦': 'NGN',
 };
+
+/**
+ * Any other currency sign is still a currency, just not dollars. Coinbase's Manila roles say
+ * "₱849,800 — ₱849,800 PHP"; with ₱ unrecognised the figure fell back to USD and 849,800 pesos
+ * (≈ $15k) was stored as $849,800 a year. ISO 4217 reserves XXX for "no specific currency".
+ */
+const UNKNOWN_CURRENCY = 'XXX';
 
 /**
  * The paragraph employers add to satisfy pay-transparency law. Finding it first and
@@ -58,10 +72,52 @@ const COMPLIANCE_CUE =
 
 const HOURLY_CUE = /\b(per hour|an hour|hourly|\/\s*(hr|hour)|hr\b)/i;
 const ANNUAL_CUE = /\b(per year|annually|annualized|per annum|\/\s*(yr|year)|yearly)\b/i;
-const MONTHLY_CUE = /\b(per month|monthly|\/\s*(mo|month))\b/i;
+/*
+ * `(?<!-)` so "semi-monthly payroll" and "bi-monthly" are not a pay cadence. That exact phrase,
+ * in a payroll job's description one line under "$70,000 - $83,000", made this parser multiply
+ * by twelve and store $840k–$996k.
+ */
+const MONTHLY_CUE = /(?<!-)\b(per month|monthly|\/\s*(mo|month))\b/i;
+
+/**
+ * How far either side of a figure its cadence words are looked for. The cadence belongs to the
+ * words next to the number ("$45 – $62 per hour"), not to anything else in the paragraph — a
+ * window-wide test is what let "semi-monthly payroll" and "hourly employees" re-label a range.
+ */
+const CADENCE_REACH = 40;
+
+/**
+ * A currency written after the figure — "226,000 zł - 346,000 zł", "€139.000—€170.000 EUR",
+ * "$120,000 CAD". It overrides a bare `$`, which Canadian and Australian postings also use.
+ * Affirm's Warsaw roles were stored as USD before this, so 226,000 złoty (≈ $57k) read as $226k.
+ */
+const CURRENCY_CODE = /(zł|\b(?:USD|EUR|GBP|CAD|AUD|INR|PLN|CHF|SEK|NOK|DKK|JPY|SGD|ILS|BRL|MXN|NZD|HKD|CZK|HUF|RON)\b)/;
+
+function currencyIn(context: string): string | null {
+  const match = CURRENCY_CODE.exec(context);
+  if (!match?.[1]) return null;
+  return match[1] === 'zł' ? 'PLN' : match[1];
+}
+
+/** A monthly figure is only believed within this range before it is multiplied by twelve. */
+const MONTHLY_MIN = 1_000;
+const MONTHLY_MAX = 40_000;
 
 /** `$120,000`, `120k`, `$1.2M`, `58.50`. Captures the number and its magnitude suffix. */
-const AMOUNT = /(C\$|A\$|[$£€₹¥])?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*([kKmM])?/g;
+/*
+ * The suffix must end the word: without the lookahead, "$110,000 monthly" read the "m" of
+ * "monthly" as millions and produced $110 billion — rejected by the bounds, which is why it
+ * surfaced only as a range that silently lost its top end.
+ */
+const AMOUNT = /(C\$|A\$|R\$|\p{Sc})?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,3}(?:\.\d{3})+(?![\d,])|\d+(?:\.\d+)?)(?:\s*([kKmM])(?![a-zA-Z]))?/gu;
+
+/**
+ * European grouping — "€139.000", "€51.450" — where the dot separates thousands. Algolia's EU
+ * postings write pay this way, and reading "139.000" as a decimal stored €139,000 a year as
+ * $139 an hour. A dot followed by exactly three digits is taken as grouping; "58.50" and
+ * "139.5" stay decimals.
+ */
+const DOT_GROUPED = /^\d{1,3}(?:\.\d{3})+$/;
 
 interface Amount {
   value: number;
@@ -82,19 +138,19 @@ function readAmounts(text: string): Amount[] {
     const [whole, symbol, digits, suffix] = match;
     if (!digits) continue;
 
-    const base = Number.parseFloat(digits.replace(/,/g, ''));
+    const base = Number.parseFloat(DOT_GROUPED.test(digits) ? digits.replace(/\./g, '') : digits.replace(/,/g, ''));
     if (!Number.isFinite(base)) continue;
 
     const multiplier = suffix?.toLowerCase() === 'k' ? 1_000 : suffix?.toLowerCase() === 'm' ? 1_000_000 : 1;
 
     found.push({
       value: base * multiplier,
-      currency: symbol ? (CURRENCY_SYMBOLS[symbol] ?? null) : null,
+      currency: symbol ? (CURRENCY_SYMBOLS[symbol] ?? UNKNOWN_CURRENCY) : null,
       index: match.index,
       end: match.index + whole.length,
       hadSuffix: suffix !== undefined,
       hadSymbol: symbol !== undefined,
-      hadSeparator: digits.includes(','),
+      hadSeparator: digits.includes(',') || DOT_GROUPED.test(digits),
     });
   }
 
@@ -106,6 +162,21 @@ function readAmounts(text: string): Amount[] {
  * a workload. Both sit next to words that give them away.
  */
 function looksLikePay(text: string, amount: Amount): boolean {
+  // "401(k)" and "403(b)" are retirement plans. Alloy's benefits paragraph ("401k matching")
+  // otherwise parsed as a $401,000 salary sitting next to the real $130,000–$160,000 range.
+  const literal = text.slice(amount.index, amount.end + 4);
+  if (/^\s*40[13]\s*\(?\s*[kb]\b/i.test(literal) || /^\s*40[13]\s*\(\s*[kb]\s*\)/i.test(literal)) return false;
+
+  /*
+   * Money that is not pay. Affirm lists "New hire equity: $16,000-$24,000" and "Reward equity"
+   * in the same block as base pay; funding rounds, relocation and signing bonuses sit beside it
+   * elsewhere. The label is in the few words before the figure.
+   */
+  const before = text.slice(Math.max(0, amount.index - 32), amount.index);
+  if (/\b(equity|rsus?|stock|shares|options|refresh|sign[- ]?on|signing|relocation|stipend|reimburse\w*|bonus|raised|funding|series [a-h]|valuation|revenue|401)\b[^$€£\d]*$/i.test(before)) {
+    return false;
+  }
+
   if (amount.hadSymbol || amount.hadSuffix || amount.hadSeparator) return true;
 
   const context = text.slice(Math.max(0, amount.index - 30), Math.min(text.length, amount.end + 30));
@@ -120,10 +191,13 @@ function looksLikePay(text: string, amount: Amount): boolean {
  * decides, because nobody is paid $95,000 an hour and nobody is paid $60 a year.
  */
 function periodFor(text: string, value: number): 'hour' | 'year' {
-  if (HOURLY_CUE.test(text)) return 'hour';
-  if (ANNUAL_CUE.test(text)) return 'year';
+  const byMagnitude = value > 0 && value < HOURLY_CEILING_GUESS ? 'hour' : 'year';
+  // A stated cadence wins only when the figure is plausible for it. "$95,000 … hourly" is an
+  // annual salary next to an unrelated word, not a $95,000 hourly rate.
+  if (HOURLY_CUE.test(text)) return inBounds(value, 'hour') ? 'hour' : byMagnitude;
+  if (ANNUAL_CUE.test(text)) return inBounds(value, 'year') ? 'year' : byMagnitude;
   if (MONTHLY_CUE.test(text)) return 'year'; // converted by the caller
-  return value > 0 && value < HOURLY_CEILING_GUESS ? 'hour' : 'year';
+  return byMagnitude;
 }
 
 function inBounds(value: number, period: 'hour' | 'year'): boolean {
@@ -132,7 +206,16 @@ function inBounds(value: number, period: 'hour' | 'year'): boolean {
     : value >= ANNUAL_MIN && value <= ANNUAL_MAX;
 }
 
+/**
+ * A form's filler, not a range. SambaNova posts "Base Pay Range $1 — $999,999 USD"; the $1
+ * failed the bounds and $999,999 alone was stored as the salary.
+ */
+function isPlaceholder(value: number | null): boolean {
+  return value !== null && value >= 9_999 && /^9+$/.test(String(Math.trunc(value)));
+}
+
 function build(min: number | null, max: number | null, period: 'hour' | 'year', currency: string): ParsedSalary | null {
+  if (isPlaceholder(min) || isPlaceholder(max)) return null;
   const low = min !== null && inBounds(min, period) ? min : null;
   const high = max !== null && inBounds(max, period) ? max : null;
 
@@ -162,8 +245,22 @@ function parseWindow(rawWindow: string): ParsedSalary | null {
   const amounts = readAmounts(window).filter((amount) => looksLikePay(window, amount));
   if (amounts.length === 0) return null;
 
-  const currency = amounts.find((amount) => amount.currency)?.currency ?? 'USD';
-  const monthly = MONTHLY_CUE.test(window) && !HOURLY_CUE.test(window) && !ANNUAL_CUE.test(window);
+  const symbolCurrency = amounts.find((amount) => amount.currency)?.currency ?? null;
+  const currencyFor = (context: string) => currencyIn(context) ?? symbolCurrency ?? 'USD';
+
+  /**
+   * The words around a figure or a range — where its cadence is actually stated. The reach after
+   * it stops at the end of the sentence or list item: "$95,000 - $120,000. We also employ hourly
+   * staff" is two statements, and only the first is about this salary.
+   */
+  const near = (from: number, to: number) => {
+    const after = window.slice(to, Math.min(window.length, to + CADENCE_REACH));
+    const stop = after.search(/[.;•]\s|\s[•|]\s/);
+    return window.slice(Math.max(0, from - CADENCE_REACH), to + (stop === -1 ? after.length : stop));
+  };
+  const isMonthly = (context: string, value: number) =>
+    MONTHLY_CUE.test(context) && !HOURLY_CUE.test(context) && !ANNUAL_CUE.test(context) &&
+    value >= MONTHLY_MIN && value <= MONTHLY_MAX;
 
   // A range is two amounts separated by a dash or "to" and nothing else.
   for (let index = 0; index < amounts.length - 1; index += 1) {
@@ -178,21 +275,39 @@ function parseWindow(rawWindow: string): ParsedSalary | null {
     // side's magnitude when the right side is a bare number smaller than it.
     const rightValue = !right.hadSuffix && left.hadSuffix && right.value < left.value ? right.value * 1000 : right.value;
 
-    const period = periodFor(window, Math.max(left.value, rightValue));
+    const context = near(left.index, right.end);
+    const top = Math.max(left.value, rightValue);
+    const monthly = isMonthly(context, top);
+    const period = periodFor(context, top);
     const scale = monthly ? 12 : 1;
-    const parsed = build(left.value * scale, rightValue * scale, monthly ? 'year' : period, currency);
+    const parsed = build(left.value * scale, rightValue * scale, monthly ? 'year' : period, currencyFor(context));
     if (parsed) return parsed;
   }
 
   // No range: take the most plausible single figure.
   for (const amount of amounts) {
-    const period = periodFor(window, amount.value);
+    const context = near(amount.index, amount.end);
+    const monthly = isMonthly(context, amount.value);
+    const period = periodFor(context, amount.value);
     const scale = monthly ? 12 : 1;
-    const parsed = build(amount.value * scale, amount.value * scale, monthly ? 'year' : period, currency);
+    const parsed = build(amount.value * scale, amount.value * scale, monthly ? 'year' : period, currencyFor(context));
     if (parsed) return parsed;
   }
 
   return null;
+}
+
+/**
+ * Moves a cut point forward to the end of the word it lands in, so a window never ends inside a
+ * number. A fixed-length cut once turned Algolia's "$130,500" into "$130,50", which read as
+ * "$130" — stored as $130 an hour for a $130k-a-year role.
+ */
+function tokenEnd(text: string, at: number): number {
+  let end = Math.min(at, text.length);
+  while (end < text.length && /[\w.,\p{Sc}]/u.test(text[end]!)) end += 1;
+  // …and if that figure opens a range, keep its other half too.
+  const rest = /^\s*(?:-|–|—|to)\s*(?:C\$|A\$|R\$|\p{Sc})?\s*[\d,.]+(?:\s*[kKmM](?![a-zA-Z]))?/u.exec(text.slice(end));
+  return rest ? end + rest[0].length : end;
 }
 
 /**
@@ -211,12 +326,18 @@ export function parseSalary(structured: StructuredSalary | null, description: st
 
   if (description === '') return null;
 
-  const cue = COMPLIANCE_CUE.exec(description);
-  if (cue) {
+  /*
+   * Every cue, in order, not just the first. Postings often open the section with a sentence
+   * that names "the base compensation range" and states no figures, then give the actual range
+   * further down under a second cue ("USA base pay range … $195,000 - 255,000") — which a
+   * first-cue-only reading never reached.
+   */
+  const cues = new RegExp(COMPLIANCE_CUE.source, 'gi');
+  for (const cue of description.matchAll(cues)) {
     // A window around the cue rather than the sentence: the figures sometimes precede the
     // phrase ("$120,000 — $150,000 is the base pay range for this role").
     const start = Math.max(0, cue.index - 160);
-    const fromCue = parseWindow(description.slice(start, cue.index + 400));
+    const fromCue = parseWindow(description.slice(start, tokenEnd(description, cue.index + 400)));
     if (fromCue) return fromCue;
   }
 

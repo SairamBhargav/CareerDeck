@@ -8,6 +8,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { writeBatches } from './batches.ts';
 
 import type { AtsKind, SourceRef } from './sources/types.ts';
 import type { SkillEntry } from './normalize/skills.ts';
@@ -34,6 +35,7 @@ export function serviceClient(): SupabaseClient {
 }
 
 export interface SourceRow extends SourceRef {
+  enabled?: boolean;
   companyId: string | null;
   companyName: string | null;
   companyDomain: string | null;
@@ -45,7 +47,7 @@ export interface SourceRow extends SourceRef {
 /**
  * Sources that are enabled and due, oldest first.
  *
- * "Due" is `last_crawled_at + crawl_interval < now()`, evaluated in SQL so a run started
+ * "Due" is `last_crawled_at + crawl_interval < now()`, evaluated after reading the sources so a run started
  * five minutes after the last one does nothing rather than crawling every board again.
  * `--force` skips the check; nothing else does.
  */
@@ -294,21 +296,29 @@ export function chunk<T>(items: T[], size = IN_CHUNK): T[][] {
  * The content hash means an unchanged posting does no downstream work — but "no work"
  * must not include "no `last_seen_at`", or the staleness sweep closes every posting that
  * has not been edited in 48 hours, which is most of them.
+ *
+ * Rows seen in the last TOUCH_EVERY_MS are left alone: a second crawl the same day would
+ * otherwise rewrite every row again for a timestamp nobody needs finer than the 48h sweep.
+ * last_seen_at is deliberately unindexed so this update is HOT (20261002000000).
  */
+const TOUCH_EVERY_MS = 12 * 60 * 60 * 1000;
+
 export async function touchSeen(
   client: SupabaseClient,
   sourceId: string,
   externalIds: string[],
 ): Promise<void> {
-  for (const batch of chunk(externalIds)) {
+  const now = Date.now();
+  await writeBatches(externalIds, IN_CHUNK, 'refresh last seen', async (batch) => {
     const { error } = await client
       .from('jobs')
-      .update({ last_seen_at: new Date().toISOString() })
+      .update({ last_seen_at: new Date(now).toISOString() })
       .eq('source_id', sourceId)
       .eq('status', 'open')
+      .lt('last_seen_at', new Date(now - TOUCH_EVERY_MS).toISOString())
       .in('external_id', batch);
     if (error) throw error;
-  }
+  });
 }
 
 export async function refreshOpenJobCounts(client: SupabaseClient): Promise<number> {
@@ -355,7 +365,7 @@ export async function getOrCreateFeedSource(
 ): Promise<SourceRow | null> {
   const { data: existing, error: selectError } = await client
     .from('job_sources')
-    .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures')
+    .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures, enabled')
     .eq('kind', params.kind)
     .eq('board_url', params.boardUrl)
     .maybeSingle();
@@ -374,7 +384,7 @@ export async function getOrCreateFeedSource(
             crawl_interval: params.crawlInterval ?? '24 hours',
             notes: params.notes ?? null,
           })
-          .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures')
+          .select('id, kind, board_url, board_token, etag, crawl_interval, last_crawled_at, consecutive_failures, enabled')
           .single();
         if (error) throw error;
         return data;
@@ -383,6 +393,7 @@ export async function getOrCreateFeedSource(
 
   return {
     id: row.id as string,
+    enabled: row.enabled as boolean,
     kind: row.kind as AtsKind,
     boardUrl: row.board_url as string,
     boardToken: (row.board_token as string | null) ?? null,
@@ -423,9 +434,8 @@ function slugify(name: string): string {
  * would be actively wrong to store as `companies.domain`. A created row's `domain` is
  * left null, same as a company with no crawl source at all.
  *
- * Fetches every existing company once rather than querying per name: even after this
- * aggregator runs, the table is a few thousand rows at most, and one query beats however
- * many hundreds of distinct names a feed contains.
+ * Pages through existing companies rather than querying per name. A single select is
+ * capped by PostgREST's max_rows and would silently lose companies after row 1,000.
  */
 export async function resolveCompaniesByName(
   client: SupabaseClient,
@@ -442,15 +452,24 @@ export async function resolveCompaniesByName(
   const distinct = [...new Set(names.map((name) => name.trim()).filter((name) => name !== ''))];
   const byLower = new Map<string, string>(); // lowercased name -> id
 
-  const { data: existing, error: fetchError } = await client.from('companies').select('id, name');
-  if (fetchError) throw fetchError;
-  for (const row of existing ?? []) {
-    byLower.set((row.name as string).toLowerCase(), row.id as string);
-  }
+  const usedSlugs = new Set<string>();
+  const readCompanies = async () => {
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await client.from('companies').select('id, name, slug')
+        .order('id').range(offset, offset + 499);
+      if (error) throw error;
+      for (const row of data ?? []) {
+        byLower.set((row.name as string).toLowerCase(), row.id as string);
+        usedSlugs.add(row.slug as string);
+      }
+      if (!data || data.length < 500) break;
+    }
+  };
+  await readCompanies();
 
-  const missing = distinct.filter((name) => !byLower.has(name.toLowerCase()));
+  const missing = [...new Map(distinct.filter((name) => !byLower.has(name.toLowerCase()))
+    .map((name) => [name.toLowerCase(), name])).values()];
   if (missing.length > 0 && createMissing) {
-    const usedSlugs = new Set<string>();
     const rows = missing.map((name) => {
       let slug = slugify(name);
       // A collision here means two different company names slugify identically (rare —
@@ -465,26 +484,22 @@ export async function resolveCompaniesByName(
       return { slug, name, logo_monogram: monogramOf(name) };
     });
 
-    for (const batch of chunk(rows, 200)) {
+    await writeBatches(rows, 200, 'resolve companies', async (batch) => {
       // ignoreDuplicates rather than a plain insert: a slug or domain collision against a
       // row created by a concurrent process (there is only one right now, but the next
       // aggregator to run this same batch resolver should not crash on one) is skipped,
       // not fatal — the row already exists under that identity, which is what we wanted.
       const { error } = await client.from('companies').upsert(batch, { onConflict: 'slug', ignoreDuplicates: true });
       if (error) throw error;
-    }
+    });
 
-    // A second unfiltered fetch rather than `.in('name', missing)`: an aggregator can
+    // A second paginated read rather than `.in('name', missing)`: an aggregator can
     // easily produce over a thousand distinct new names in one run, and PostgREST puts an
     // `in` filter's values in the URL — a batch that size is exactly what made two Ashby
     // boards fail with "URI too long" earlier in this project. The companies table is a
     // few thousand rows at most, so one more full select is cheap and has no length limit
     // to hit.
-    const { data: refreshed, error: refetchError } = await client.from('companies').select('id, name');
-    if (refetchError) throw refetchError;
-    for (const row of refreshed ?? []) {
-      byLower.set((row.name as string).toLowerCase(), row.id as string);
-    }
+    await readCompanies();
   }
 
   const resolved = new Map<string, string>();
