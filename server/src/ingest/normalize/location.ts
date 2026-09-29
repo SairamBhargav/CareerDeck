@@ -19,6 +19,47 @@ export interface ParsedLocation {
   region: string | null;
   country: string | null;
   type: LocationTypeValue;
+  /**
+   * The place is known to be outside the markets the app serves (MARKET_COUNTRIES). False when
+   * it is inside them *or unknown*: most unplaced strings in this corpus are American office
+   * labels ("San Francisco", "NY HQ"), so an unknown place is kept rather than thrown away.
+   */
+  abroad: boolean;
+}
+
+/** Decision 2026-09-29: the app lists jobs in the US and Canada only. */
+export const MARKET_COUNTRIES = new Set(['US', 'CA']);
+
+/**
+ * Named regions that are outside the market even though they are not a country. Tested on
+ * the segment as written, because the parser deliberately treats "EMEA" as naming no place
+ * (it has no city to filter on) — which is exactly what used to make "Remote - EMEA" read
+ * as plain "Remote".
+ */
+const ABROAD_REGION =
+  /\b(emea|apac|asia|asia[- ]pacific|europe|european union|eu|latam|latin america|south america|africa|middle east|oceania|anz|dach|nordics|benelux)\b/i;
+
+/** "Remote - US & Europe" is open to the market; only a region with no market in it is abroad. */
+const MARKET_REGION = /\b(us|usa|u\.s\.a?\.?|united states|america|americas|amer|north america|canada)\b/i;
+
+function regionAbroad(text: string): boolean {
+  return ABROAD_REGION.test(text) && !MARKET_REGION.test(text);
+}
+
+const PROVINCES: Record<string, string> = {
+  alberta: 'AB', 'british columbia': 'BC', manitoba: 'MB', 'new brunswick': 'NB',
+  newfoundland: 'NL', 'newfoundland and labrador': 'NL', 'nova scotia': 'NS',
+  'northwest territories': 'NT', nunavut: 'NU', ontario: 'ON', 'prince edward island': 'PE',
+  quebec: 'QC', québec: 'QC', saskatchewan: 'SK', yukon: 'YT',
+};
+
+// None of these collide with a US state code, so "Toronto, ON" can be read without guessing.
+const PROVINCE_CODES = new Set(Object.values(PROVINCES));
+
+function provinceOf(value: string): string | null {
+  const bare = value.replace(/\./g, '').trim();
+  if (PROVINCE_CODES.has(bare.toUpperCase()) && bare.length === 2) return bare.toUpperCase();
+  return PROVINCES[bare.toLowerCase()] ?? null;
 }
 
 /**
@@ -115,6 +156,20 @@ const COUNTRIES: Record<string, string> = {
   australia: 'AU', 'new zealand': 'NZ', brazil: 'BR', mexico: 'MX', 'south korea': 'KR',
   china: 'CN', 'hong kong': 'HK', taiwan: 'TW', argentina: 'AR', colombia: 'CO',
   chile: 'CL', 'costa rica': 'CR', philippines: 'PH', 'united arab emirates': 'AE',
+  // Added with the US-and-Canada decision: each of these was an unplaced row in the corpus.
+  'great britain': 'GB', wales: 'GB', 'northern ireland': 'GB', italy: 'IT', belgium: 'BE',
+  austria: 'AT', finland: 'FI', iceland: 'IS', greece: 'GR', turkey: 'TR', türkiye: 'TR',
+  'czech republic': 'CZ', czechia: 'CZ', hungary: 'HU', romania: 'RO', bulgaria: 'BG',
+  serbia: 'RS', croatia: 'HR', ukraine: 'UA', estonia: 'EE', latvia: 'LV', lithuania: 'LT',
+  luxembourg: 'LU', vietnam: 'VN', 'viet nam': 'VN', thailand: 'TH', malaysia: 'MY',
+  indonesia: 'ID', pakistan: 'PK', bangladesh: 'BD', 'sri lanka': 'LK', 'south africa': 'ZA',
+  nigeria: 'NG', kenya: 'KE', egypt: 'EG', ghana: 'GH', morocco: 'MA', 'saudi arabia': 'SA',
+  qatar: 'QA', uae: 'AE', peru: 'PE', uruguay: 'UY', korea: 'KR',
+  // Bare ISO codes boards write alone ("IE", "SG"). Only codes that are not also a US state
+  // code: "IN", "DE", "CA", "GA" and friends stay states.
+  gb: 'GB', ie: 'IE', sg: 'SG', mx: 'MX', jp: 'JP', au: 'AU', nz: 'NZ', br: 'BR', fr: 'FR',
+  es: 'ES', it: 'IT', nl: 'NL', pl: 'PL', se: 'SE', ch: 'CH', cn: 'CN', kr: 'KR',
+  tw: 'TW', hk: 'HK', ph: 'PH',
 };
 
 /**
@@ -145,6 +200,33 @@ const CITY_COUNTRY: Record<string, string> = {
   singapore: 'SG', tokyo: 'JP', sydney: 'AU', melbourne: 'AU', toronto: 'CA',
   vancouver: 'CA', montreal: 'CA', 'mexico city': 'MX', 'são paulo': 'BR',
   'sao paulo': 'BR', seoul: 'KR', shanghai: 'CN', beijing: 'CN', taipei: 'TW',
+  // Canada, so a bare Canadian city counts as in the market rather than unknown.
+  ottawa: 'CA', calgary: 'CA', edmonton: 'CA', winnipeg: 'CA', halifax: 'CA', waterloo: 'CA',
+  kitchener: 'CA', 'kitchener waterloo': 'CA', mississauga: 'CA', markham: 'CA', burnaby: 'CA',
+  'quebec city': 'CA', saskatoon: 'CA', regina: 'CA',
+  /*
+   * Abroad, from the corpus's unplaced rows. Names shared with a US city (Cambridge,
+   * Birmingham, Manchester, Athens, Valencia, Richmond…) are deliberately absent: a wrong
+   * "abroad" deletes a real US job, a wrong "unknown" only keeps a foreign one.
+   */
+  gurugram: 'IN', gurgaon: 'IN', noida: 'IN', delhi: 'IN', 'new delhi': 'IN', chennai: 'IN',
+  kolkata: 'IN', ahmedabad: 'IN', cardiff: 'GB', edinburgh: 'GB', glasgow: 'GB', bristol: 'GB',
+  leeds: 'GB', belfast: 'GB', cork: 'IE', galway: 'IE', limerick: 'IE', frankfurt: 'DE',
+  hamburg: 'DE', cologne: 'DE', köln: 'DE', münchen: 'DE', stuttgart: 'DE', düsseldorf: 'DE',
+  lyon: 'FR', toulouse: 'FR', porto: 'PT', rotterdam: 'NL', utrecht: 'NL', eindhoven: 'NL',
+  'the hague': 'NL', brussels: 'BE', antwerp: 'BE', vienna: 'AT', zürich: 'CH', geneva: 'CH',
+  milan: 'IT', rome: 'IT', turin: 'IT', prague: 'CZ', budapest: 'HU', bucharest: 'RO',
+  sofia: 'BG', belgrade: 'RS', zagreb: 'HR', kyiv: 'UA', kiev: 'UA', lviv: 'UA',
+  tallinn: 'EE', riga: 'LV', vilnius: 'LT', helsinki: 'FI', reykjavik: 'IS', kraków: 'PL',
+  wroclaw: 'PL', wrocław: 'PL', gdansk: 'PL', istanbul: 'TR', haifa: 'IL', jerusalem: 'IL',
+  'abu dhabi': 'AE', riyadh: 'SA', doha: 'QA', cairo: 'EG', lagos: 'NG', nairobi: 'KE',
+  'cape town': 'ZA', johannesburg: 'ZA', brisbane: 'AU', adelaide: 'AU', auckland: 'NZ',
+  wellington: 'NZ', kassel: 'DE', osaka: 'JP', busan: 'KR', shenzhen: 'CN', hangzhou: 'CN', guangzhou: 'CN',
+  'kuala lumpur': 'MY', jakarta: 'ID', bangkok: 'TH', 'ho chi minh city': 'VN', hanoi: 'VN',
+  manila: 'PH', 'makati': 'PH', cebu: 'PH', 'buenos aires': 'AR', bogota: 'CO', bogotá: 'CO',
+  medellin: 'CO', medellín: 'CO', lima: 'PE', montevideo: 'UY', guadalajara: 'MX',
+  monterrey: 'MX', 'rio de janeiro': 'BR', 'belo horizonte': 'BR', karachi: 'PK', lahore: 'PK',
+  dhaka: 'BD', colombo: 'LK',
 };
 
 function titleCase(value: string): string {
@@ -172,6 +254,8 @@ function stripModality(segment: string): string {
     // "Ireland Locations", "Bengaluru Office" — boards append a noise word to the place.
     // Trailing only, so "Bay Area" and "Greater Boston Area" survive via ALIASES.
     .replace(/\s+(locations?|offices?|hub)\s*$/i, '')
+    // …or put it first: "Office London", "Office San Francisco".
+    .replace(/^(office|offices)\s+/i, '')
     // A trailing super-region: "Gemini North America" is an office label, not a place.
     .replace(/\s+(north america|south america|americas|emea|apac|latam|global)\s*$/i, '')
     .replace(/[-–—()]+/g, ' ')
@@ -202,7 +286,8 @@ function splitOnCommas(segment: string): string[] {
     // "Washington, D.C." split into a state called Washington and a city called "D.C.".
     const bare = part.replace(/\./g, '').trim();
     const key = bare.toLowerCase();
-    return STATE_CODES.has(bare.toUpperCase()) || US_STATES[key] !== undefined || COUNTRIES[key] !== undefined;
+    return STATE_CODES.has(bare.toUpperCase()) || US_STATES[key] !== undefined || COUNTRIES[key] !== undefined ||
+      provinceOf(bare) !== null;
   };
 
   const places: string[] = [];
@@ -255,7 +340,8 @@ function placeFromSegment(segment: string): Pick<ParsedLocation, 'city' | 'regio
     return { city: null, region: null, country: null };
   }
 
-  const lower = cleaned.toLowerCase();
+  // "The Netherlands", "the UK".
+  const lower = cleaned.toLowerCase().replace(/^the\s+/, '');
 
   const alias = ALIASES[lower];
   if (alias) return { city: alias.city, region: alias.region, country: alias.country };
@@ -287,6 +373,10 @@ function placeFromSegment(segment: string): Pick<ParsedLocation, 'city' | 'regio
     ? cleaned.toUpperCase()
     : (US_STATES[lower] ?? null);
   if (bareState) return { city: null, region: bareState, country: 'US' };
+
+  // …and a bare province is a province: "ON" used to become a city called "ON".
+  const bareProvince = provinceOf(cleaned);
+  if (bareProvince) return { city: null, region: bareProvince, country: 'CA' };
 
   const parts = cleaned.split(/\s*,\s*/).map((part) => part.trim()).filter(Boolean);
   const first = parts[0];
@@ -327,6 +417,9 @@ function placeFromSegment(segment: string): Pick<ParsedLocation, 'city' | 'regio
       country ??= 'US';
     } else if (COUNTRIES[key]) {
       country ??= COUNTRIES[key] ?? null;
+    } else if (provinceOf(part)) {
+      region ??= provinceOf(part);
+      country ??= 'CA';
     } else if (region === null && part.length <= 3) {
       // A short unrecognised trailing token is a province or state code we do not list
       // (ON, BC, NSW). Keeping it is better than discarding the only region signal.
@@ -391,7 +484,7 @@ export function parseLocations(
   const sources = [raw, ...extras].filter((value): value is string => typeof value === 'string' && value.trim() !== '');
 
   if (sources.length === 0) {
-    return [{ raw: 'Not specified', city: null, region: null, country: null, type: hint ?? 'Onsite' }];
+    return [{ raw: 'Not specified', city: null, region: null, country: null, type: hint ?? 'Onsite', abroad: false }];
   }
 
   const segments = sources.flatMap((source) =>
@@ -428,23 +521,32 @@ export function parseLocations(
           ? segment
           : (stripModality(segment) || segment);
 
-    const key = `${label.toLowerCase()}|${type}`;
+    const abroad = place.country !== null
+      ? !MARKET_COUNTRIES.has(place.country)
+      : regionAbroad(segment);
+
+    // Abroad is part of the key: "Remote - EMEA" and "Remote - US" both label as "Remote",
+    // and collapsing them would let the first one decide whether the job is in the market.
+    const key = `${label.toLowerCase()}|${type}|${abroad}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
-    results.push({ raw: label, ...place, type });
+    results.push({ raw: label, ...place, type, abroad });
     if (results.length >= MAX_LOCATIONS_PER_POSTING) break;
   }
 
   if (results.length === 0) {
     const first = sources[0] ?? 'Not specified';
-    return [{ raw: first, city: null, region: null, country: null, type: modalityOf(first, hint) }];
+    return [{ raw: first, city: null, region: null, country: null, type: modalityOf(first, hint), abroad: regionAbroad(first) }];
   }
 
   // A posting that is "Remote" *and* lists offices is one remote job, not one per office.
   // Without this, every remote role at a company with five offices becomes six rows.
   const remoteOnly = results.filter((entry) => entry.type === 'Remote' && entry.city === null);
-  if (remoteOnly.length > 0 && hint === 'Remote') return remoteOnly.slice(0, 1);
+  // The in-market one when there is a choice, so the kept row does not decide the job is abroad.
+  if (remoteOnly.length > 0 && hint === 'Remote') {
+    return [remoteOnly.find((entry) => !entry.abroad) ?? remoteOnly[0]!];
+  }
 
   /*
    * Drop country- and region-level rows once a real city is known.

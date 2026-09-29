@@ -43,7 +43,7 @@ import {
   type RunTotals,
   type SourceRow,
 } from '../db.ts';
-import { describeError, landRawPostings, markRawProcessed, type NormalizedJob } from '../pipeline.ts';
+import { describeError, landRawPostings, markRawProcessed, postingInMarket, type NormalizedJob } from '../pipeline.ts';
 import { writeBatches } from '../batches.ts';
 import { politeFetch } from '../http.ts';
 import { parseLocations } from '../normalize/location.ts';
@@ -252,13 +252,23 @@ export async function crawlSimplifyFeed(
     // non-zero, once that gate is respected — it previously wasn't, and running
     // `--dry-run` once was enough to create ~1,100 company rows for real.
     const beforeCount = await client.from('companies').select('id', { count: 'exact', head: true });
-    const names = listings.map((entry) => str(entry.company_name)).filter((name): name is string => name !== null);
+    // US and Canada only, decided before companies are resolved so a foreign-only listing
+    // does not create a company row either.
+    const marketListings = listings.filter((entry) => {
+      const [locationRaw, ...extraLocations] = strArray(entry.locations);
+      return postingInMarket({ locationRaw: locationRaw ?? null, extraLocations, workplaceHint: null });
+    });
+    if (marketListings.length < listings.length) {
+      log(`      ${label} — ${listings.length - marketListings.length} listing(s) outside the US and Canada skipped`);
+    }
+
+    const names = marketListings.map((entry) => str(entry.company_name)).filter((name): name is string => name !== null);
     const companyIds = await resolveCompaniesByName(client, names, { createMissing: !options.dryRun });
     const afterCount = await client.from('companies').select('id', { count: 'exact', head: true });
     totals.companiesCreated = Math.max(0, (afterCount.count ?? 0) - (beforeCount.count ?? 0));
 
     const rawPostings: RawPosting[] = [];
-    for (const entry of listings) {
+    for (const entry of marketListings) {
       const id = str(entry.id);
       const companyName = str(entry.company_name);
       const title = str(entry.title);
@@ -290,7 +300,7 @@ export async function crawlSimplifyFeed(
     if (!options.dryRun) await touchSeen(client, source.id, rawPostings.map((posting) => posting.externalId));
 
     const companySizes = new Map<string, number>();
-    for (const listing of listings) {
+    for (const listing of marketListings) {
       const name = str(listing.company_name);
       if (name) companySizes.set(name, (companySizes.get(name) ?? 0) + 1);
     }
@@ -315,7 +325,9 @@ export async function crawlSimplifyFeed(
 
       const titleNormalized = normalizeTitle(p.title);
       const [primaryLocation, ...extraLocations] = p.locations;
-      const locations = parseLocations(primaryLocation ?? null, extraLocations, null);
+      const locations = parseLocations(primaryLocation ?? null, extraLocations, null)
+        .filter((location) => !location.abroad);
+      if (locations.length === 0) continue;
       const description = synthesizeDescription({
         title: p.title,
         companyName: p.company_name,

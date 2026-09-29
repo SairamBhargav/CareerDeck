@@ -170,6 +170,12 @@ export interface NormalizeContext {
  * locations" later and what stops the near-miss detector filing its own siblings as
  * suspected duplicates.
  */
+/** Whether any of a posting's locations is in the market (MARKET_COUNTRIES) or unknown. */
+export function postingInMarket(posting: Pick<ParsedPosting, 'locationRaw' | 'extraLocations' | 'workplaceHint'>): boolean {
+  return parseLocations(posting.locationRaw, posting.extraLocations, posting.workplaceHint)
+    .some((location) => !location.abroad);
+}
+
 export function normalize(posting: ParsedPosting, context: NormalizeContext): NormalizedJob[] {
   // The adapter's plain text is preferred where the vendor supplies one — it is their own
   // rendering, and it keeps list structure that a generic HTML strip would flatten.
@@ -234,7 +240,12 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
 
   // Falling back to the unfiltered set rather than to nothing: a posting whose only
   // location happens to share a word with the employer's name is still a posting.
-  const locations = usable.length > 0 ? usable : parsed;
+  const candidates = usable.length > 0 ? usable : parsed;
+
+  // US and Canada only: a London + New York posting keeps its New York row, and a posting
+  // with no location in the market produces no rows at all.
+  const locations = candidates.filter((location) => !location.abroad);
+  if (locations.length === 0) return [];
 
   const distinct = new Map<string, (typeof locations)[number]>();
   for (const location of locations) {
@@ -427,8 +438,14 @@ export async function crawlSource(
     }
 
     const listed = await readBoard(adapter, request, response.body);
-    const postings = await hydrate(adapter, listed, (message) => log(`      ${label} — ${message}`));
+    const hydrated = await hydrate(adapter, listed, (message) => log(`      ${label} — ${message}`));
+    // Filtered before landing, so a foreign posting costs no storage and no Disk IO at all —
+    // landing it and discarding it later would re-store its payload on every crawl.
+    const postings = hydrated.filter((posting) => postingInMarket(adapter.parse(posting)));
     totals.postingsSeen = postings.length;
+    if (postings.length < hydrated.length) {
+      log(`      ${label} — ${hydrated.length - postings.length} posting(s) outside the US and Canada skipped`);
+    }
 
     const changed = options.dryRun
       ? postings

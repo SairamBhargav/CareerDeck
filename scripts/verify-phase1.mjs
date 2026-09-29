@@ -33,7 +33,7 @@ import {
 import { compileDictionary, extractSkills } from '../server/src/ingest/normalize/skills.ts';
 import { scoreQuality } from '../server/src/ingest/normalize/quality.ts';
 import { extractRequirements, htmlToText } from '../server/src/ingest/normalize/html.ts';
-import { contentHash } from '../server/src/ingest/pipeline.ts';
+import { contentHash, postingInMarket } from '../server/src/ingest/pipeline.ts';
 import { ashby, greenhouse, lever } from '../server/src/ingest/sources/index.ts';
 import { crawlSimplifyFeed } from '../server/src/ingest/aggregators/simplify.ts';
 import { SKILLS } from './skills-dictionary.ts';
@@ -318,6 +318,50 @@ check(
   'an unparseable location still yields a row',
   parseLocations('Somewhere Peculiar Indeed Truly', []).length === 1,
 );
+
+section('market: US and Canada only');
+
+// [input, hint, expected abroad for every row] — from the corpus's real location strings.
+const MARKET_CASES = [
+  ['San Francisco', null, false],          // no country parsed, but kept: unknown is not abroad
+  ['NY HQ', 'Remote', false],
+  ['Remote', 'Remote', false],
+  ['Toronto, ON', null, false],
+  ['ON', null, false],
+  ['Kitchener Waterloo', null, false],
+  ['Remote - Canada', 'Remote', false],
+  ['Remote - US & Europe', 'Remote', false],
+  ['London', null, true],
+  ['Gurugram', null, true],
+  ['Cardiff', null, true],
+  ['The Netherlands', null, true],
+  ['Ho Chi Minh City', null, true],
+  ['Remote - EMEA', 'Remote', true],
+  ['Europe', 'Remote', true],
+  ['Warsaw, Poland', null, true],
+  ['IE', null, true],
+  ['Office London', null, true],
+  ['IL', null, false],                     // Illinois, not Israel
+  ['Chicago, IL', null, false],
+  ['Office San Francisco', null, false],
+];
+for (const [input, hint, abroad] of MARKET_CASES) {
+  const parsed = parseLocations(input, [], hint);
+  check(`market: ${input} → ${abroad ? 'abroad' : 'kept'}`,
+    parsed.every((entry) => entry.abroad === abroad),
+    parsed.map((entry) => `${entry.raw}/${entry.country ?? '?'}/${entry.abroad}`).join(' | '));
+}
+
+check('a London + New York posting keeps only New York',
+  JSON.stringify(parseLocations('London / New York', []).filter((l) => !l.abroad).map((l) => l.raw)) === '["New York, NY"]',
+  parseLocations('London / New York', []).map((l) => `${l.raw}/${l.abroad}`).join(' | '));
+check('"Toronto, ON" stays one place in Canada',
+  parseLocations('Toronto, ON', []).length === 1 && parseLocations('Toronto, ON', [])[0]?.country === 'CA',
+  parseLocations('Toronto, ON', []).map((l) => `${l.raw}/${l.country}`).join(' | '));
+check('a remote posting open to EMEA and the US is kept',
+  parseLocations('Remote - EMEA', ['Remote - US'], 'Remote').some((l) => !l.abroad));
+check('a foreign posting produces no jobs',
+  !postingInMarket({ locationRaw: 'Bengaluru', extraLocations: ['Hyderabad'], workplaceHint: null }));
 
 section('salaries');
 
