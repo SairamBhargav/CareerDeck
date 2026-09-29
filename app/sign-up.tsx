@@ -170,7 +170,10 @@ export default function SignUpScreen() {
               />
 
               {asksSchool ? (
-                <View style={styles.pair}>
+                <>
+                  {/* Full width, and on its own row. The suggestion list underneath holds
+                      names like "Massachusetts Institute of Technology", and sharing a row
+                      with Grad year meant those names decided how wide the form was. */}
                   <SchoolField
                     value={school}
                     onChangeText={setSchool}
@@ -185,7 +188,7 @@ export default function SignUpScreen() {
                     keyboardType="number-pad"
                     narrow
                   />
-                </View>
+                </>
               ) : null}
 
               <Text style={styles.footnote}>
@@ -340,6 +343,7 @@ const useStyles = makeStyles((colors) => ({
   form: {
     gap: spacing.lg,
   },
+  // First and last name share a row. School does not — see the comment at its use.
   pair: {
     flexDirection: 'row',
     gap: spacing.md,

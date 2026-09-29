@@ -144,6 +144,10 @@ export const SCHOOL_COUNT = SCHOOLS.length;
 
 const useStyles = makeStyles((colors) => ({
   field: {
+    // Stretch, not hug. Without an explicit width the field is sized by its widest child,
+    // which is a suggestion row holding an arbitrarily long school name.
+    alignSelf: 'stretch',
+    width: '100%',
     gap: spacing.sm,
   },
   label: {
@@ -181,11 +185,15 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   name: {
+    // numberOfLines truncates the render, not the measurement — without flexShrink the
+    // row still asks for the full intrinsic width and pushes everything around it.
+    flexShrink: 1,
     fontSize: fontSize.body,
     fontWeight: '600',
     color: colors.text,
   },
   meta: {
+    flexShrink: 1,
     fontSize: fontSize.small,
     color: colors.textTertiary,
   },
