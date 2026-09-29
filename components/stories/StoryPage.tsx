@@ -7,7 +7,6 @@ import type { EdgeInsets } from 'react-native-safe-area-context';
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { StoryProgressBar } from '@/components/stories/StoryProgressBar';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
-import { useTheme } from '@/context/ThemeContext';
 import type { StoryGroup } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
@@ -74,7 +73,6 @@ export function StoryPage({
   onToggleFollow,
   onOpenCompany,
 }: StoryPageProps) {
-  const { colors } = useTheme();
 
   const item = group.items[itemIndex] ?? group.items[0];
 
@@ -126,19 +124,39 @@ export function StoryPage({
     <View style={[styles.page, { width, backgroundColor: item.accentColor }]}>
       <GestureDetector gesture={gesture}>
         <View style={styles.tapZone}>
-          {/* Artwork stand-in: the company mark, large and centred on the article's own
-              accent colour. */}
-          <View style={styles.artwork}>
+          {/*
+            * There is no artwork and there never will be: §9 means a news item carries a
+            * headline, our summary and a link, and nothing that could hold a picture. A
+            * mark floating in the middle of an empty half-page was standing in for an
+            * image that cannot exist, and it read as a page still loading.
+            *
+            * So the mark becomes a watermark — oversized, faint, bled off the corner —
+            * which gives the colour field some structure without claiming to be a photo,
+            * and hands the whole page back to the words.
+            */}
+          <View style={styles.watermark} pointerEvents="none">
             {group.isIndustry ? (
-              <View style={styles.industryMark}>
-                <Ionicons name="trending-up" size={44} color={colors.textInverse} />
-              </View>
+              <Ionicons name="trending-up" size={200} color={INK} />
             ) : (
-              <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="xl" />
+              <CompanyLogo
+                logo={group.logo}
+                name={group.name}
+                color={group.logoColor}
+                size="xl"
+              />
             )}
           </View>
 
-          <View style={[styles.caption, { paddingBottom: insets.bottom + spacing.xxl + spacing.xl }]}>
+          <View
+            style={[
+              styles.caption,
+              {
+                // Clears the header above and the source link below; between those two
+                // the text is free to use the whole page.
+                paddingTop: insets.top + spacing.xxl + spacing.lg,
+                paddingBottom: insets.bottom + spacing.xxl,
+              },
+            ]}>
             <Text style={styles.tag} numberOfLines={1}>
               {item.tag}
             </Text>
@@ -245,22 +263,22 @@ const styles = StyleSheet.create({
   tapZone: {
     flex: 1,
   },
-  artwork: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  industryMark: {
-    width: 96,
-    height: 96,
-    borderRadius: radius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: INK,
+  watermark: {
+    position: 'absolute',
+    // Off the corner on both axes, so it reads as texture rather than as a thing placed
+    // in the layout. Scaled well past its own box; the overflow is the effect.
+    top: -32,
+    right: -48,
+    opacity: 0.16,
+    transform: [{ scale: 2.4 }],
   },
   caption: {
+    flex: 1,
+    // Centred in what is left after the header and the link. Bottom-anchored text under
+    // an empty half-page was the whole complaint.
+    justifyContent: 'center',
     paddingHorizontal: screenPadding,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   tag: {
     fontSize: fontSize.caption,
@@ -270,10 +288,11 @@ const styles = StyleSheet.create({
     color: INK_MUTED,
   },
   headline: {
-    fontSize: fontSize.heading,
+    marginBottom: spacing.xs,
+    fontSize: fontSize.display,
     fontWeight: '700',
-    letterSpacing: -0.5,
-    lineHeight: 28,
+    letterSpacing: -0.8,
+    lineHeight: 36,
     color: INK,
   },
   subtext: {
