@@ -24,7 +24,7 @@
  * pass belongs out of this file.
  */
 
-export type BoardKind = 'greenhouse' | 'lever' | 'ashby';
+export type BoardKind = 'greenhouse' | 'lever' | 'ashby' | 'workday';
 
 export interface BoardEntry {
   /** Also the company slug and the /company/[id] route segment. */
@@ -33,6 +33,11 @@ export interface BoardEntry {
   /** §3.3's cross-crawler dedup key. The registrable domain, no scheme, no www. */
   domain: string;
   kind: BoardKind;
+  /*
+   * The board identifier inside that ATS's URL space. For Workday it is
+   * `tenant.wdN/SiteName` — a Workday board is addressed by tenant *and* career site, and
+   * neither half is derivable from the other.
+   */
   token: string;
   industry: string;
   /** Brand tint behind the logo. Omitted where guessing would be worse than the default. */
@@ -193,6 +198,23 @@ export const BOARDS: BoardEntry[] = [
   { slug: 'unify', name: 'Unify', domain: 'unifygtm.com', kind: 'ashby', token: 'unify', industry: 'Go-to-Market', logoColor: '#111827' },
   { slug: 'n8n', name: 'n8n', domain: 'n8n.io', kind: 'ashby', token: 'n8n', industry: 'Workflow Automation', logoColor: '#EA4B71' },
   { slug: 'ophelia', name: 'Ophelia', domain: 'ophelia.com', kind: 'greenhouse', token: 'ophelia', industry: 'Telehealth', logoColor: '#2B4C7E' },
+  // ── Workday tenants ──────────────────────────────────────────────────────────
+  //
+  // §4.2 deferred Workday on the prediction it would eat a quarter; shipping the adapter
+  // proved otherwise, and these are the boards it unlocks. Every token below was checked
+  // against the live cxs endpoint first, because a wrong site name answers 422 rather
+  // than anything that looks like a mistake.
+  //
+  // Absent, and not an oversight: Google, Apple, Amazon, Microsoft, Meta, Netflix and
+  // Tesla each run their own careers system. None is Workday, and none is reachable by
+  // any adapter this project has — they are separate pieces of work, one per employer.
+  { slug: 'nvidia', name: 'NVIDIA', domain: 'nvidia.com', kind: 'workday', token: 'nvidia.wd5/NVIDIAExternalCareerSite', industry: 'Accelerated Computing', logoColor: '#76B900' },
+  { slug: 'salesforce', name: 'Salesforce', domain: 'salesforce.com', kind: 'workday', token: 'salesforce.wd12/External_Career_Site', industry: 'Customer Platform', logoColor: '#00A1E0' },
+  { slug: 'adobe', name: 'Adobe', domain: 'adobe.com', kind: 'workday', token: 'adobe.wd5/external_experienced', industry: 'Creative Software', logoColor: '#FF0000' },
+  { slug: 'capital-one', name: 'Capital One', domain: 'capitalone.com', kind: 'workday', token: 'capitalone.wd12/Capital_One', industry: 'Consumer Banking', logoColor: '#004977' },
+  { slug: 'mastercard', name: 'Mastercard', domain: 'mastercard.com', kind: 'workday', token: 'mastercard.wd1/CorporateCareers', industry: 'Payments Network', logoColor: '#EB001B' },
+  { slug: 'paypal', name: 'PayPal', domain: 'paypal.com', kind: 'workday', token: 'paypal.wd1/jobs', industry: 'Digital Payments', logoColor: '#003087' },
+  { slug: 'workday', name: 'Workday', domain: 'workday.com', kind: 'workday', token: 'workday.wd5/Workday', industry: 'Enterprise HR', logoColor: '#0875E1' },
 ];
 
 /** `NV` for NVIDIA, `HR` for Hudson River Trading — the CompanyLogo fallback. */
@@ -216,6 +238,18 @@ export function boardUrlFor(entry: BoardEntry): string {
       return `https://jobs.lever.co/${entry.token}`;
     case 'ashby':
       return `https://jobs.ashbyhq.com/${entry.token}`;
+    case 'workday': {
+      /*
+       * `tenant.wdN/SiteName` → `https://tenant.wdN.myworkdayjobs.com/SiteName`.
+       *
+       * The crawler reads the tenant back out of this host rather than being told it (see
+       * server/src/ingest/sources/workday.ts), so the host has to be exact. Workday shards
+       * its customers across numbered instances with no rule for which — NVIDIA is wd5,
+       * Salesforce wd12 — so the number is data, not something the code can derive.
+       */
+      const [host, site] = entry.token.split('/');
+      return `https://${host}.myworkdayjobs.com/${site}`;
+    }
   }
 }
 

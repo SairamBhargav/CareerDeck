@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { ScrollPane } from '@/components/common/ScrollPane';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
-import { companiesForSectors } from '@/constants/industries';
+import { PER_FIELD, companiesForSectors } from '@/constants/industries';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import { useOnboarding } from '@/context/OnboardingContext';
@@ -14,18 +14,14 @@ import { useCompanyDirectory } from '@/hooks/useCompanies';
 import type { Company } from '@/types';
 
 /**
- * How many companies the step offers.
+ * The ceiling, however many fields somebody picks.
  *
- * Twenty-five rather than a dozen: this is the only screen in the flow where somebody is
- * looking for a specific employer by name, and a list that stops at twelve means the one
- * they actually care about is missing with no way to ask for it.
- *
- * And twenty-five rather than fifty, because the step's pitch is "follow a few to start"
- * and a list long enough to feel like homework argues against it. The pane scrolls and
- * nobody has to reach the end — but the length of a list is itself a suggestion about how
- * much is expected, and fifty suggested too much.
+ * The list is PER_FIELD per pick — fifteen each, alternating — which is right up to a
+ * handful of fields and absurd at twenty. Somebody who taps half the grid is telling
+ * you they are undecided, not asking for seven hundred rows, and past about sixty the
+ * list stops being a shortlist and becomes the directory.
  */
-const SUGGESTION_LIMIT = 25;
+const MAX_SUGGESTIONS = 60;
 
 /**
  * Step three: follow a few companies.
@@ -46,8 +42,11 @@ export default function CompaniesStep() {
   const directory = useCompanyDirectory();
 
   const suggestions = useMemo(() => {
+    // Fifteen per field they picked, so two picks give thirty and one gives fifteen.
+    const limit = Math.min(PER_FIELD * Math.max(industries.length, 1), MAX_SUGGESTIONS);
+
     /*
-     * Every company in the fields they picked, best first, capped at SUGGESTION_LIMIT.
+     * Every company in the fields they picked, best first, capped at limit.
      *
      * `companiesForSectors` interleaves rather than concatenates, so somebody who picked
      * Artificial Intelligence and Accounting sees a spend-management company before the
@@ -69,19 +68,19 @@ export default function CompaniesStep() {
      * board list barely covers. Ranked by open roles, because a filler row nobody asked
      * for should at least be a company that is hiring.
      */
-    if (wanted.length < SUGGESTION_LIMIT) {
+    if (wanted.length < limit) {
       const taken = new Set(wanted.map((company) => company.slug));
       const rest = directory.companies
         .filter((company) => !taken.has(company.slug))
         .sort((a, b) => b.openJobCount - a.openJobCount);
 
       for (const company of rest) {
-        if (wanted.length >= SUGGESTION_LIMIT) break;
+        if (wanted.length >= limit) break;
         wanted.push(company);
       }
     }
 
-    return wanted.slice(0, SUGGESTION_LIMIT);
+    return wanted.slice(0, limit);
   }, [industries, directory]);
 
   const count = followedCompanySlugs.length;

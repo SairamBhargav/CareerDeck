@@ -63,6 +63,7 @@ export const SECTORS: Sector[] = [
     key: 'technology',
     label: 'Technology',
     companies: [
+      'nvidia', 'salesforce', 'adobe',
       'cloudflare', 'datadog', 'mongodb', 'elastic', 'twilio', 'gitlab', 'vercel', 'databricks',
       'dropbox', 'figma', 'linear', 'airtable',
     ],
@@ -71,6 +72,7 @@ export const SECTORS: Sector[] = [
     key: 'software-development',
     label: 'Software Development',
     companies: [
+      'salesforce', 'adobe',
       'gitlab', 'vercel', 'replit', 'warp', 'sourcegraph', 'supabase', 'neon', 'circleci',
       'launchdarkly', 'browserbase', 'n8n', 'cockroach-labs',
     ],
@@ -79,6 +81,7 @@ export const SECTORS: Sector[] = [
     key: 'data-science',
     label: 'Data Science',
     companies: [
+      'nvidia',
       'databricks', 'dataiku', 'hex', 'sigma-computing', 'fivetran', 'posthog', 'amplitude',
       'imply', 'elastic', 'mongodb', 'weaviate',
     ],
@@ -87,6 +90,7 @@ export const SECTORS: Sector[] = [
     key: 'artificial-intelligence',
     label: 'Artificial Intelligence',
     companies: [
+      'nvidia',
       'anthropic', 'openai', 'cohere', 'scale-ai', 'sierra', 'writer', 'cresta', 'decagon',
       'elevenlabs', 'langchain', 'baseten', 'modal', 'fireworks-ai', 'coreweave', 'sambanova',
       'graphcore', 'lovable',
@@ -102,12 +106,14 @@ export const SECTORS: Sector[] = [
   {
     key: 'information-technology',
     label: 'Information Technology',
-    companies: ['jamf', 'okta', 'pagerduty', 'datadog', 'grafana', 'cloudflare', 'gitlab'],
+    companies: [
+      'salesforce', 'workday', 'adobe','jamf', 'okta', 'pagerduty', 'datadog', 'grafana', 'cloudflare', 'gitlab'],
   },
   {
     key: 'engineering',
     label: 'Engineering',
     companies: [
+      'nvidia',
       'anduril', 'relativity-space', 'astranis', 'epirus', 'saronic', 'waymo', 'wayve', 'axon',
       'samsara', 'motive',
     ],
@@ -117,17 +123,20 @@ export const SECTORS: Sector[] = [
   {
     key: 'business-management',
     label: 'Business Management',
-    companies: ['celonis', 'asana', 'linear', 'lattice', 'samsara', 'carta'],
+    companies: [
+      'workday', 'salesforce','celonis', 'asana', 'linear', 'lattice', 'samsara', 'carta'],
   },
   {
     key: 'business-operations',
     label: 'Business Operations',
-    companies: ['celonis', 'asana', 'motive', 'samsara', 'flexport', 'n8n'],
+    companies: [
+      'salesforce', 'workday','celonis', 'asana', 'motive', 'samsara', 'flexport', 'n8n'],
   },
   {
     key: 'finance',
     label: 'Finance',
     companies: [
+      'capital-one', 'mastercard', 'paypal',
       'stripe', 'brex', 'ramp', 'affirm', 'sofi', 'mercury', 'carta', 'betterment', 'robinhood',
       'wise', 'coinbase', 'ripple', 'gemini', 'jane-street', 'imc', 'optiver', 'drw',
     ],
@@ -135,7 +144,8 @@ export const SECTORS: Sector[] = [
   {
     key: 'banking',
     label: 'Banking',
-    companies: ['chime', 'monzo', 'mercury', 'sofi', 'brex', 'ramp', 'tala', 'trade-republic'],
+    companies: [
+      'capital-one','chime', 'monzo', 'mercury', 'sofi', 'brex', 'ramp', 'tala', 'trade-republic'],
   },
   {
     key: 'accounting',
@@ -147,17 +157,20 @@ export const SECTORS: Sector[] = [
   {
     key: 'marketing',
     label: 'Marketing',
-    companies: ['klaviyo', 'braze', 'amplitude', 'unify', 'algolia'],
+    companies: [
+      'adobe', 'salesforce','klaviyo', 'braze', 'amplitude', 'unify', 'algolia'],
   },
   {
     key: 'advertising',
     label: 'Advertising',
-    companies: ['klaviyo', 'braze', 'reddit', 'pinterest'],
+    companies: [
+      'adobe','klaviyo', 'braze', 'reddit', 'pinterest'],
   },
   {
     key: 'sales',
     label: 'Sales',
-    companies: ['unify', 'cresta', 'decagon', 'braze', 'klaviyo', 'faire'],
+    companies: [
+      'salesforce','unify', 'cresta', 'decagon', 'braze', 'klaviyo', 'faire'],
   },
   {
     key: 'communications',
@@ -172,17 +185,20 @@ export const SECTORS: Sector[] = [
   {
     key: 'media-production',
     label: 'Media Production',
-    companies: ['elevenlabs', 'epic-games', 'riot-games', 'roblox', 'contentful', 'scopely'],
+    companies: [
+      'adobe','elevenlabs', 'epic-games', 'riot-games', 'roblox', 'contentful', 'scopely'],
   },
   {
     key: 'arts',
     label: 'Arts',
-    companies: ['figma', 'roblox', 'epic-games', 'squarespace', 'contentful'],
+    companies: [
+      'adobe','figma', 'roblox', 'epic-games', 'squarespace', 'contentful'],
   },
   {
     key: 'design',
     label: 'Design',
-    companies: ['figma', 'contentful', 'squarespace', 'lovable'],
+    companies: [
+      'adobe','figma', 'contentful', 'squarespace', 'lovable'],
   },
 
   // ── Health ───────────────────────────────────────────────────────────────────
@@ -295,7 +311,8 @@ export const SECTORS: Sector[] = [
   {
     key: 'human-resources',
     label: 'Human Resources',
-    companies: ['gusto', 'deel', 'lattice', 'handshake', 'checkr'],
+    companies: [
+      'workday','gusto', 'deel', 'lattice', 'handshake', 'checkr'],
   },
 
   // ── Service, leisure and land ────────────────────────────────────────────────
@@ -342,6 +359,15 @@ export const SECTORS: Sector[] = [
 ];
 
 /**
+ * How many companies a single field contributes.
+ *
+ * Picking two fields should give fifteen from each, alternating, rather than thirty
+ * from whichever field happens to be listed longer. The cap is what makes the
+ * interleave fair in both directions: without it a field with seventeen entries
+ * quietly outweighs one with four.
+ */
+export const PER_FIELD = 15;
+/**
  * Company slugs for a set of field keys, interleaved.
  *
  * Interleaved rather than concatenated: someone who picks Artificial Intelligence and
@@ -359,7 +385,7 @@ export function companiesForSectors(keys: string[]): string[] {
 
   const out: string[] = [];
   // Seeded with 0 so a pick of only empty fields yields an empty list, not -Infinity.
-  const longest = Math.max(...picked.map((sector) => sector.companies.length), 0);
+  const longest = Math.min(PER_FIELD, Math.max(...picked.map((f) => f.companies.length), 0));
 
   for (let rank = 0; rank < longest; rank += 1) {
     for (const sector of picked) {
@@ -370,6 +396,7 @@ export function companiesForSectors(keys: string[]): string[] {
 
   return out;
 }
+
 
 /** The smallest number of fields worth continuing on. One is a feed, none is a blank. */
 export const MIN_SECTORS = 1;
