@@ -7,7 +7,7 @@
  *
  *  - `constants/schools.ts` — what the app bundles and searches. No database ids in it,
  *    so it can be regenerated without a migration and without a `db:reset`.
- *  - `supabase/seed-schools.sql` — the `schools` rows, keyed on `ipeds_id`. This is what
+ *  - `supabase/schools-rows.sql` — the `schools` rows, keyed on `ipeds_id`. This is what
  *    `profiles.school_id_claimed` points at and what `.edu` verification matches domains
  *    against, so it has to be in Postgres however static the data is.
  *
@@ -316,7 +316,7 @@ export function schoolById(id: number | null): School | undefined {
   const tsSize = (fs.statSync('constants/schools.ts').size / 1024).toFixed(0);
   console.log(`Wrote constants/schools.ts (${tsSize} KB, ${schools.length} rows).`);
 
-  // ── supabase/seed-schools.sql ──────────────────────────────────────────────
+  // ── supabase/schools-rows.sql ──────────────────────────────────────────────
 
   const values = schools
     .map((s) => {
@@ -346,9 +346,13 @@ on conflict (ipeds_id) do update set
                   end;
 `;
 
-  fs.writeFileSync('supabase/seed-schools.sql', sql);
-  const sqlSize = (fs.statSync('supabase/seed-schools.sql').size / 1024).toFixed(0);
-  console.log(`Wrote supabase/seed-schools.sql (${sqlSize} KB).`);
+  fs.writeFileSync('supabase/schools-rows.sql', sql);
+  const sqlSize = (fs.statSync('supabase/schools-rows.sql').size / 1024).toFixed(0);
+  console.log(`Wrote supabase/schools-rows.sql (${sqlSize} KB).`);
+  console.log(
+    'To publish a refresh, paste it into a NEW migration — never edit an applied one. ' +
+      'Seeds do not reach a hosted project; only `db push` does.',
+  );
 }
 
 await main();

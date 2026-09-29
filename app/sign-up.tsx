@@ -14,6 +14,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { SchoolField } from '@/components/common/SchoolField';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
 import { SignInCancelled, useAuth } from '@/context/AuthContext';
 import { useOnboarding } from '@/context/OnboardingContext';
@@ -55,6 +56,8 @@ export default function SignUpScreen() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [school, setSchool] = useState('');
+  // The directory row behind `school`, when one was picked. Null while it is free text.
+  const [schoolIpedsId, setSchoolIpedsId] = useState<number | null>(null);
   const [gradYear, setGradYear] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -97,6 +100,7 @@ export default function SignUpScreen() {
             firstName,
             lastName,
             school: asksSchool ? school : '',
+            schoolIpedsId: asksSchool ? schoolIpedsId : null,
             graduationYear:
               asksSchool && Number.isFinite(parsedYear) && parsedYear > 1950 && parsedYear < 2100
                 ? parsedYear
@@ -116,7 +120,7 @@ export default function SignUpScreen() {
         setBusy(false);
       }
     },
-    [email, verifyEmailCode, firstName, lastName, school, gradYear, asksSchool, onboarding],
+    [email, verifyEmailCode, firstName, lastName, school, schoolIpedsId, gradYear, asksSchool, onboarding],
   );
 
   return (
@@ -167,7 +171,12 @@ export default function SignUpScreen() {
 
               {asksSchool ? (
                 <View style={styles.pair}>
-                  <Field label="School" value={school} onChangeText={setSchool} placeholder="UT Dallas" />
+                  <SchoolField
+                    value={school}
+                    onChangeText={setSchool}
+                    ipedsId={schoolIpedsId}
+                    onPick={setSchoolIpedsId}
+                  />
                   <Field
                     label="Grad year"
                     value={gradYear}

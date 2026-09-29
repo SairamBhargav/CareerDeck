@@ -1696,6 +1696,14 @@ export interface OnboardingFlush {
   firstName: string;
   lastName: string;
   school: string;
+  /**
+   * The directory row behind `school`, when the picker resolved one.
+   *
+   * Carried separately rather than replacing the text: the text is what the profile shows
+   * and what somebody outside the directory still gets to keep, while this is what the
+   * cohort signal can actually join on.
+   */
+  schoolIpedsId: number | null;
   graduationYear: number | null;
   /** Sector keys — see constants/industries.ts. */
   industries: string[];
@@ -1739,6 +1747,23 @@ export async function flushOnboarding(userId: string, draft: OnboardingFlush): P
     })
     .eq('user_id', userId);
   if (preferencesError) reportError(preferencesError, { where: 'flushOnboarding.preferences' });
+
+  /*
+   * The claimed school, when the picker resolved one.
+   *
+   * Its own call because it is the one field here that is not a column write:
+   * `authenticated` has no grant on `school_id_claimed`, so an RPC resolves the federal
+   * id to a row and records it against the caller.
+   *
+   * Failing is survivable. The typed name is already on the profile from the update
+   * above, so the worst case is a reader who does not contribute to the cohort signal.
+   */
+  if (draft.schoolIpedsId !== null) {
+    const { error: schoolError } = await supabase.rpc('set_claimed_school', {
+      p_ipeds_id: draft.schoolIpedsId,
+    });
+    if (schoolError) reportError(schoolError, { where: 'flushOnboarding.school' });
+  }
 
   // Sequential, not Promise.all: `set_company_follow` moves `companies.follower_count`
   // through a trigger, and five concurrent updates to five different rows is fine, but

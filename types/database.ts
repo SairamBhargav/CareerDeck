@@ -3404,6 +3404,10 @@ export type Database = {
         Args: { p_comment_id: string; p_on: boolean }
         Returns: boolean
       }
+      set_claimed_school: {
+        Args: { p_ipeds_id: number | null }
+        Returns: string | null
+      }
       set_comment_like: {
         Args: { p_comment_id: string; p_on: boolean }
         Returns: boolean
