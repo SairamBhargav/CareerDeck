@@ -24,9 +24,10 @@ follows from them. If one of these changes, re-read the sections it touches.
 | 7 | Resume handling | **Parse to structured profile** | Highest-value data and highest-risk data. Encrypted, audited, purgeable. |
 | 8 | News | **RSS / news API ingestion** | Editorial pipeline + a copyright constraint (see §9). |
 | 9 | Scale target | **Small team, 50k+ users** | Real queues, cache tier, separate ranking path, observability from day one. |
-| 10 | Geography | **US-only first**, GDPR-ready schema | CCPA/CPRA now. Consent + deletion + export designed in, not bolted on. |
+| 10 | Geography | **US and Canada** *(was "US-only first"; changed 2026-09-29)*, GDPR-ready schema | CCPA/CPRA now. Consent + deletion + export designed in, not bolted on. Postings elsewhere are skipped before they are stored (`postingInScope`, server/src/ingest/pipeline.ts). A place the parser cannot name is kept. |
 | 11 | Moderation | **Automated pre-screen + human post-hoc** | Classifier in the write path; review queue; strikes bound to verified identity. |
 | 12 | Money | **Subscription at launch** | RevenueCat + server-side entitlements. Credits become an append-only ledger. |
+| 13 | Corpus level | **Student-level roles only** *(2026-09-29)* | Senior and Staff+ postings are never stored, which keeps the corpus inside the free plan. Mid-level roles are stored and shown only to early-career switchers. The deck matches field and stage ([PHASE8.md](./PHASE8.md)). |
 
 ---
 

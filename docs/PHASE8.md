@@ -199,8 +199,9 @@ Unclassified jobs are still shown; they score 0.3 on `fieldMatch` rather than 0.
 
 ## 7. Going live
 
-1. `npx supabase db push --linked` applies `20261004000000_phase8_personalization.sql`. It adds
-   one nullable column and one index to `jobs`, with no table rewrite.
+1. `npx supabase db push --linked` applies `20261004000000_phase8_personalization.sql`, plus
+   `20261005000000` (closed-job retention) and `20261005000001` (stops the A/B, see item 3).
+   Together they add one nullable column and one index to `jobs`, with no table rewrite.
 2. `node --env-file=server/.env scripts/backfill-job-family.mjs --apply` classifies the existing
    jobs. It is about 11,600 updates, once, in batches of 200.
 3. **The phase 5 A/B is still running at 50%.** `ranked_feed_v1` sends half of all readers to the
@@ -208,4 +209,5 @@ Unclassified jobs are still shown; they score 0.3 on `fieldMatch` rather than 0.
    correct for measuring the ranker. It also means half of launch users would not see a
    personalized deck. Stopping it is one row:
    `update feed_experiments set is_running = false where name = 'ranked_feed_v1'`.
-   This is the owner's call; the migration does not make it.
+   `20261005000001_stop_ranked_feed_ab.sql` makes that change. It is a separate file, so
+   deleting it before `db push` keeps the experiment running.
