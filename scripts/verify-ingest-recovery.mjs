@@ -34,6 +34,18 @@ test('permanent errors and single-row timeouts fail visibly', async () => {
   }
 });
 
+test('a dropped connection is retried rather than failing the board', async () => {
+  const committed = [];
+  let attempts = 0;
+  await writeBatches([1, 2], 50, 'land raw postings', async (batch) => {
+    attempts++;
+    if (attempts === 1) throw { code: '', message: 'TypeError: fetch failed' };
+    committed.push(...batch);
+  });
+  assert.deepEqual(committed, [1, 2]);
+  assert.equal(attempts, 2);
+});
+
 test('an aggregator preserves direct employer content but keeps distinct roles and locations', () => {
   const direct = { company_id: 'acme', title_normalized: 'software summer 2027', location_city: null, seniority: 'intern' };
   const otherCity = { ...direct, location_city: 'Seattle' };
