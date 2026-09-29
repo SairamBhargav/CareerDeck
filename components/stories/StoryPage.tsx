@@ -47,6 +47,8 @@ interface StoryPageProps {
   onReadSource: () => void;
   /** Undefined on industry stories, which have no company to follow. */
   isFollowing?: boolean;
+  /** Closes the viewer and opens the company. Absent on industry stories. */
+  onOpenCompany?: () => void;
   onToggleFollow?: () => void;
 }
 
@@ -70,6 +72,7 @@ export function StoryPage({
   onReadSource,
   isFollowing,
   onToggleFollow,
+  onOpenCompany,
 }: StoryPageProps) {
   const { colors } = useTheme();
 
@@ -170,11 +173,39 @@ export function StoryPage({
         <StoryProgressBar count={group.items.length} activeIndex={itemIndex} progress={progress} />
 
         <View style={styles.headerRow} pointerEvents="box-none">
-          <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="sm" />
-          <Text style={styles.headerName} numberOfLines={1}>
-            {group.name}
-          </Text>
-          <Text style={styles.headerTime}>{formatPostedAt(item.publishedAt)}</Text>
+          {/* The mark and the name are one target, because they are one thing: a tap on
+              either is somebody asking who this company is. */}
+          <Pressable
+            onPress={onOpenCompany}
+            disabled={!onOpenCompany}
+            hitSlop={8}
+            accessibilityRole={onOpenCompany ? 'link' : 'text'}
+            accessibilityLabel={onOpenCompany ? 'Open ' + group.name : group.name}
+            style={({ pressed }) => [styles.identity, pressed ? styles.pressed : null]}>
+            <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="sm" />
+            <View style={styles.identityText}>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {group.name}
+              </Text>
+              <Text style={styles.headerTime}>{formatPostedAt(item.publishedAt)}</Text>
+            </View>
+          </Pressable>
+
+          {/* Beside the name rather than down by the article link: following is about
+              the company, and the company is what the top of the page is. */}
+          {onToggleFollow && isFollowing === false ? (
+            <Pressable
+              onPress={onToggleFollow}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={'Follow ' + group.name}
+              style={({ pressed }) => [styles.follow, pressed ? styles.pressed : null]}>
+              <Ionicons name="add" size={13} color={INK} />
+              <Text style={styles.followLabel}>Follow</Text>
+            </Pressable>
+          ) : null}
+
+          <View style={styles.headerSpacer} />
 
           <Pressable
             onPress={onClose}
@@ -187,34 +218,22 @@ export function StoryPage({
         </View>
       </View>
 
-      <View
-        pointerEvents="box-none"
-        style={[styles.actions, { bottom: insets.bottom + spacing.lg }]}>
-        <Pressable
-          onPress={onReadSource}
-          accessibilityRole="button"
-          accessibilityLabel={'Read the full article at ' + item.publisher}
-          style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
-          <Ionicons name="open-outline" size={13} color={INK} />
-          <Text style={styles.actionLabel}>Read at {item.publisher}</Text>
-        </Pressable>
-
-        {/* Only when there is something to gain. Most stories are from companies you
-            already follow, and offering to follow them again is the clutter that made
-            this strip feel busy. Non-followed companies do appear — useNewsFeed sorts
-            followed first rather than filtering — and for those this is the only way
-            to act on what you just read. */}
-        {onToggleFollow && isFollowing === false ? (
-          <Pressable
-            onPress={onToggleFollow}
-            accessibilityRole="button"
-            accessibilityLabel={'Follow ' + group.name}
-            style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
-            <Ionicons name="add" size={14} color={INK} />
-            <Text style={styles.actionLabel}>Follow</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      {/* A text link, not a button. It leaves the app, which is the least important
+         thing anyone does here — the summary above is the point, and a filled pill
+         competing with it said otherwise. */}
+      <Pressable
+        onPress={onReadSource}
+        hitSlop={12}
+        accessibilityRole="link"
+        accessibilityLabel={'Read the full article at ' + item.publisher}
+        style={({ pressed }) => [
+          styles.source,
+          { bottom: insets.bottom + spacing.lg },
+          pressed ? styles.pressed : null,
+        ]}>
+        <Text style={styles.sourceLabel}>Read at {item.publisher}</Text>
+        <Ionicons name="arrow-forward" size={12} color={INK_MUTED} />
+      </Pressable>
     </View>
   );
 }
@@ -287,6 +306,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexShrink: 1,
+  },
+  identityText: {
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  follow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: INK_SURFACE,
+  },
+  followLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: INK,
+  },
   headerName: {
     fontSize: fontSize.body,
     fontWeight: '700',
@@ -294,35 +339,27 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   headerTime: {
-    flex: 1,
     fontSize: fontSize.small,
     color: INK_MUTED,
   },
   close: {
     padding: spacing.xs,
   },
-  actions: {
+  source: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  action: {
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: INK_SURFACE,
+    // No background and generous hit slop instead of padding: the target stays big
+    // without a filled shape drawing the eye away from the summary.
+    paddingVertical: spacing.xs,
   },
-  actionLabel: {
+  sourceLabel: {
     fontSize: fontSize.small,
-    fontWeight: '700',
-    color: INK,
+    fontWeight: '600',
+    color: INK_MUTED,
+    textDecorationLine: 'underline',
   },
   pressed: {
     opacity: 0.6,

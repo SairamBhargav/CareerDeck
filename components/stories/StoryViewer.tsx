@@ -17,6 +17,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useRouter } from 'expo-router';
+
 import { Linking } from 'react-native';
 import { StoryPage } from '@/components/stories/StoryPage';
 import { useTheme } from '@/context/ThemeContext';
@@ -71,6 +73,7 @@ export function StoryViewer({
 }: StoryViewerProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width } = useWindowDimensions();
 
   const listRef = useRef<FlatList<StoryGroup>>(null);
@@ -252,6 +255,25 @@ export function StoryViewer({
               }}
               isFollowing={
                 index === groupIndex && company ? company.isFollowing : undefined
+              }
+              onOpenCompany={
+                storyGroup.isIndustry
+                  ? undefined
+                  : () => {
+                      /*
+                       * Close first, then navigate. The viewer is a native Modal, so a
+                       * push while it is open changes the route underneath it and the
+                       * reader sees nothing happen until they dismiss the story.
+                       */
+                      onClose();
+                      // `group.id` is the company slug for company groups — §1.3(c) kept
+                      // slugs as the URL through the move to uuid primary keys, and
+                      // /company/[id] resolves one.
+                      router.push({
+                        pathname: '/company/[id]',
+                        params: { id: storyGroup.id },
+                      });
+                    }
               }
               onToggleFollow={
                 index === groupIndex && company
