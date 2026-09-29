@@ -474,6 +474,18 @@ const SENIORITY_CASES = [
   ['Staff Machine Learning Engineer', 'staff_plus'],
   ['VP of Engineering', 'staff_plus'],
   ['Software Engineer II', 'mid'],
+  // Manager and sales titles that reached students' decks unranked on 2026-09-29.
+  ['Engineering Manager, Client Platform Engineering', 'staff_plus'],
+  ['General Manager, Consumer', 'staff_plus'],
+  ['Manager, SMB Sales', 'senior'],
+  ['Counsel, Commercial - Americas', 'senior'],
+  ['Product Manager, Payments', 'mid'],
+  ['Strategic Enterprise AE (Hunter) Telco', null],
+  ['Enterprise Account Executive, Central US', 'mid'],
+  ['Associate Product Manager', 'new_grad'],
+  ['Product Manager Intern (Summer 2027)', 'intern'],
+  ['Sales Development Representative', null],
+  ['Software Engineer', null],
 ];
 
 for (const [title, expected] of SENIORITY_CASES) {

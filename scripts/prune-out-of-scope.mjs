@@ -25,6 +25,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { adapterFor } from '../server/src/ingest/sources/index.ts';
 import { postingInMarket, postingInScope, EXCLUDED_SENIORITY } from '../server/src/ingest/pipeline.ts';
+import { extractSeniority } from '../server/src/ingest/normalize/seniority.ts';
 import { parseLocations, MARKET_COUNTRIES } from '../server/src/ingest/normalize/location.ts';
 import { writeBatches } from '../server/src/ingest/batches.ts';
 
@@ -70,11 +71,14 @@ for (const source of sources) {
 
 // ── 2. individual rows ────────────────────────────────────────────────────────
 const jobs = await pages(() => db.from('jobs')
-  .select('id, source_id, external_id, location_raw, location_country, location_type, seniority, status').order('id'), 1000);
+  .select('id, source_id, external_id, title, location_raw, location_country, location_type, seniority, status').order('id'), 1000);
 
 const foreignJobIds = [];
 for (const job of jobs) {
-  if (foreignPostings.has(`${job.source_id}|${job.external_id}`) || EXCLUDED_SENIORITY.has(job.seniority ?? '')) {
+  // A row stored "unranked" before a seniority rule existed is judged by the current rules,
+  // from its title: "Engineering Manager" was unranked until 2026-09-29.
+  const level = job.seniority ?? extractSeniority(job.title, '');
+  if (foreignPostings.has(`${job.source_id}|${job.external_id}`) || EXCLUDED_SENIORITY.has(level ?? '')) {
     foreignJobIds.push(job.id);
     continue;
   }

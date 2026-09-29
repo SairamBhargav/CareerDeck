@@ -31,12 +31,28 @@ const TITLE_RULES: { level: SeniorityLevel; pattern: RegExp }[] = [
    * European boards (Anduril's among them) use instead of "intern".
    */
   { level: 'intern', pattern: /\b(intern|internship|co-?op|coop|summer\s+(analyst|associate|20\d\d)|industrial placement|placement (student|year)|apprentice(ship)?|trainee|student (worker|assistant)|working student|werkstudent\w*|práctic\w*)\b/i },
-  { level: 'staff_plus', pattern: /\b(staff|principal|distinguished|fellow|architect|director|vp|vice president|head of|chief|cto|svp|manager,? (engineering|software))\b/i },
-  { level: 'senior', pattern: /\b(senior|sr\.?|lead|staff\s|iii|iv|expert|specialist ii)\b/i },
-  { level: 'new_grad', pattern: /\b(new ?grad(uate)?s?|university (grad|graduate|hire)|campus hire|entry[- ]level|early career(s)?|graduate (program|scheme|engineer|analyst|developer)|associate (software )?(engineer|developer)|junior|jr\.?|rotational)\b/i },
+  /*
+   * People managers of managers. "Engineering Manager" was missing — only "Manager,
+   * Engineering" matched — and 2,234 unranked "Manager" titles reached students' decks on
+   * 2026-09-29 as a result.
+   */
+  { level: 'staff_plus', pattern: /\b(staff|principal|distinguished|fellow|architect|director|vp|vice president|head of|chief|cto|svp|manager,? (engineering|software)|engineering manager|manager of engineering|general manager|group manager)\b/i },
+  /*
+   * A title that *starts* "Manager, …" names a team lead ("Manager, SMB Sales"), and counsel
+   * and attorneys need a law degree and years behind it. Neither is a student role.
+   */
+  { level: 'senior', pattern: /\b(senior|sr\.?|lead|staff\s|iii|iv|expert|specialist ii|senior manager|counsel|attorney|lawyer)\b|^\s*manager\b,/i },
+  { level: 'new_grad', pattern: /\b(new ?grad(uate)?s?|university (grad|graduate|hire)|campus hire|entry[- ]level|early career(s)?|graduate (program|scheme|engineer|analyst|developer)|associate (software )?(engineer|developer)|associate product manager|apm|junior|jr\.?|rotational)\b/i },
   // A roman or arabic "1" suffix is a new-grad rung at most large employers.
   { level: 'new_grad', pattern: /\b(engineer|developer|analyst|scientist|designer)\s+(i|1)\b/i },
   { level: 'mid', pattern: /\b(engineer|developer|analyst|scientist|designer)\s+(ii|2)\b/i },
+  /*
+   * Roles that assume some experience without saying "senior": individual-contributor
+   * managers (product, program, marketing, account), sales executives and supervisors.
+   * After the new-grad rules, so "Associate Product Manager" stays new grad. `mid` is still
+   * stored; a student's deck leaves it out and an early-career switcher's includes it.
+   */
+  { level: 'mid', pattern: /\b(manager|account executive|supervisor)\b/i },
 ];
 
 /** Only consulted when the title is silent, and only for the two buckets it can prove. */
