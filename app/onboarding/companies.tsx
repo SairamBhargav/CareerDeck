@@ -16,12 +16,16 @@ import type { Company } from '@/types';
 /**
  * How many companies the step offers.
  *
- * Fifty rather than a dozen: this is the only screen in the flow where somebody is
- * looking for a specific employer by name, and a list that stops at twelve means the
- * one they actually care about is missing with no way to ask for it. The pane scrolls,
- * and nobody is obliged to read to the end — the first screenful is still the pitch.
+ * Twenty-five rather than a dozen: this is the only screen in the flow where somebody is
+ * looking for a specific employer by name, and a list that stops at twelve means the one
+ * they actually care about is missing with no way to ask for it.
+ *
+ * And twenty-five rather than fifty, because the step's pitch is "follow a few to start"
+ * and a list long enough to feel like homework argues against it. The pane scrolls and
+ * nobody has to reach the end — but the length of a list is itself a suggestion about how
+ * much is expected, and fifty suggested too much.
  */
-const SUGGESTION_LIMIT = 50;
+const SUGGESTION_LIMIT = 25;
 
 /**
  * Step three: follow a few companies.
