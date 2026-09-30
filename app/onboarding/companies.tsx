@@ -24,6 +24,17 @@ import type { Company } from '@/types';
 const MAX_SUGGESTIONS = 60;
 
 /**
+ * The floor below which the step borrows from outside the picked fields.
+ *
+ * Six fields map to no company on the board list at all — Pharmaceuticals, Agriculture,
+ * Real Estate and a few others — and somebody who picks only those would otherwise see
+ * an empty screen, which reads as the app being broken rather than the corpus being
+ * young. Five rows is enough to look deliberate and few enough that nobody mistakes
+ * them for a match.
+ */
+const MIN_SUGGESTIONS = 5;
+
+/**
  * Step three: follow a few companies.
  *
  * The only genuinely skippable step, and the most valuable one that isn't required. A
@@ -64,18 +75,27 @@ export default function CompaniesStep() {
       .filter((company): company is Company => company !== undefined);
 
     /*
-     * Backfill only if their picks could not fill the list — a narrow field, or one the
-     * board list barely covers. Ranked by open roles, because a filler row nobody asked
-     * for should at least be a company that is hiring.
+     * Backfill is a floor, not a filler.
+     *
+     * It used to top the list up to `limit` whenever the picks fell short, which meant a
+     * pick like Banking — nine companies against a limit of fifteen — got six rows chosen
+     * purely by who had the most open roles. That is how somebody who tapped Banking was
+     * offered OpenAI, and it makes the step look like it did not listen.
+     *
+     * The only case that genuinely needs rescuing is a pick the board list cannot answer
+     * at all: Pharmaceuticals, Agriculture and Real Estate map to nothing today, and an
+     * empty third step reads as a broken app. So it fires only below MIN_SUGGESTIONS, and
+     * only fills to there — never up to the full list. A short, honest list beats a long
+     * one padded with strangers.
      */
-    if (wanted.length < limit) {
+    if (wanted.length < MIN_SUGGESTIONS) {
       const taken = new Set(wanted.map((company) => company.slug));
       const rest = directory.companies
         .filter((company) => !taken.has(company.slug))
         .sort((a, b) => b.openJobCount - a.openJobCount);
 
       for (const company of rest) {
-        if (wanted.length >= limit) break;
+        if (wanted.length >= MIN_SUGGESTIONS) break;
         wanted.push(company);
       }
     }
