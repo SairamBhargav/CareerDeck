@@ -119,9 +119,12 @@ export function SchoolField({
               <Text style={styles.name} numberOfLines={1}>
                 {school.name}
               </Text>
+              {/* The state alone. It is the one thing that disambiguates — "Bethel
+                  University" is three institutions in three states — and the aliases that
+                  make matching work are index, not information: listing them under every
+                  row answers a question nobody asked. */}
               <Text style={styles.meta} numberOfLines={1}>
                 {school.state}
-                {school.alt && school.alt.length > 0 ? ` · ${school.alt.slice(0, 3).join(', ')}` : ''}
               </Text>
             </Pressable>
           ))}
