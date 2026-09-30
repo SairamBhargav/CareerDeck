@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -33,6 +34,7 @@ const CODE_LENGTH = 6;
  * and puts the gate on commenting instead, so there is nothing to choose between here.
  */
 export default function SignInScreen() {
+  const router = useRouter();
   const styles = useStyles();
   const { colors, scheme } = useTheme();
   const { sendEmailCode, verifyEmailCode, signInWithApple, signInWithGoogle, isAppleAvailable } =
@@ -69,7 +71,9 @@ export default function SignInScreen() {
   );
 
   const handleSendCode = () =>
-    run('email', () => sendEmailCode(email), () => {
+    // `false`: this screen is for people who already have an account, so an unknown
+    // address is a wrong turn rather than a signup.
+    run('email', () => sendEmailCode(email, false), () => {
       setStep('code');
       setCode('');
       // The keyboard is already up from the email field; moving focus rather than
@@ -139,9 +143,10 @@ export default function SignInScreen() {
                   onChangeText={(value) => {
                     const digits = value.replace(/\D/g, '').slice(0, CODE_LENGTH);
                     setCode(digits);
-                    // Submitting on the last digit rather than making them reach for a
-                    // button: there is exactly one thing to do with a complete code.
-                    if (digits.length === CODE_LENGTH && busy === null) handleVerify(digits);
+                    // Deliberately not submitting on the sixth digit. Autofill and fast
+                    // typing both overshoot, and a Continue button that fires before
+                    // anybody can press it is a button that does nothing — which reads as
+                    // the screen having decided for you.
                   }}
                   placeholder="000000"
                   placeholderTextColor={colors.textTertiary}
@@ -180,7 +185,20 @@ export default function SignInScreen() {
               </>
             )}
 
-            {error ? (
+            {error === NO_ACCOUNT ? (
+              <Animated.View entering={FadeIn.duration(180)} style={styles.noAccount}>
+                <Text style={styles.error}>
+                  No account for that email yet.
+                </Text>
+                <Pressable
+                  onPress={() => router.replace('/welcome')}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create an account">
+                  <Text style={styles.noAccountAction}>Create one — it takes a minute</Text>
+                </Pressable>
+              </Animated.View>
+            ) : error ? (
               <Animated.Text entering={FadeIn.duration(180)} style={styles.error}>
                 {error}
               </Animated.Text>
@@ -241,6 +259,12 @@ type SignInKind = 'email' | 'code' | 'apple' | 'google';
  * will actually hit; everything else falls through with its own wording rather than
  * being flattened into "Something went wrong", which tells them nothing.
  */
+/**
+ * Returned when the address has no account. The render checks for it by identity and
+ * offers a way to sign up, which is the only error on this screen with somewhere to go.
+ */
+export const NO_ACCOUNT = 'no-account';
+
 function messageFor(error: unknown, kind: SignInKind): string {
   const raw = error instanceof Error ? error.message : String(error);
   const lower = raw.toLowerCase();
@@ -253,6 +277,14 @@ function messageFor(error: unknown, kind: SignInKind): string {
     (lower.includes('expired') || lower.includes('invalid') || lower.includes('not found'))
   ) {
     return 'That code is wrong or has expired. Ask for a new one.';
+  }
+  /*
+   * What `shouldCreateUser: false` returns for an address with no account. Supabase
+   * phrases it as signups being disallowed, which is true of this call and useless to
+   * read, so it becomes the one error here that has an answer attached.
+   */
+  if (kind === 'email' && (lower.includes('signups not allowed') || lower.includes('signup is disabled') || lower.includes('user not found'))) {
+    return NO_ACCOUNT;
   }
   if (lower.includes('rate limit') || lower.includes('too many') || lower.includes('security purposes')) {
     return 'Too many attempts. Wait a minute and try again.';
@@ -350,6 +382,14 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     color: colors.textTertiary,
     lineHeight: 18,
+  },
+  noAccount: {
+    gap: spacing.xs,
+  },
+  noAccountAction: {
+    fontSize: fontSize.small + 1,
+    fontWeight: '700',
+    color: colors.accent,
   },
   error: {
     fontSize: fontSize.small,

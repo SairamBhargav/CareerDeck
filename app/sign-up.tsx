@@ -62,6 +62,8 @@ export default function SignUpScreen() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set when the address turns out to already have an account. */
+  const [existingAccount, setExistingAccount] = useState(false);
   const codeInput = useRef<TextInput>(null);
 
   const asksSchool = onboarding.roleOption?.asksSchool ?? false;
@@ -72,7 +74,34 @@ export default function SignUpScreen() {
     setBusy(true);
     setError(null);
     try {
-      await sendEmailCode(email);
+      /*
+       * Ask whether the account exists before creating one.
+       *
+       * `createIfMissing: false` succeeds only for an address that already has an
+       * account — so success here is the answer "yes, and they are trying to sign up
+       * again", which is a wrong turn worth stopping. Supabase will not answer the
+       * question any other way, and an endpoint that did would be an enumeration
+       * endpoint.
+       *
+       * The probe mails a sign-in code to an existing account, which is not waste: it is
+       * exactly the code they need on the screen we are about to point them at.
+       */
+      let exists = false;
+      try {
+        await sendEmailCode(email, false);
+        exists = true;
+      } catch {
+        // The expected path for a new address: signups are "not allowed" for this call,
+        // which is Supabase's way of saying nobody owns it. Nothing was sent.
+        exists = false;
+      }
+
+      if (exists) {
+        setExistingAccount(true);
+        return;
+      }
+
+      await sendEmailCode(email, true);
       setStep('code');
       setCode('');
       requestAnimationFrame(() => codeInput.current?.focus());
@@ -164,14 +193,20 @@ export default function SignUpScreen() {
               <Field
                 label="Email"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(next) => {
+                  setEmail(next);
+                  if (existingAccount) setExistingAccount(false);
+                }}
                 placeholder="you@school.edu"
                 keyboardType="email-address"
                 autoComplete="email"
               />
 
               {asksSchool ? (
-                <View style={styles.pair}>
+                <>
+                  {/* Full width, and on its own row. The suggestion list underneath holds
+                      names like "Massachusetts Institute of Technology", and sharing a row
+                      with Grad year meant those names decided how wide the form was. */}
                   <SchoolField
                     value={school}
                     onChangeText={setSchool}
@@ -186,7 +221,7 @@ export default function SignUpScreen() {
                     keyboardType="number-pad"
                     narrow
                   />
-                </View>
+                </>
               ) : null}
 
               <Text style={styles.footnote}>
@@ -220,7 +255,23 @@ export default function SignUpScreen() {
             </View>
           )}
 
-          {error ? (
+          {existingAccount ? (
+            <Animated.View entering={FadeIn.duration(180)} style={styles.existing}>
+              <Text style={styles.error}>That email already has an account.</Text>
+              <Pressable
+                onPress={() => router.replace('/sign-in')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Go to sign in">
+                <Text style={styles.existingAction}>Sign in instead</Text>
+              </Pressable>
+              {/* The probe that found the account also mailed them a code, so the screen
+                  they are being sent to is one step from done rather than a restart. */}
+              <Text style={styles.existingHint}>
+                We just sent a sign-in code to that address.
+              </Text>
+            </Animated.View>
+          ) : error ? (
             <Animated.Text entering={FadeIn.duration(180)} style={styles.error}>
               {error}
             </Animated.Text>
@@ -341,6 +392,7 @@ const useStyles = makeStyles((colors) => ({
   form: {
     gap: spacing.lg,
   },
+  // First and last name share a row. School does not — see the comment at its use.
   pair: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -386,6 +438,18 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small + 1,
     fontWeight: '600',
     color: colors.textSecondary,
+  },
+  existing: {
+    gap: spacing.xs,
+  },
+  existingAction: {
+    fontSize: fontSize.small + 1,
+    fontWeight: '700',
+    color: colors.accent,
+  },
+  existingHint: {
+    fontSize: fontSize.small,
+    color: colors.textTertiary,
   },
   error: {
     marginTop: spacing.lg,

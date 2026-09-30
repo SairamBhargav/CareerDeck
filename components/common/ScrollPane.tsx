@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { View } from 'react-native';
+import { View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -48,8 +48,23 @@ const MIN_THUMB = 28;
 /** Slack before the rail appears: overflow under this is rounding, not scrollable. */
 const OVERFLOW_EPSILON = 2;
 
-export interface ScrollPaneProps {
-  children: ReactNode;
+export interface ScrollPaneProps<Item> {
+  /** Used when `data` is absent. Everything mounts at once, which is the point of a pane. */
+  children?: ReactNode;
+  /**
+   * Rows to virtualise instead of taking `children`.
+   *
+   * A pane normally mounts everything, which is right for a dozen chips and wrong for a
+   * long list of rows that each fetch an image: fifty company logos is fifty requests on
+   * mount, on a first-run screen, often on cellular. Passing `data` swaps the ScrollView
+   * for a FlatList so rows — and their images — arrive as they are scrolled to.
+   *
+   * The rail is identical either way. A FlatList *is* a ScrollView underneath, so the same
+   * offset, layout and content-size callbacks drive it.
+   */
+  data?: readonly Item[];
+  renderItem?: (item: Item) => ReactNode;
+  keyExtractor?: (item: Item) => string;
   /**
    * Extra room under the last row, so the final item does not sit flush against the
    * bottom edge and read as cut off.
@@ -57,7 +72,13 @@ export interface ScrollPaneProps {
   bottomInset?: number;
 }
 
-export function ScrollPane({ children, bottomInset = spacing.lg }: ScrollPaneProps) {
+export function ScrollPane<Item>({
+  children,
+  data,
+  renderItem,
+  keyExtractor,
+  bottomInset = spacing.lg,
+}: ScrollPaneProps<Item>) {
   const styles = useStyles();
 
   const scrollY = useSharedValue(0);
@@ -90,22 +111,38 @@ export function ScrollPane({ children, bottomInset = spacing.lg }: ScrollPanePro
     };
   });
 
+  // Shared by both branches, so the rail cannot drift between them.
+  const scrollProps = {
+    onScroll,
+    scrollEventThrottle: 16,
+    onLayout: (event: LayoutChangeEvent) => {
+      viewport.value = event.nativeEvent.layout.height;
+    },
+    onContentSizeChange: (_width: number, height: number) => {
+      content.value = height;
+    },
+    contentContainerStyle: [styles.content, { paddingBottom: bottomInset }],
+    showsVerticalScrollIndicator: false,
+    keyboardShouldPersistTaps: 'handled' as const,
+  };
+
   return (
     <View style={styles.pane}>
-      <Animated.ScrollView
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        onLayout={(event) => {
-          viewport.value = event.nativeEvent.layout.height;
-        }}
-        onContentSizeChange={(_width, height) => {
-          content.value = height;
-        }}
-        contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
-        {children}
-      </Animated.ScrollView>
+      {data && renderItem ? (
+        <Animated.FlatList
+          {...scrollProps}
+          data={data}
+          renderItem={({ item }) => <>{renderItem(item as Item)}</>}
+          keyExtractor={(item, index) => keyExtractor?.(item as Item) ?? String(index)}
+          // Enough to fill a tall phone before the first scroll, so the list never shows
+          // blank space waiting for a render pass.
+          initialNumToRender={10}
+          windowSize={7}
+          removeClippedSubviews
+        />
+      ) : (
+        <Animated.ScrollView {...scrollProps}>{children}</Animated.ScrollView>
+      )}
 
       {/* Outside the ScrollView, so it holds still instead of scrolling away with the
           content it is describing. */}

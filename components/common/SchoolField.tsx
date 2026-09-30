@@ -119,9 +119,12 @@ export function SchoolField({
               <Text style={styles.name} numberOfLines={1}>
                 {school.name}
               </Text>
+              {/* The state alone. It is the one thing that disambiguates — "Bethel
+                  University" is three institutions in three states — and the aliases that
+                  make matching work are index, not information: listing them under every
+                  row answers a question nobody asked. */}
               <Text style={styles.meta} numberOfLines={1}>
                 {school.state}
-                {school.alt && school.alt.length > 0 ? ` · ${school.alt.slice(0, 3).join(', ')}` : ''}
               </Text>
             </Pressable>
           ))}
@@ -144,6 +147,10 @@ export const SCHOOL_COUNT = SCHOOLS.length;
 
 const useStyles = makeStyles((colors) => ({
   field: {
+    // Stretch, not hug. Without an explicit width the field is sized by its widest child,
+    // which is a suggestion row holding an arbitrarily long school name.
+    alignSelf: 'stretch',
+    width: '100%',
     gap: spacing.sm,
   },
   label: {
@@ -181,11 +188,15 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   name: {
+    // numberOfLines truncates the render, not the measurement — without flexShrink the
+    // row still asks for the full intrinsic width and pushes everything around it.
+    flexShrink: 1,
     fontSize: fontSize.body,
     fontWeight: '600',
     color: colors.text,
   },
   meta: {
+    flexShrink: 1,
     fontSize: fontSize.small,
     color: colors.textTertiary,
   },

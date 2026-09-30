@@ -43,7 +43,13 @@ interface StoryPageProps {
   onPrevious: () => void;
   onHoldChange: (held: boolean) => void;
   onClose: () => void;
-  onReadMore: () => void;
+  /** Opens the publisher. The summary is ours; the article is theirs. */
+  onReadSource: () => void;
+  /** Undefined on industry stories, which have no company to follow. */
+  isFollowing?: boolean;
+  /** Closes the viewer and opens the company. Absent on industry stories. */
+  onOpenCompany?: () => void;
+  onToggleFollow?: () => void;
 }
 
 /**
@@ -63,7 +69,10 @@ export function StoryPage({
   onPrevious,
   onHoldChange,
   onClose,
-  onReadMore,
+  onReadSource,
+  isFollowing,
+  onToggleFollow,
+  onOpenCompany,
 }: StoryPageProps) {
   const { colors } = useTheme();
 
@@ -134,7 +143,26 @@ export function StoryPage({
               {item.tag}
             </Text>
             <Text style={styles.headline}>{item.headline}</Text>
-            <Text style={styles.subtext}>{item.subtext}</Text>
+
+            {/* The summary used to live behind "Read more", which left the page as a
+                logo on a colour field. It is at most three sentences and it is the
+                reason somebody opened the story, so it belongs on the story. */}
+            {item.summary.length > 0 ? (
+              item.summary.map((sentence, index) => (
+                <Text key={index} style={styles.summary}>
+                  {sentence}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.summary}>{item.subtext}</Text>
+            )}
+
+            {/* §9. Redisplaying a publisher’s article is infringement; the headline,
+                our own summary and a link out are what keeps this lawful, so the
+                attribution travels with the summary wherever the summary goes. */}
+            <Text style={styles.attribution}>
+              Summary by CareerDeck · {item.publisher}
+            </Text>
           </View>
         </View>
       </GestureDetector>
@@ -145,11 +173,39 @@ export function StoryPage({
         <StoryProgressBar count={group.items.length} activeIndex={itemIndex} progress={progress} />
 
         <View style={styles.headerRow} pointerEvents="box-none">
-          <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="sm" />
-          <Text style={styles.headerName} numberOfLines={1}>
-            {group.name}
-          </Text>
-          <Text style={styles.headerTime}>{formatPostedAt(item.publishedAt)}</Text>
+          {/* The mark and the name are one target, because they are one thing: a tap on
+              either is somebody asking who this company is. */}
+          <Pressable
+            onPress={onOpenCompany}
+            disabled={!onOpenCompany}
+            hitSlop={8}
+            accessibilityRole={onOpenCompany ? 'link' : 'text'}
+            accessibilityLabel={onOpenCompany ? 'Open ' + group.name : group.name}
+            style={({ pressed }) => [styles.identity, pressed ? styles.pressed : null]}>
+            <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="sm" />
+            <View style={styles.identityText}>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {group.name}
+              </Text>
+              <Text style={styles.headerTime}>{formatPostedAt(item.publishedAt)}</Text>
+            </View>
+          </Pressable>
+
+          {/* Beside the name rather than down by the article link: following is about
+              the company, and the company is what the top of the page is. */}
+          {onToggleFollow && isFollowing === false ? (
+            <Pressable
+              onPress={onToggleFollow}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={'Follow ' + group.name}
+              style={({ pressed }) => [styles.follow, pressed ? styles.pressed : null]}>
+              <Ionicons name="add" size={13} color={INK} />
+              <Text style={styles.followLabel}>Follow</Text>
+            </Pressable>
+          ) : null}
+
+          <View style={styles.headerSpacer} />
 
           <Pressable
             onPress={onClose}
@@ -162,17 +218,21 @@ export function StoryPage({
         </View>
       </View>
 
+      {/* A text link, not a button. It leaves the app, which is the least important
+         thing anyone does here — the summary above is the point, and a filled pill
+         competing with it said otherwise. */}
       <Pressable
-        onPress={onReadMore}
-        accessibilityRole="button"
-        accessibilityLabel={'Read the full article: ' + item.headline}
+        onPress={onReadSource}
+        hitSlop={12}
+        accessibilityRole="link"
+        accessibilityLabel={'Read the full article at ' + item.publisher}
         style={({ pressed }) => [
-          styles.readMore,
+          styles.source,
           { bottom: insets.bottom + spacing.lg },
           pressed ? styles.pressed : null,
         ]}>
-        <Ionicons name="chevron-up" size={13} color={INK} />
-        <Text style={styles.readMoreLabel}>Read more</Text>
+        <Text style={styles.sourceLabel}>Read at {item.publisher}</Text>
+        <Ionicons name="arrow-forward" size={12} color={INK_MUTED} />
       </Pressable>
     </View>
   );
@@ -221,6 +281,18 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: INK_MUTED,
   },
+  summary: {
+    fontSize: fontSize.body,
+    lineHeight: 22,
+    color: INK_MUTED,
+  },
+  attribution: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.caption,
+    letterSpacing: 0.3,
+    color: INK_MUTED,
+    opacity: 0.8,
+  },
   header: {
     position: 'absolute',
     top: 0,
@@ -234,6 +306,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexShrink: 1,
+  },
+  identityText: {
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  follow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: INK_SURFACE,
+  },
+  followLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: INK,
+  },
   headerName: {
     fontSize: fontSize.body,
     fontWeight: '700',
@@ -241,28 +339,27 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   headerTime: {
-    flex: 1,
     fontSize: fontSize.small,
     color: INK_MUTED,
   },
   close: {
     padding: spacing.xs,
   },
-  readMore: {
+  source: {
     position: 'absolute',
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    backgroundColor: INK_SURFACE,
+    // No background and generous hit slop instead of padding: the target stays big
+    // without a filled shape drawing the eye away from the summary.
+    paddingVertical: spacing.xs,
   },
-  readMoreLabel: {
+  sourceLabel: {
     fontSize: fontSize.small,
-    fontWeight: '700',
-    color: INK,
+    fontWeight: '600',
+    color: INK_MUTED,
+    textDecorationLine: 'underline',
   },
   pressed: {
     opacity: 0.6,

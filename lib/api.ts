@@ -1382,8 +1382,24 @@ export async function parseResume(resumeId: string): Promise<void> {
 type NewsCardRow = Database['public']['CompositeTypes']['news_card'];
 
 /** The stories row: the last two weeks of published stories, with this reader's seen state. */
+/**
+ * How far back the stories row reaches.
+ *
+ * A week, down from the fortnight this shipped with. A story is a thing that just
+ * happened, and at fourteen days the row still carried items from before the reader's
+ * last two visits — which makes the whole strip feel stale rather than the individual
+ * item feel old. Seven days is also the cadence somebody actually opens the app on.
+ *
+ * `news_feed` clamps this to 1..60 server-side, so the number here is a request rather
+ * than a guarantee.
+ */
+const NEWS_WINDOW_DAYS = 7;
+
 export async function fetchNews(): Promise<NewsItem[]> {
-  const { data, error } = await supabase.rpc('news_feed', { p_days: 14, p_limit: 120 });
+  const { data, error } = await supabase.rpc('news_feed', {
+    p_days: NEWS_WINDOW_DAYS,
+    p_limit: 120,
+  });
   if (error) throw error;
   return ((data ?? []) as NewsCardRow[]).map((row) => ({
     id: row.id!,
@@ -1817,6 +1833,27 @@ export interface OnboardingFlush {
  * fails is reported and the rest still lands.
  */
 export async function flushOnboarding(userId: string, draft: OnboardingFlush): Promise<void> {
+  /*
+   * Never overwrite somebody who has already done this.
+   *
+   * Signing up with an address that already has an account does not fail: Supabase
+   * sends that person a sign-in code, they use it, and they arrive here logged into
+   * their real account with a draft full of answers they gave five minutes ago. Every
+   * write below would then replace a name, a school, a graduation year and a whole set
+   * of preferences that were already right.
+   *
+   * The sign-up screen checks for this before it sends anything, so this should never
+   * fire. It is here anyway because the screen is not the only door — a provider
+   * sign-in reaches the same code — and because the cost of being wrong is somebody
+   * else’s data.
+   */
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('onboarding_completed_at')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (existing?.onboarding_completed_at) return;
   const identity: Database['public']['Tables']['profiles']['Update'] = {
     // Marks the flow finished. §3.1 put this column on `profiles` in phase 0 for exactly
     // this, long before there was an onboarding flow to set it.

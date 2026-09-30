@@ -17,13 +17,24 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { StoryArticleSheet } from '@/components/stories/StoryArticleSheet';
+import { useRouter } from 'expo-router';
+
+import { Linking } from 'react-native';
 import { StoryPage } from '@/components/stories/StoryPage';
 import { useTheme } from '@/context/ThemeContext';
 import type { Company, StoryGroup } from '@/types';
 
 /** How long one story holds before advancing itself. */
-const STORY_DURATION = 5000;
+/*
+ * Long enough to read the summary, which now sits on the page rather than behind a
+ * sheet that paused the timer. Three sentences is roughly forty-five words, and forty-
+ * five words at a normal reading pace is about thirteen seconds — five was sized for a
+ * headline and a logo, and would flip the page away mid-sentence.
+ *
+ * Holding still pauses, and a tap still advances immediately, so nobody who reads fast
+ * is made to wait.
+ */
+const STORY_DURATION = 13000;
 
 interface StoryViewerProps {
   /** Snapshot taken when the viewer opened — see HomeScreen's story session. */
@@ -62,12 +73,12 @@ export function StoryViewer({
 }: StoryViewerProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width } = useWindowDimensions();
 
   const listRef = useRef<FlatList<StoryGroup>>(null);
 
   const [groupIndex, setGroupIndex] = useState(startGroupIndex);
-  const [articleOpen, setArticleOpen] = useState(false);
   const [held, setHeld] = useState(false);
   const [swiping, setSwiping] = useState(false);
 
@@ -89,7 +100,7 @@ export function StoryViewer({
   const company = item?.companyId ? companyBySlug.get(item.companyId) : undefined;
 
   // The timer stops for anything that takes attention off the story itself.
-  const paused = articleOpen || held || swiping;
+  const paused = held || swiping;
 
   // The timer has to call "advance" from inside an animation callback, but advancing
   // depends on where we currently are — which would make the timer itself change every
@@ -238,21 +249,40 @@ export function StoryViewer({
               onPrevious={goPrevious}
               onHoldChange={setHeld}
               onClose={onClose}
-              onReadMore={() => setArticleOpen(true)}
+              onReadSource={() => {
+                const url = storyGroup.items[itemIndexByGroup[storyGroup.id] ?? 0]?.url;
+                if (url) void Linking.openURL(url);
+              }}
+              isFollowing={
+                index === groupIndex && company ? company.isFollowing : undefined
+              }
+              onOpenCompany={
+                storyGroup.isIndustry
+                  ? undefined
+                  : () => {
+                      /*
+                       * Close first, then navigate. The viewer is a native Modal, so a
+                       * push while it is open changes the route underneath it and the
+                       * reader sees nothing happen until they dismiss the story.
+                       */
+                      onClose();
+                      // `group.id` is the company slug for company groups — §1.3(c) kept
+                      // slugs as the URL through the move to uuid primary keys, and
+                      // /company/[id] resolves one.
+                      router.push({
+                        pathname: '/company/[id]',
+                        params: { id: storyGroup.id },
+                      });
+                    }
+              }
+              onToggleFollow={
+                index === groupIndex && company
+                  ? () => onToggleFollow(company.slug)
+                  : undefined
+              }
             />
           )}
         />
-
-        {articleOpen ? (
-          <StoryArticleSheet
-            item={item}
-            company={company}
-            onClose={() => setArticleOpen(false)}
-            onToggleFollow={() => {
-              if (company) onToggleFollow(company.slug);
-            }}
-          />
-        ) : null}
       </Animated.View>
     </Modal>
   );
