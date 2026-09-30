@@ -1136,7 +1136,9 @@ export async function fetchResumes(): Promise<Resume[]> {
  * footgun `randomObjectId` below was built on and the reason every upload used to throw.
  */
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+  // A view, not the buffer: the native side accepts only a TypedArray and rejects a bare
+  // ArrayBuffer with ArgumentCastException, even though the TypeScript type allows it.
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new Uint8Array(bytes));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
