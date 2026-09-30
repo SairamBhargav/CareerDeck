@@ -67,6 +67,44 @@ async function contactDetails(user: AuthedUser): Promise<unknown[]> {
   return out;
 }
 
+/*
+ * Delete the account now, rather than in thirty days.
+ *
+ * `request_account_deletion` remains the considered path: it switches the account off,
+ * keeps it recoverable for a month, and is what a real user who half-regrets a decision
+ * needs. This is the other one — gone immediately, email free to register again.
+ *
+ * ── Why this is a route and not an RPC ────────────────────────────────────────
+ *
+ * The last step of a purge is removing the row from `auth.users`, and that needs the
+ * admin API rather than a Postgres grant. `purgeAccount` already does the whole sequence
+ * for the nightly sweep — anonymise comments onto the tombstone, dissociate impressions,
+ * delete the storage objects, remove the auth user, close the request — so this exposes
+ * it for the caller's own account and nothing else.
+ *
+ * `force` skips the grace check, which is exactly what it was added for.
+ *
+ * ── What this costs, and when it starts costing ───────────────────────────────
+ *
+ * No law requires the thirty days. GDPR Art. 17 says "without undue delay" and CCPA gives
+ * forty-five; a grace period is permitted, never mandated, and immediate erasure is the
+ * more compliant of the two. The window exists for three practical reasons, and only the
+ * first is neutral: somebody undoing a mistake, a subscription still mid-period, and a
+ * moderated account resetting its strikes by deleting and re-registering.
+ *
+ * That last one is the real cost. Phase 3 built strikes, blocks and a review queue, and
+ * this route lets anyone carrying one start again with the same address. That is an
+ * acceptable trade before launch and a bad one after it, so this is a decision to revisit
+ * rather than a feature to forget.
+ */
+privacy.post('/delete', async (c) => {
+  const user = c.get('user');
+  const detail = await purgeAccount(user.id, true);
+  // The caller's session is already void — the user it names no longer exists — so there
+  // is nothing to sign out of and nothing useful to return but what was removed.
+  return c.json({ deleted: true, ...detail });
+});
+
 privacy.post('/export', async (c) => {
   const user = c.get('user');
 

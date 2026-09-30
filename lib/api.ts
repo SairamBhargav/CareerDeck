@@ -1705,6 +1705,17 @@ export async function cancelAccountDeletion(): Promise<boolean> {
   return data === true;
 }
 
+/**
+ * Deletes the account immediately, rather than scheduling it thirty days out.
+ *
+ * The session is dead the moment this resolves — the user it names is gone — so the
+ * caller signs out rather than trying to read anything afterwards. The email is free to
+ * register again straight away, which `requestAccountDeletion` deliberately does not do.
+ */
+export async function deleteAccountNow(): Promise<void> {
+  await serviceFetch('/v1/me/delete', { method: 'POST', timeoutMs: 60_000 });
+}
+
 /** §13.2's export bundle, as the JSON document the service returns. Rate-limited to one a day. */
 export async function exportMyData(): Promise<unknown> {
   return serviceFetch<unknown>('/v1/me/export', { method: 'POST', timeoutMs: 60_000 });

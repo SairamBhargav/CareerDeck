@@ -15,7 +15,7 @@ import { SectionHeader } from '@/components/common/SectionHeader';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
 import { Toggle } from '@/components/common/Toggle';
 import { useNotificationSettings } from '@/hooks/useNotificationSettings';
-import { exportMyData, requestAccountDeletion } from '@/lib/api';
+import { deleteAccountNow, exportMyData } from '@/lib/api';
 import { ServiceError } from '@/lib/service';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -44,6 +44,7 @@ export default function SettingsScreen() {
 
   const [editingGoal, setEditingGoal] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const notify = useNotificationSettings(userId);
 
   /*
@@ -74,22 +75,41 @@ export default function SettingsScreen() {
     }
   };
 
-  // Deliberately two steps and deliberately plain about what happens and what does not.
+  /*
+   * Two steps, and plain about what it does.
+   *
+   * This is the immediate purge, not the thirty-day one. Nothing requires the wait —
+   * GDPR Art. 17 says "without undue delay" and CCPA allows forty-five days, so a grace
+   * period is permitted rather than mandated and erasing now is the more compliant of
+   * the two. The window exists for three practical reasons: undoing a mistake, a
+   * subscription still mid-period, and a moderated account resetting its strikes by
+   * deleting and registering again.
+   *
+   * That last one is the reason to revisit this before launch. Phase 3 built strikes,
+   * blocks and a review queue, and an account that can be recreated on the same address
+   * in a minute defeats all three. Right now the app has five users and no abuse, and
+   * being able to start clean is worth more than a defence against a problem that does
+   * not exist yet. `requestAccountDeletion` is still in lib/api.ts for the day it does.
+   */
   const confirmDelete = () =>
     Alert.alert(
       'Delete your account?',
-      'Your account is switched off now and permanently deleted in 30 days. Sign back in before then to change your mind. Your comments stay up with your pseudonym removed.',
+      'This deletes everything now and cannot be undone — your profile, resumes, saved roles and applications. Your comments stay up with your name removed. You can sign up again with the same email straight away.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            requestAccountDeletion()
-              .then(() => retryProfile())
-              .catch((error: unknown) =>
-                Alert.alert('Could not delete', error instanceof Error ? error.message : String(error)),
-              );
+            setDeleting(true);
+            deleteAccountNow()
+              // Sign out rather than refresh: the session names a user who no longer
+              // exists, so every read after this would fail on an account that is gone.
+              .then(() => signOut())
+              .catch((error: unknown) => {
+                setDeleting(false);
+                Alert.alert('Could not delete', error instanceof Error ? error.message : String(error));
+              });
           },
         },
       ],
@@ -222,7 +242,13 @@ export default function SettingsScreen() {
       hint: 'Everything CareerDeck holds about you, as a file',
       onPress: exporting ? undefined : () => void exportData(),
     },
-    { key: 'delete', icon: 'trash-outline', label: 'Delete account', hint: '30 days to change your mind', onPress: confirmDelete },
+    {
+      key: 'delete',
+      icon: 'trash-outline',
+      label: deleting ? 'Deleting…' : 'Delete account',
+      hint: 'Immediate and permanent',
+      onPress: deleting ? undefined : confirmDelete,
+    },
   ];
 
   const sessionRows: RowGroupItem[] = [
