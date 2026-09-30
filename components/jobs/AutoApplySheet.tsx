@@ -2,9 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -17,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { AutofillBrowser } from '@/components/jobs/AutofillBrowser';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -25,11 +25,14 @@ import {
   abandonAutoApply,
   completeAutoApply,
   fetchAutoApplyRun,
+  fetchResumeUrl,
   reviewAutoApply,
   startAutoApply,
   type AutoApplyRun,
   type DraftField,
 } from '@/lib/api';
+import { useApplicationAnswers } from '@/hooks/useApplicationAnswers';
+import { savedAnswers, type AutofillAnswer, type AutofillResume } from '@/lib/autofill';
 import { reportError } from '@/lib/observability';
 import { ServiceError } from '@/lib/service';
 import type { Job } from '@/types';
@@ -54,8 +57,10 @@ import { localDateKey } from '@/utils/week';
  *  - **Credits are never decremented optimistically.** The balance on screen is re-read from
  *    the ledger after the server reserves, and again after a refund.
  *
- * Nothing here submits anything. The reader copies each answer onto the employer's own form,
- * which is §0 decision 2 and the thing that keeps this on the right side of every ATS's terms.
+ * Nothing here submits anything. The hand-off opens the employer's own form inside the app and
+ * fills the reviewed answers into it (components/jobs/AutofillBrowser.tsx, lib/autofill.ts); the
+ * reader presses the employer's Submit. That is §0 decision 2 kept: CareerDeck never sends an
+ * application, it types into one the reader is looking at, like a browser's own autofill.
  */
 
 type Step =
@@ -92,8 +97,49 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
   const [values, setValues] = useState<Record<string, string>>({});
   const [edited, setEdited] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [resume, setResume] = useState<AutofillResume | null>(null);
   /** The run to abandon if the sheet closes before the hand-off. */
   const openRun = useRef<AutoApplyRun | null>(null);
+
+  /*
+   * The resume PDF, read while the reader reviews so it is ready to attach when the form opens.
+   * Downloaded here and handed to the page as a data URL, so the page never needs a link to our
+   * storage. A failure only means the reader attaches it by hand.
+   */
+  const resumeId = step.kind === 'review' || step.kind === 'handedOff' ? step.run.resumeId : null;
+  useEffect(() => {
+    if (!resumeId || resume) return;
+    let cancelled = false;
+    (async () => {
+      const signed = await fetchResumeUrl(resumeId);
+      const blob = await (await fetch(signed)).blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      const fileName = `${[user?.firstName, user?.lastName].filter(Boolean).join('_') || 'Resume'}_Resume.pdf`;
+      if (!cancelled) setResume({ dataUrl: dataUrl.replace(/^data:[^;]*;/, 'data:application/pdf;'), fileName });
+    })().catch((error) => reportError(error, { where: 'AutoApplySheet.resume' }));
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeId, resume, user?.firstName, user?.lastName]);
+
+  /**
+   * What the page gets filled with: every reviewed answer with a value first (they were written
+   * for this posting), then the reader's saved answers for everything else a form asks.
+   */
+  const { answers: saved } = useApplicationAnswers(userId);
+  const answers = useMemo<AutofillAnswer[]>(() => {
+    if (step.kind !== 'review' && step.kind !== 'handedOff') return [];
+    const drafted = step.run.fields
+      .filter((f) => (f.role === 'answer' || f.role === 'contact') && (values[f.key] ?? '').trim() !== '')
+      .map((f) => ({ key: f.key, label: f.label, value: values[f.key]!.trim(), kind: f.kind, options: f.options }));
+    return [...drafted, ...savedAnswers(saved, user)];
+  }, [step, values, saved, user]);
 
   const refreshAfterLedgerChange = credits.refresh;
 
@@ -198,9 +244,7 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
       await reviewAutoApply(step.run.id, step.run.fields.map((f) => f.key), [...edited]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStep({ kind: 'handedOff', run: { ...step.run, status: 'reviewed' } });
-      Linking.openURL(job.applicationUrl).catch(() => {
-        // A dead link must not strand the sheet — the answers are still here to copy.
-      });
+      setBrowserOpen(true);
     } catch (error) {
       reportError(error, { where: 'AutoApplySheet.review' });
       setStep({ kind: 'problem', code: undefined, message: 'Could not save your review. Try again.' });
@@ -215,6 +259,7 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
     try {
       await completeAutoApply(step.run.id, localDateKey());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setBrowserOpen(false);
       openRun.current = null;
       void queryClient.invalidateQueries({ queryKey: applicationsKey(userId) });
       onClose();
@@ -269,8 +314,8 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
           <>
             <Text style={styles.notice}>
               {step.kind === 'review'
-                ? 'Check every answer. Nothing is sent anywhere — you’ll copy these onto the form yourself.'
-                : 'The form is open in your browser. Tap an answer to copy it.'}
+                ? 'Check your answers. Next, the application opens here with them filled in and your resume attached — you just review and submit.'
+                : 'Your answers are filled in on the application. Reopen it to finish, or copy any answer below.'}
               {step.run.formSource === 'greenhouse' ? ' These are this posting’s real questions.' : ''}
             </Text>
 
@@ -289,18 +334,22 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
               <View style={styles.actions}>
                 {step.kind === 'review' ? (
                   <PrimaryButton
-                    label="Looks right — open the form"
+                    label="Autofill the application"
                     onPress={handOff}
                     loading={busy}
-                    accessibilityHint="Opens the employer's application page. This uses the Auto Apply."
+                    accessibilityHint="Opens the employer's application with your answers filled in. This uses the Auto Apply."
                   />
                 ) : (
-                  <PrimaryButton
-                    label="I applied — track it"
-                    onPress={confirmApplied}
-                    loading={busy}
-                    accessibilityHint="Adds this job to your Activity tracker as applied."
-                  />
+                  <>
+                    <PrimaryButton label="Reopen the application" onPress={() => setBrowserOpen(true)} />
+                    <PrimaryButton
+                      label="I applied — track it"
+                      variant="secondary"
+                      onPress={confirmApplied}
+                      loading={busy}
+                      accessibilityHint="Adds this job to your Activity tracker as applied."
+                    />
+                  </>
                 )}
                 <PrimaryButton
                   label={step.kind === 'review' ? 'Discard draft' : 'Not yet'}
@@ -312,6 +361,18 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
           </>
         )}
       </View>
+
+      {browserOpen && step.kind === 'handedOff' ? (
+        <AutofillBrowser
+          runId={step.run.id}
+          applyUrl={job.applicationUrl}
+          answers={answers}
+          resume={resume}
+          companyName={job.companyName}
+          onSubmitted={confirmApplied}
+          onClose={() => setBrowserOpen(false)}
+        />
+      ) : null}
     </Modal>
   );
 }

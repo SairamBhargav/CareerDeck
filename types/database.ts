@@ -25,6 +25,30 @@ export type Database = {
           updated_at: string
           user_id: string
           willing_to_relocate: boolean | null
+          preferred_name: string | null
+          phone: string | null
+          address_line1: string | null
+          address_line2: string | null
+          city: string | null
+          state_region: string | null
+          postal_code: string | null
+          country: string | null
+          school_name: string | null
+          graduation_date: string | null
+          gpa: string | null
+          how_heard: string | null
+          desired_pay: string | null
+          pronouns: string | null
+          gender: string | null
+          hispanic_latino: string | null
+          race: string | null
+          veteran_status: string | null
+          disability_status: string | null
+          sexual_orientation: string | null
+          transgender: string | null
+          over_18: boolean | null
+          us_citizen: boolean | null
+          has_clearance: boolean | null
           work_authorized_us: boolean | null
         }
         Insert: {
@@ -39,6 +63,30 @@ export type Database = {
           updated_at?: string
           user_id: string
           willing_to_relocate?: boolean | null
+          preferred_name?: string | null
+          phone?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          city?: string | null
+          state_region?: string | null
+          postal_code?: string | null
+          country?: string | null
+          school_name?: string | null
+          graduation_date?: string | null
+          gpa?: string | null
+          how_heard?: string | null
+          desired_pay?: string | null
+          pronouns?: string | null
+          gender?: string | null
+          hispanic_latino?: string | null
+          race?: string | null
+          veteran_status?: string | null
+          disability_status?: string | null
+          sexual_orientation?: string | null
+          transgender?: string | null
+          over_18?: boolean | null
+          us_citizen?: boolean | null
+          has_clearance?: boolean | null
           work_authorized_us?: boolean | null
         }
         Update: {
@@ -53,6 +101,30 @@ export type Database = {
           updated_at?: string
           user_id?: string
           willing_to_relocate?: boolean | null
+          preferred_name?: string | null
+          phone?: string | null
+          address_line1?: string | null
+          address_line2?: string | null
+          city?: string | null
+          state_region?: string | null
+          postal_code?: string | null
+          country?: string | null
+          school_name?: string | null
+          graduation_date?: string | null
+          gpa?: string | null
+          how_heard?: string | null
+          desired_pay?: string | null
+          pronouns?: string | null
+          gender?: string | null
+          hispanic_latino?: string | null
+          race?: string | null
+          veteran_status?: string | null
+          disability_status?: string | null
+          sexual_orientation?: string | null
+          transgender?: string | null
+          over_18?: boolean | null
+          us_citizen?: boolean | null
+          has_clearance?: boolean | null
           work_authorized_us?: boolean | null
         }
         Relationships: [

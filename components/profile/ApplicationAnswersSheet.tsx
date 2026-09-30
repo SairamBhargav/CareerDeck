@@ -24,8 +24,67 @@ interface ApplicationAnswersSheetProps {
   onClose: () => void;
 }
 
-type TextKey = 'degree' | 'fieldOfStudy' | 'linkedinUrl' | 'githubUrl' | 'portfolioUrl' | 'earliestStart';
-type ChoiceKey = 'workAuthorizedUs' | 'needsSponsorship' | 'willingToRelocate';
+type TextKey =
+  | 'degree' | 'fieldOfStudy' | 'linkedinUrl' | 'githubUrl' | 'portfolioUrl' | 'earliestStart'
+  | 'preferredName' | 'phone' | 'addressLine1' | 'addressLine2' | 'city' | 'stateRegion' | 'postalCode'
+  | 'country' | 'schoolName' | 'graduationDate' | 'gpa' | 'howHeard' | 'desiredPay' | 'pronouns';
+type ChoiceKey = 'workAuthorizedUs' | 'needsSponsorship' | 'willingToRelocate' | 'over18' | 'usCitizen' | 'hasClearance';
+type PickKey = 'gender' | 'hispanicLatino' | 'race' | 'veteranStatus' | 'disabilityStatus' | 'sexualOrientation' | 'transgender';
+
+const DECLINE = { value: 'decline', label: 'Prefer not to say' } as const;
+
+/** The standard EEO answers. Autofill maps each to the wording a form's own options use. */
+const PICKS: { key: PickKey; label: string; options: { value: string; label: string }[] }[] = [
+  {
+    key: 'gender',
+    label: 'Gender',
+    options: [{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'non_binary', label: 'Non-binary' }, DECLINE],
+  },
+  {
+    key: 'hispanicLatino',
+    label: 'Hispanic or Latino?',
+    options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, DECLINE],
+  },
+  {
+    key: 'race',
+    label: 'Race',
+    options: [
+      { value: 'asian', label: 'Asian' },
+      { value: 'black', label: 'Black or African American' },
+      { value: 'white', label: 'White' },
+      { value: 'american_indian', label: 'American Indian or Alaska Native' },
+      { value: 'pacific_islander', label: 'Native Hawaiian or Pacific Islander' },
+      { value: 'two_or_more', label: 'Two or more races' },
+      DECLINE,
+    ],
+  },
+  {
+    key: 'veteranStatus',
+    label: 'Veteran status',
+    options: [{ value: 'not_veteran', label: 'Not a protected veteran' }, { value: 'protected_veteran', label: 'Protected veteran' }, DECLINE],
+  },
+  {
+    key: 'disabilityStatus',
+    label: 'Disability',
+    options: [{ value: 'no', label: 'No disability' }, { value: 'yes', label: 'Yes, I have a disability' }, DECLINE],
+  },
+  {
+    key: 'sexualOrientation',
+    label: 'Sexual orientation',
+    options: [
+      { value: 'heterosexual', label: 'Heterosexual' },
+      { value: 'gay_lesbian', label: 'Gay or lesbian' },
+      { value: 'bisexual', label: 'Bisexual' },
+      { value: 'other', label: 'Other' },
+      DECLINE,
+    ],
+  },
+  {
+    key: 'transgender',
+    label: 'Transgender?',
+    options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, DECLINE],
+  },
+];
 
 /**
  * The questions every application asks, answered once — docs/PHASE8.md §5.
@@ -53,6 +112,11 @@ export function ApplicationAnswersSheet({ answers, onSave, onClose }: Applicatio
   };
 
   const setChoice = (key: ChoiceKey, value: boolean | null) => {
+    Haptics.selectionAsync();
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const setPick = (key: PickKey, value: string | null) => {
     Haptics.selectionAsync();
     setDraft((current) => ({ ...current, [key]: value }));
   };
@@ -96,7 +160,32 @@ export function ApplicationAnswersSheet({ answers, onSave, onClose }: Applicatio
             contentContainerStyle={styles.fields}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
+            <Text style={styles.group}>Contact</Text>
+            <Field label="Preferred first name" placeholder="Optional" value={draft.preferredName} onChange={(v) => setText('preferredName', v)} />
+            <Field label="Phone" placeholder="(555) 555-0100" value={draft.phone} onChange={(v) => setText('phone', v)} keyboard="phone-pad" />
+
+            <Text style={styles.group}>Address</Text>
+            <Field label="Street address" placeholder="123 Main St" value={draft.addressLine1} onChange={(v) => setText('addressLine1', v)} />
+            <Field label="Apt, suite (optional)" placeholder="Apt 4" value={draft.addressLine2} onChange={(v) => setText('addressLine2', v)} />
+            <View style={styles.pair}>
+              <View style={styles.pairItem}>
+                <Field label="City" placeholder="Boulder" value={draft.city} onChange={(v) => setText('city', v)} />
+              </View>
+              <View style={styles.pairItem}>
+                <Field label="State" placeholder="CO" value={draft.stateRegion} onChange={(v) => setText('stateRegion', v)} />
+              </View>
+            </View>
+            <View style={styles.pair}>
+              <View style={styles.pairItem}>
+                <Field label="ZIP code" placeholder="80302" value={draft.postalCode} onChange={(v) => setText('postalCode', v)} keyboard="number-pad" />
+              </View>
+              <View style={styles.pairItem}>
+                <Field label="Country" placeholder="United States" value={draft.country} onChange={(v) => setText('country', v)} />
+              </View>
+            </View>
+
             <Text style={styles.group}>Education</Text>
+            <Field label="School" placeholder="University of Colorado Boulder" value={draft.schoolName} onChange={(v) => setText('schoolName', v)} />
             <Field
               label="Degree"
               placeholder="B.S."
@@ -111,8 +200,19 @@ export function ApplicationAnswersSheet({ answers, onSave, onClose }: Applicatio
               fromResume={draft.fromResume.includes('fieldOfStudy')}
               onChange={(value) => setText('fieldOfStudy', value)}
             />
+            <View style={styles.pair}>
+              <View style={styles.pairItem}>
+                <Field label="Graduation" placeholder="May 2028" value={draft.graduationDate} onChange={(v) => setText('graduationDate', v)} />
+              </View>
+              <View style={styles.pairItem}>
+                <Field label="GPA" placeholder="3.7" value={draft.gpa} onChange={(v) => setText('gpa', v)} keyboard="decimal-pad" />
+              </View>
+            </View>
 
             <Text style={styles.group}>Work eligibility</Text>
+            <Choice label="18 or older?" value={draft.over18} onChange={(value) => setChoice('over18', value)} />
+            <Choice label="US citizen?" value={draft.usCitizen} onChange={(value) => setChoice('usCitizen', value)} />
+            <Choice label="Active security clearance?" value={draft.hasClearance} onChange={(value) => setChoice('hasClearance', value)} />
             <Choice
               label="Authorized to work in the US?"
               value={draft.workAuthorizedUs}
@@ -159,6 +259,27 @@ export function ApplicationAnswersSheet({ answers, onSave, onClose }: Applicatio
               value={draft.willingToRelocate}
               onChange={(value) => setChoice('willingToRelocate', value)}
             />
+
+            <Text style={styles.group}>Other common questions</Text>
+            <Field label="How did you hear about us?" placeholder="LinkedIn" value={draft.howHeard} onChange={(v) => setText('howHeard', v)} />
+            <Field label="Expected pay" placeholder="$30/hr" value={draft.desiredPay} onChange={(v) => setText('desiredPay', v)} />
+
+            <Text style={styles.group}>Voluntary self-identification</Text>
+            <Text style={styles.note}>
+              Optional. US employers ask these for equal-opportunity reporting, and they never affect a
+              hiring decision. Answers are only used to fill forms you open, and nothing else reads them.
+              Leave one blank and Auto Apply leaves that question for you.
+            </Text>
+            <Field label="Pronouns" placeholder="she/her" value={draft.pronouns} onChange={(v) => setText('pronouns', v)} />
+            {PICKS.map((pick) => (
+              <Pick
+                key={pick.key}
+                label={pick.label}
+                options={pick.options}
+                value={draft[pick.key]}
+                onChange={(value) => setPick(pick.key, value)}
+              />
+            ))}
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -173,9 +294,10 @@ interface FieldProps {
   onChange: (value: string) => void;
   fromResume?: boolean;
   link?: boolean;
+  keyboard?: 'phone-pad' | 'number-pad' | 'decimal-pad';
 }
 
-function Field({ label, placeholder, value, onChange, fromResume = false, link = false }: FieldProps) {
+function Field({ label, placeholder, value, onChange, fromResume = false, link = false, keyboard }: FieldProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   return (
@@ -191,7 +313,7 @@ function Field({ label, placeholder, value, onChange, fromResume = false, link =
         placeholderTextColor={colors.textTertiary}
         autoCapitalize={link ? 'none' : 'sentences'}
         autoCorrect={!link}
-        keyboardType={link ? 'url' : 'default'}
+        keyboardType={link ? 'url' : (keyboard ?? 'default')}
         maxLength={link ? 200 : 80}
         style={styles.input}
         accessibilityLabel={label}
@@ -245,7 +367,63 @@ function Choice({ label, value, onChange }: ChoiceProps) {
   );
 }
 
+interface PickProps {
+  label: string;
+  options: readonly { value: string; label: string }[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+}
+
+/** One of several, wrapping onto new lines. Tapping the selected option clears it back to "not set". */
+function Pick({ label, options, value, onChange }: PickProps) {
+  const styles = useStyles();
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.wrap} accessibilityRole="radiogroup" accessibilityLabel={label}>
+        {options.map((option) => {
+          const selected = value === option.value;
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onChange(selected ? null : option.value)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${label} ${option.label}`}
+              style={({ pressed }) => [
+                styles.segment,
+                selected ? styles.segmentSelected : null,
+                pressed ? styles.pressed : null,
+              ]}>
+              <Text style={[styles.segmentLabel, selected ? styles.segmentLabelSelected : null]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
+  note: {
+    fontSize: fontSize.caption,
+    lineHeight: 16,
+    color: colors.textTertiary,
+  },
+  pair: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  pairItem: {
+    flex: 1,
+  },
+  wrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.42)',
