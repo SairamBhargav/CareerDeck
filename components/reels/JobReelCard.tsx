@@ -31,6 +31,11 @@ const RAIL_LIFT = spacing.sm;
 const CONTENT_BOTTOM_GAP = spacing.xl;
 /** Must match `description`'s own lineHeight — it's what one clamped line gives back. */
 const DESCRIPTION_LINE_HEIGHT = 22;
+/**
+ * A blurb this short is a stand-in (the employer's page could not be read), not a description.
+ * It is set larger so the caption still reads as a caption rather than a stray line up top.
+ */
+const SHORT_DESCRIPTION = 260;
 /** Never clamp the blurb below this, however tight the card gets. */
 const MIN_DESCRIPTION_LINES = 2;
 
@@ -184,7 +189,10 @@ export function JobReelCard({
 
               <View style={styles.descriptionBlock}>
                 <Text
-                  style={styles.description}
+                  style={[
+                    styles.description,
+                    job.description.length < SHORT_DESCRIPTION ? styles.descriptionShort : null,
+                  ]}
                   numberOfLines={descriptionLines}
                   onLayout={capture('description')}>
                   {job.description}
@@ -302,6 +310,11 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.body,
     lineHeight: 22,
     color: colors.textSecondary,
+  },
+  // Never clamped (it is too short to overflow), so its lineHeight never enters the clamp math.
+  descriptionShort: {
+    fontSize: fontSize.title,
+    lineHeight: 26,
   },
   skills: {
     flexDirection: 'row',
