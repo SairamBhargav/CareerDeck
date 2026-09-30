@@ -11,6 +11,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DeckMark } from '@/components/brand/DeckMark';
+import { useOnboarding } from '@/context/OnboardingContext';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
@@ -38,6 +39,7 @@ import { makeStyles } from '@/context/ThemeContext';
 export default function WelcomeScreen() {
   const router = useRouter();
   const styles = useStyles();
+  const onboarding = useOnboarding();
 
   // The wordmark and everything under it wait for the last card to land, so the screen
   // reads as one gesture rather than three things appearing at once.
@@ -49,9 +51,20 @@ export default function WelcomeScreen() {
 
   const leave = useCallback(() => setLeaving(true), []);
 
-  // Navigating from here rather than from the tap is the whole point: the deck gets its
-  // three hundred milliseconds before the stack takes the screen.
-  const handleDismissed = useCallback(() => router.push('/onboarding/role'), [router]);
+  /*
+   * Navigating from here rather than from the tap is the whole point: the deck gets its
+   * three hundred milliseconds before the stack takes the screen.
+   *
+   * The draft is cleared on the way through. It is persisted so a run survives the app
+   * being killed between steps, but a signed-out launch always lands here rather than
+   * resuming where it stopped — so the only thing an old draft ever did was pre-tick
+   * somebody else's answers on a screen that is meant to be a fresh start. Clearing at
+   * the entrance keeps the persistence useful within a run and harmless between them.
+   */
+  const handleDismissed = useCallback(() => {
+    onboarding.clear();
+    router.push('/onboarding/role');
+  }, [onboarding, router]);
 
   // Coming back — the hardware back button, or the swipe gesture — finds this screen
   // still mounted and still mid-exit. Reset it, and let the deck restore itself.
