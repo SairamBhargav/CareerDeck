@@ -106,6 +106,7 @@ export const SECTORS: Sector[] = [
     companies: [
       'palantir', 'booz-allen', 'leidos',
       'okta', 'vanta', 'abnormal', 'verkada', 'jamf', 'secureframe', 'checkr', 'sardine', 'alloy',
+      'northern-trust', 'ensign-bickford-aerospace-defense-company',
     ],
   },
   {
@@ -113,7 +114,9 @@ export const SECTORS: Sector[] = [
     label: 'Information Technology',
     companies: [
       'microsoft', 'booz-allen', 'general-dynamics-information-technology',
-      'salesforce', 'workday', 'adobe','jamf', 'okta', 'pagerduty', 'datadog', 'grafana', 'cloudflare', 'gitlab'],
+      'salesforce', 'workday', 'adobe','jamf', 'okta', 'pagerduty', 'datadog', 'grafana', 'cloudflare', 'gitlab',
+      'l3harris-technologies', 'keysight-technologies',
+    ],
   },
   {
     key: 'engineering',
@@ -132,14 +135,18 @@ export const SECTORS: Sector[] = [
     label: 'Business Management',
     companies: [
       'booz-allen',
-      'workday', 'salesforce','celonis', 'asana', 'linear', 'lattice', 'samsara', 'carta'],
+      'workday', 'salesforce','celonis', 'asana', 'linear', 'lattice', 'samsara', 'carta',
+      'susquehanna-international-group-sig', 'meridian-partners', 'citizens-financial-group', 'cigna-group', 'western-southern-financial-group', 'avis-budget-group',
+    ],
   },
   {
     key: 'business-operations',
     label: 'Business Operations',
     companies: [
       'booz-allen', 'emerson-electric',
-      'salesforce', 'workday','celonis', 'asana', 'motive', 'samsara', 'flexport', 'n8n'],
+      'salesforce', 'workday','celonis', 'asana', 'motive', 'samsara', 'flexport', 'n8n',
+      'susquehanna-international-group-sig', 'national-information-solutions-cooperative', 'citizens-financial-group', 'cigna-group', 'allied-solutions',
+    ],
   },
   {
     key: 'finance',
@@ -156,13 +163,17 @@ export const SECTORS: Sector[] = [
     label: 'Banking',
     companies: [
       'goldman-sachs', 'royal-bank-of-canada', 'citizens-financial-group', 'navy-federal',
-      'capital-one','chime', 'monzo', 'mercury', 'sofi', 'brex', 'ramp', 'tala', 'trade-republic'],
+      'capital-one','chime', 'monzo', 'mercury', 'sofi', 'brex', 'ramp', 'tala', 'trade-republic',
+      'manulife-financial', 'first-national-bank',
+    ],
   },
   {
     key: 'accounting',
     label: 'Accounting',
     companies: [
-      'american-express', 'fidelity-investments','brex', 'ramp', 'carta', 'gusto'],
+      'american-express', 'fidelity-investments','brex', 'ramp', 'carta', 'gusto',
+      'manulife-financial', 'citizens-financial-group', 'gm-financial', 'western-southern-financial-group', 'definity-financial', 'virtu-financial', 'compeer-financial', 'principal-financial-group', 'lpl-financial-holdings',
+    ],
   },
 
   // ── Marketing, media and creative ────────────────────────────────────────────
@@ -171,27 +182,35 @@ export const SECTORS: Sector[] = [
     label: 'Marketing',
     companies: [
       'procter-gamble', 'nike',
-      'adobe', 'salesforce','klaviyo', 'braze', 'amplitude', 'unify', 'algolia'],
+      'adobe', 'salesforce','klaviyo', 'braze', 'amplitude', 'unify', 'algolia',
+      'fortune-brands', 'marquee-brands',
+    ],
   },
   {
     key: 'advertising',
     label: 'Advertising',
     companies: [
       'tiktok', 'publicis-groupe',
-      'adobe','klaviyo', 'braze', 'reddit', 'pinterest'],
+      'adobe','klaviyo', 'braze', 'reddit', 'pinterest',
+      'fortune-brands', 'marquee-brands',
+    ],
   },
   {
     key: 'sales',
     label: 'Sales',
     companies: [
       'american-express', 'procter-gamble',
-      'salesforce','unify', 'cresta', 'decagon', 'braze', 'klaviyo', 'faire'],
+      'salesforce','unify', 'cresta', 'decagon', 'braze', 'klaviyo', 'faire',
+      'commercial-metals',
+    ],
   },
   {
     key: 'communications',
     label: 'Communications',
     companies: [
-      'tiktok', 'meta', 'the-walt-disney-company','twilio', 'discord', 'elevenlabs', 'sierra', 'reddit'],
+      'tiktok', 'meta', 'the-walt-disney-company','twilio', 'discord', 'elevenlabs', 'sierra', 'reddit',
+      'palo-alto-networks', 'verizon-communications', 'kepler-communications', 'arista-networks', 'iridium-communications',
+    ],
   },
   {
     key: 'journalism',
@@ -204,21 +223,27 @@ export const SECTORS: Sector[] = [
     label: 'Media Production',
     companies: [
       'the-walt-disney-company', 'netflix', 'sony-interactive-entertainment',
-      'adobe','elevenlabs', 'epic-games', 'riot-games', 'roblox', 'contentful', 'scopely'],
+      'adobe','elevenlabs', 'epic-games', 'riot-games', 'roblox', 'contentful', 'scopely',
+      'haven-studios',
+    ],
   },
   {
     key: 'arts',
     label: 'Arts',
     companies: [
       'the-walt-disney-company', 'autodesk',
-      'adobe','figma', 'roblox', 'epic-games', 'squarespace', 'contentful'],
+      'adobe','figma', 'roblox', 'epic-games', 'squarespace', 'contentful',
+      'cadence-design-systems', 'electronic-arts', 'haven-studios', 'sony-interactive-entertainment',
+    ],
   },
   {
     key: 'design',
     label: 'Design',
     companies: [
       'autodesk', 'the-walt-disney-company',
-      'adobe','figma', 'contentful', 'squarespace', 'lovable'],
+      'adobe','figma', 'contentful', 'squarespace', 'lovable',
+      'cadence-design-systems', 'fortune-brands', 'haven-studios', 'marquee-brands',
+    ],
   },
 
   // ── Health ───────────────────────────────────────────────────────────────────
@@ -226,31 +251,41 @@ export const SECTORS: Sector[] = [
     key: 'healthcare',
     label: 'Healthcare',
     companies: [
-      'johnson-johnson', 'stryker', 'medtronic', 'boston-scientific', 'ge-healthcare','komodo-health', 'ophelia'],
+      'johnson-johnson', 'stryker', 'medtronic', 'boston-scientific', 'ge-healthcare','komodo-health', 'ophelia',
+      'ensemble-health-partners', 'bjc-healthcare', 'calpion-plutus-health', 'cardinal-health', 'charta-health', 'cooper-university-health-care', 'garner-health', 'jefferson-health',
+    ],
   },
   {
     key: 'medicine',
     label: 'Medicine',
     companies: [
-      'johnson-johnson', 'merck', 'stryker', 'medtronic','ophelia', 'komodo-health'],
+      'johnson-johnson', 'merck', 'stryker', 'medtronic','ophelia', 'komodo-health',
+      'ensemble-health-partners', 'calpion-plutus-health', 'cardinal-health', 'charta-health', 'clinical-ink', 'cooper-university-health-care', 'garner-health', 'jefferson-health', 'medical-informatics-engineering',
+    ],
   },
   {
     key: 'public-health',
     label: 'Public Health',
     companies: [
-      'johnson-johnson', 'merck', 'ge-healthcare','komodo-health', 'ophelia'],
+      'johnson-johnson', 'merck', 'ge-healthcare','komodo-health', 'ophelia',
+      'ensemble-health-partners', 'bjc-healthcare', 'calpion-plutus-health', 'cardinal-health', 'charta-health', 'cooper-university-health-care', 'garner-health', 'jefferson-health', 'medical-informatics-engineering', 'nerv-technology-inc-d-b-a-fluidai-medical',
+    ],
   },
   {
     key: 'biotechnology',
     label: 'Biotechnology',
     companies: [
-      'amgen', 'moderna', 'merck', 'bio-techne','komodo-health'],
+      'amgen', 'moderna', 'merck', 'bio-techne','komodo-health',
+      'output-biosciences', 'xaira-therapeutics',
+    ],
   },
   {
     key: 'pharmaceuticals',
     label: 'Pharmaceuticals',
     companies: [
-      'merck', 'amgen', 'moderna', 'johnson-johnson',],
+      'merck', 'amgen', 'moderna', 'johnson-johnson',
+      'kite-pharma', 'xaira-therapeutics',
+    ],
   },
 
   // ── Law, policy and government ───────────────────────────────────────────────
@@ -264,19 +299,25 @@ export const SECTORS: Sector[] = [
     key: 'public-policy',
     label: 'Public Policy',
     companies: [
-      'booz-allen', 'johns-hopkins-applied-physics-laboratory','sylvera', 'axon', 'vannevar-labs'],
+      'booz-allen', 'johns-hopkins-applied-physics-laboratory','sylvera', 'axon', 'vannevar-labs',
+      'national-information-solutions-cooperative', 'first-national-bank', 'lawrence-livermore-national-laboratory-llnl', 'national-laboratory-of-the-rockies', 'toyota-research-institute', 'national-life', 'sdsu-research-foundation', 'foundation', 'foundation-finance', 'institute-of-foundation-models',
+    ],
   },
   {
     key: 'government',
     label: 'Government',
     companies: [
-      'johns-hopkins-applied-physics-laboratory', 'booz-allen', 'leidos', 'lawrence-livermore-national-laboratory-llnl', 'l3harris-technologies', 'rtx', 'northrop-grumman', 'general-dynamics-mission-systems','anduril', 'axon', 'vannevar-labs', 'epirus', 'saronic'],
+      'johns-hopkins-applied-physics-laboratory', 'booz-allen', 'leidos', 'lawrence-livermore-national-laboratory-llnl', 'l3harris-technologies', 'rtx', 'northrop-grumman', 'general-dynamics-mission-systems','anduril', 'axon', 'vannevar-labs', 'epirus', 'saronic',
+      'navy-federal', 'national-information-solutions-cooperative',
+    ],
   },
   {
     key: 'international-affairs',
     label: 'International Affairs',
     companies: [
-      'goldman-sachs', 'royal-bank-of-canada', 'american-express','wise', 'monzo', 'deel', 'trade-republic', 'deliveroo'],
+      'goldman-sachs', 'royal-bank-of-canada', 'american-express','wise', 'monzo', 'deel', 'trade-republic', 'deliveroo',
+      'susquehanna-international-group-sig', 'lennox-international', 'edison-international', 'susquehanna-international-group', 'twg-global', 'dallas-fort-worth-international-airport', 'asm-global',
+    ],
   },
 
   // ── Education, social and science ────────────────────────────────────────────
@@ -284,7 +325,9 @@ export const SECTORS: Sector[] = [
     key: 'education',
     label: 'Education',
     companies: [
-      'pennsylvania-state-university', 'arizona-state-university', 'university-of-rochester','duolingo', 'coursera', 'udemy', 'handshake'],
+      'pennsylvania-state-university', 'arizona-state-university', 'university-of-rochester','duolingo', 'coursera', 'udemy', 'handshake',
+      'akuna-capital-university', 'university-of-texas-at-austin', 'ivy-tech-community-college', 'mercer-university', 'prairie-view-a-m-university', 'texas-a-m-international-university', 'texas-a-m-university-system', 'university-of-arkansas',
+    ],
   },
   {
     key: 'psychology',
@@ -294,55 +337,73 @@ export const SECTORS: Sector[] = [
   {
     key: 'social-work',
     label: 'Social Work',
-    companies: ['ophelia', 'nextdoor'],
+    companies: ['ophelia', 'nextdoor',
+      'cole-engineering-services', 'greatamerica-financial-services', 'ivy-tech-community-college', 'sdsu-research-foundation', 'cooper-university-health-care', 'coretek-services', 'foundation', 'foundation-finance', 'hays-electrical-services', 'herzog-railroad-services', 'institute-of-foundation-models', 'pnc-financial-services', 'universal-health-services',
+    ],
   },
   {
     key: 'scientific-research',
     label: 'Scientific Research',
     companies: [
-      'lawrence-livermore-national-laboratory-llnl', 'johns-hopkins-applied-physics-laboratory', 'pacific-northwest-national-laboratory', 'amgen', 'moderna','anthropic', 'openai', 'cohere', 'graphcore', 'sambanova', 'komodo-health'],
+      'lawrence-livermore-national-laboratory-llnl', 'johns-hopkins-applied-physics-laboratory', 'pacific-northwest-national-laboratory', 'amgen', 'moderna','anthropic', 'openai', 'cohere', 'graphcore', 'sambanova', 'komodo-health',
+      'g-research', 'tower-research-capital', 'national-laboratory-of-the-rockies', 'seven-research',
+    ],
   },
   {
     key: 'environmental-science',
     label: 'Environmental Science',
     companies: [
-      'ge-vernova', 'xcel-energy', 'fervo-energy', 'constellation-energy','sylvera'],
+      'ge-vernova', 'xcel-energy', 'fervo-energy', 'constellation-energy','sylvera',
+      'dominion-energy', 'energy-transfer-partners', 'zurn-elkay-water-solutions', 'advanced-energy', 'rodan-energy-solutions', 'watts-water', 'peak-energy', 'tc-energy', 'wec-energy-group', 'cenovus-energy',
+    ],
   },
   {
     key: 'sustainability',
     label: 'Sustainability',
     companies: [
-      'ge-vernova', 'xcel-energy', 'fervo-energy', 'the-nuclear-company','sylvera'],
+      'ge-vernova', 'xcel-energy', 'fervo-energy', 'the-nuclear-company','sylvera',
+      'dominion-energy', 'constellation-energy', 'energy-transfer-partners', 'advanced-energy', 'rodan-energy-solutions', 'peak-energy', 'tc-energy', 'wec-energy-group', 'antares-nuclear', 'cenovus-energy',
+    ],
   },
 
   // ── Built environment, industry and logistics ────────────────────────────────
   {
     key: 'architecture',
     label: 'Architecture',
-    companies: ['figma', 'squarespace'],
+    companies: ['figma', 'squarespace',
+      'cadence-design-systems', 'schweitzer-engineering-laboratories', 'apogee-engineering', 'cole-engineering-services', 'bird-construction', 'hoffman-construction', 'medical-informatics-engineering', 'north-american-construction-group',
+    ],
   },
   {
     key: 'construction-management',
     label: 'Construction Management',
-    companies: [],
+    companies: [
+      'bird-construction', 'hoffman-construction', 'north-american-construction-group',
+    ],
   },
   {
     key: 'manufacturing',
     label: 'Manufacturing',
     companies: [
-      'emerson-electric', 'ge-vernova', 'oshkosh', 'vertiv', 'garmin', 'micron-technology','relativity-space', 'anduril', 'epirus', 'saronic', 'astranis'],
+      'emerson-electric', 'ge-vernova', 'oshkosh', 'vertiv', 'garmin', 'micron-technology','relativity-space', 'anduril', 'epirus', 'saronic', 'astranis',
+      'north-atlantic-industries', 'westinghouse-electric-company', 'applied-materials', 'koch-industries',
+    ],
   },
   {
     key: 'supply-chain',
     label: 'Supply Chain',
     companies: [
-      'amazon', 'walmart', 'procter-gamble','flexport', 'samsara', 'motive'],
+      'amazon', 'walmart', 'procter-gamble','flexport', 'samsara', 'motive',
+      'direct-supply', 'dayton-freight-lines', 'hd-supply',
+    ],
   },
   {
     key: 'logistics',
     label: 'Logistics',
     companies: [
-      'amazon', 'walmart', 'oshkosh','flexport', 'motive', 'samsara', 'deliveroo', 'doordash', 'instacart'],
+      'amazon', 'walmart', 'oshkosh','flexport', 'motive', 'samsara', 'deliveroo', 'doordash', 'instacart',
+      'dayton-freight-lines',
+    ],
   },
   {
     key: 'human-resources',
@@ -368,7 +429,9 @@ export const SECTORS: Sector[] = [
   {
     key: 'event-management',
     label: 'Event Management',
-    companies: [],
+    companies: [
+      'sony-interactive-entertainment',
+    ],
   },
   {
     key: 'sports-management',
@@ -380,24 +443,32 @@ export const SECTORS: Sector[] = [
     key: 'agriculture',
     label: 'Agriculture',
     companies: [
-      'farm-credit-canada',],
+      'farm-credit-canada',
+      'state-farm',
+    ],
   },
   {
     key: 'food-science',
     label: 'Food Science',
     companies: [
-      'procter-gamble','instacart', 'doordash', 'deliveroo'],
+      'procter-gamble','instacart', 'doordash', 'deliveroo',
+      'gordon-food-service', 'us-foods', 'fortune-brands', 'hormel-foods', 'tyson-foods', 'empirical-foods', 'marquee-brands',
+    ],
   },
   {
     key: 'real-estate',
     label: 'Real Estate',
     companies: [
-      'first-national-bank',],
+      'first-national-bank',
+      'perry-homes', 'gables-residential',
+    ],
   },
   {
     key: 'nonprofit-work',
     label: 'Nonprofit Work',
-    companies: [],
+    companies: [
+      'toyota-research-institute', 'sdsu-research-foundation', 'foundation', 'foundation-finance', 'institute-of-foundation-models',
+    ],
   },
 ];
 
