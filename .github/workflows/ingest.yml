@@ -118,9 +118,16 @@ jobs:
       # unreachable, because the partition it creates is what next month's impression
       # logging writes into, and the expiry pass it runs is what notifies a graduating
       # student before their badge lapses.
+      #
+      # scripts/maintain.mjs lives outside server/, so Node resolves its one dependency
+      # (@supabase/supabase-js) from the repository root, where nothing is installed. Linking
+      # the root to server/node_modules gives it the same copy the crawl just used, without a
+      # second install of the whole app.
       - name: Maintain
         if: steps.guard.outputs.configured == 'true' && !cancelled()
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: npm run db:maintain
+        run: |
+          [ -e node_modules ] || ln -s server/node_modules node_modules
+          npm run db:maintain
