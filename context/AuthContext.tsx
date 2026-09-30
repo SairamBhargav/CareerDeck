@@ -44,7 +44,14 @@ interface AuthState {
   /** Sign in with Apple exists on iOS only, and only where the device supports it. */
   isAppleAvailable: boolean;
   /** Emails a six-digit code. Resolves when it has been sent, not when it's used. */
-  sendEmailCode: (email: string) => Promise<void>;
+  /**
+   * `createIfMissing` is what separates the two doors. Sign-up passes true, because an
+   * address nobody has used is the point. Sign-in passes false, so typing an unknown
+   * address there fails loudly instead of quietly minting an account that skipped
+   * onboarding — no role, no fields, no follows, which is the exact state the first-run
+   * flow exists to prevent.
+   */
+  sendEmailCode: (email: string, createIfMissing?: boolean) => Promise<void>;
   verifyEmailCode: (email: string, code: string) => Promise<void>;
   signInWithApple: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -115,13 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     identifyUser(userId);
   }, [userId]);
 
-  const sendEmailCode = useCallback(async (email: string) => {
+  const sendEmailCode = useCallback(async (email: string, createIfMissing = true) => {
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
-        // Signup and sign-in are the same gesture here: §3.2 opens signup to any email
-        // and puts the gate on commenting instead.
-        shouldCreateUser: true,
+        /*
+         * Was unconditionally true, from when signup and sign-in were one gesture. They
+         * are two screens now, and an unknown address on the sign-in screen is a mistake
+         * rather than a signup — creating an account for it drops somebody into the app
+         * having never answered a single onboarding question.
+         *
+         * §3.2 still opens signup to any email; the gate is on commenting, not here.
+         */
+        shouldCreateUser: createIfMissing,
       },
     });
     if (error) throw error;
