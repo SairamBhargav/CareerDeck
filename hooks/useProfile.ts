@@ -124,6 +124,9 @@ export function useProfile(userId: string | null) {
 
   const settle = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: key });
+    // A new major changes what the Relevant feed ranks on; the next Relevant page is a new session.
+    void queryClient.invalidateQueries({ queryKey: ['deckProfile'] });
+    void queryClient.invalidateQueries({ queryKey: ['feed', 'all', 'recommended'] });
   }, [queryClient, key]);
 
   const identityMutation = useMutation({
