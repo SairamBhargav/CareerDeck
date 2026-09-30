@@ -131,6 +131,12 @@ export const env = {
    * than defended without them. PHASE6.md §5.4.
    */
   autoApplyModel: process.env.AUTO_APPLY_MODEL ?? 'claude-sonnet-5',
+  /**
+   * The model for the questions autofill finds left on the page (`POST /:id/questions`). Haiku
+   * 4.5 by the owner's choice (2026-09-30): these are mostly short essays and one-line facts,
+   * Sonnet made them ~3.5¢ of a ~5¢ application, and Haiku is half the per-token price.
+   */
+  autoApplyQuestionsModel: process.env.AUTO_APPLY_QUESTIONS_MODEL ?? 'claude-haiku-4-5',
   autoApplyTimeoutMs: integer('AUTO_APPLY_TIMEOUT_MS', 60_000),
 
   /**

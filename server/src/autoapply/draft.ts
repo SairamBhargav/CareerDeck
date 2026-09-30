@@ -325,9 +325,24 @@ function questionsFor(form: ApplicationForm) {
  * Drafts one application. Throws, like the extractor and unlike the classifier: a failed draft
  * refunds the credit and the reader applies by hand, while an invented one reaches an employer.
  */
-export async function draftApplication(form: ApplicationForm, input: DraftInput): Promise<DraftResult> {
+/**
+ * Haiku 4.5 predates adaptive thinking and `effort` (both are errors there), and extended thinking
+ * cannot be combined with the forced `answers` tool call. So it runs without thinking. With the
+ * tool forced, the failure thinking guards against on the newer models (a tool call written as
+ * visible text) cannot happen.
+ */
+function reasoningFor(model: string) {
+  if (model.startsWith('claude-haiku-4-5')) return {};
+  return { thinking: { type: 'adaptive' as const }, output_config: { effort: 'medium' as const } };
+}
+
+export async function draftApplication(
+  form: ApplicationForm,
+  input: DraftInput,
+  options: { model?: string } = {},
+): Promise<DraftResult> {
   const questions = questionsFor(form);
-  const model = env.autoApplyModel;
+  const model = options.model ?? env.autoApplyModel;
 
   // Nothing for a model to do — every field is contact, attachment or self-ID. Free.
   if (questions.length === 0) {
@@ -349,8 +364,7 @@ export async function draftApplication(form: ApplicationForm, input: DraftInput)
      * that silently answered nothing. Medium rather than low because deciding that a question
      * *cannot* be answered is the judgement this whole feature rests on.
      */
-    thinking: { type: 'adaptive' },
-    output_config: { effort: 'medium' },
+    ...reasoningFor(model),
     tools: [ANSWERS_TOOL],
     tool_choice: { type: 'tool', name: 'answers' },
     messages: [

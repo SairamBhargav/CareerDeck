@@ -28,7 +28,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import { adminClient, type AuthedUser } from './auth.ts';
-import { capabilities } from './env.ts';
+import { capabilities, env } from './env.ts';
 import {
   DrafterRefused,
   DrafterUnavailable,
@@ -465,7 +465,9 @@ autoApply.post('/:id/questions', async (c) => {
   if (fields.length === 0) return c.json({ answers: [] });
 
   const gathered = await draftInputs(run, user);
-  const result = await draftApplication({ source: 'standard', fields }, gathered.input);
+  const result = await draftApplication({ source: 'standard', fields }, gathered.input, {
+    model: env.autoApplyQuestionsModel,
+  });
 
   // Added to the run's own totals, so `cost_usd` per run stays the whole cost of an application.
   const { data: totals } = await adminClient
@@ -479,6 +481,17 @@ autoApply.post('/:id/questions', async (c) => {
   const answers = fields.flatMap((f) => {
     const answer = result.draft.fields[f.key];
     if (!answer || answer.value === null) return [];
+    /*
+     * Leftover questions get two kinds of answer and no others: essays, and one-line facts
+     * traced to the resume or the posting. Never a choice. The choices that matter (work
+     * authorization, sponsorship, citizenship, EEO) are filled from the student's own saved
+     * answers before this runs, so what is left is "Do you have pending offers?", "Rate your
+     * options theory", "Can you perform the essential functions?", which only the student can
+     * answer. Enforced by kind, not by the model's own `source` label: Haiku answered "pending
+     * offers: No" and labelled it `profile`, `high`, with nothing in the profile saying so.
+     */
+    if (f.kind === 'select' || f.kind === 'multi_select') return [];
+    if (f.kind === 'text' && answer.source !== 'resume' && answer.source !== 'job') return [];
     return [{
       key: f.key,
       value: Array.isArray(answer.value) ? answer.value : answer.value,
