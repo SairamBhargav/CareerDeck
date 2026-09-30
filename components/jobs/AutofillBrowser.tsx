@@ -56,6 +56,8 @@ export function AutofillBrowser({
   /** Questions currently with the drafter. */
   const [drafting, setDrafting] = useState(0);
   const [loading, setLoading] = useState(true);
+  /** The site answered with a bot wall rather than its page. */
+  const [blocked, setBlocked] = useState(false);
   const submitted = useRef(false);
 
   const url = useMemo(() => applicationFormUrl(applyUrl), [applyUrl]);
@@ -95,7 +97,9 @@ export function AutofillBrowser({
   };
 
   const filled = (progress?.filled ?? 0) + (progress?.aiFilled ?? 0);
-  const status = !progress
+  const status = blocked
+    ? `${companyName}'s site doesn't allow in-app browsers. Open it in Safari; your answers stay in the Auto Apply sheet to copy.`
+    : !progress
     ? 'Looking for the application form…'
     : drafting > 0
       ? `Filled ${filled}. Writing answers to ${drafting} more question${drafting === 1 ? '' : 's'} from your resume…`
@@ -141,11 +145,23 @@ export function AutofillBrowser({
         injectedJavaScript={script}
         onMessage={onMessage}
         onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => {
+        onLoadEnd={(event) => {
           setLoading(false);
+          if (BLOCK_PAGE_TITLE.test(event.nativeEvent.title ?? '')) setBlocked(true);
           // Every page of a multi-step form gets the script again; it is idempotent.
           webView.current?.injectJavaScript(script);
         }}
+        onHttpError={(event) => {
+          // A bot wall answers the page itself with 401/403/429; a failed image or script does not
+          // reach here on iOS, and on Android only the main document is reported for these codes.
+          if ([401, 403, 429].includes(event.nativeEvent.statusCode)) setBlocked(true);
+        }}
+        /*
+         * WKWebView's default user agent is Safari's minus the trailing "Version/… Safari/…",
+         * and bot walls (Akamai, Cloudflare) read that gap as a bot and answer "Access Denied".
+         * It is the same engine; this appends the part Safari itself sends.
+         */
+        applicationNameForUserAgent="Version/18.0 Mobile/15E148 Safari/604.1"
         javaScriptEnabled
         domStorageEnabled
         sharedCookiesEnabled
@@ -159,11 +175,17 @@ export function AutofillBrowser({
           <Ionicons name="flash" size={14} color={colors.autoApply} />
           <Text style={styles.barText}>{status}</Text>
         </View>
+        {blocked ? (
+          <PrimaryButton label="Open in Safari" onPress={() => Linking.openURL(url).catch(() => undefined)} />
+        ) : null}
         <PrimaryButton label="I submitted it" variant="secondary" onPress={onSubmitted} />
       </View>
     </View>
   );
 }
+
+/** Page titles bot walls serve instead of the page: Akamai, Cloudflare, Imperva. */
+const BLOCK_PAGE_TITLE = /access denied|attention required|just a moment|request unsuccessful|forbidden/i;
 
 function safeHost(url: string): string {
   try {
