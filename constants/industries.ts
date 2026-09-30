@@ -63,6 +63,7 @@ export const SECTORS: Sector[] = [
     key: 'technology',
     label: 'Technology',
     companies: [
+      'google', 'apple', 'microsoft', 'amazon', 'meta', 'tiktok', 'palantir',
       'nvidia', 'salesforce', 'adobe',
       'cloudflare', 'datadog', 'mongodb', 'elastic', 'twilio', 'gitlab', 'vercel', 'databricks',
       'dropbox', 'figma', 'linear', 'airtable',
@@ -72,6 +73,7 @@ export const SECTORS: Sector[] = [
     key: 'software-development',
     label: 'Software Development',
     companies: [
+      'google', 'microsoft', 'palantir', 'autodesk', 'bytedance',
       'salesforce', 'adobe',
       'gitlab', 'vercel', 'replit', 'warp', 'sourcegraph', 'supabase', 'neon', 'circleci',
       'launchdarkly', 'browserbase', 'n8n', 'cockroach-labs',
@@ -81,6 +83,7 @@ export const SECTORS: Sector[] = [
     key: 'data-science',
     label: 'Data Science',
     companies: [
+      'google', 'palantir', 'micron-technology',
       'nvidia',
       'databricks', 'dataiku', 'hex', 'sigma-computing', 'fivetran', 'posthog', 'amplitude',
       'imply', 'elastic', 'mongodb', 'weaviate',
@@ -90,6 +93,7 @@ export const SECTORS: Sector[] = [
     key: 'artificial-intelligence',
     label: 'Artificial Intelligence',
     companies: [
+      'google', 'meta', 'apple', 'tiktok',
       'nvidia',
       'anthropic', 'openai', 'cohere', 'scale-ai', 'sierra', 'writer', 'cresta', 'decagon',
       'elevenlabs', 'langchain', 'baseten', 'modal', 'fireworks-ai', 'coreweave', 'sambanova',
@@ -100,6 +104,7 @@ export const SECTORS: Sector[] = [
     key: 'cybersecurity',
     label: 'Cybersecurity',
     companies: [
+      'palantir', 'booz-allen', 'leidos',
       'okta', 'vanta', 'abnormal', 'verkada', 'jamf', 'secureframe', 'checkr', 'sardine', 'alloy',
     ],
   },
@@ -107,12 +112,14 @@ export const SECTORS: Sector[] = [
     key: 'information-technology',
     label: 'Information Technology',
     companies: [
+      'microsoft', 'booz-allen', 'general-dynamics-information-technology',
       'salesforce', 'workday', 'adobe','jamf', 'okta', 'pagerduty', 'datadog', 'grafana', 'cloudflare', 'gitlab'],
   },
   {
     key: 'engineering',
     label: 'Engineering',
     companies: [
+      'amd', 'texas-instruments', 'qualcomm', 'intel', 'micron-technology', 'marvell', 'analog-devices', 'l3harris-technologies', 'rtx', 'spacex', 'blue-origin', 'boeing', 'northrop-grumman', 'tesla', 'waymo',
       'nvidia',
       'anduril', 'relativity-space', 'astranis', 'epirus', 'saronic', 'waymo', 'wayve', 'axon',
       'samsara', 'motive',
@@ -124,18 +131,21 @@ export const SECTORS: Sector[] = [
     key: 'business-management',
     label: 'Business Management',
     companies: [
+      'booz-allen',
       'workday', 'salesforce','celonis', 'asana', 'linear', 'lattice', 'samsara', 'carta'],
   },
   {
     key: 'business-operations',
     label: 'Business Operations',
     companies: [
+      'booz-allen', 'emerson-electric',
       'salesforce', 'workday','celonis', 'asana', 'motive', 'samsara', 'flexport', 'n8n'],
   },
   {
     key: 'finance',
     label: 'Finance',
     companies: [
+      'goldman-sachs', 'jump-trading', 'drw', 'optiver', 'blackrock', 'jane-street', 'citadel-securities', 'blackrock', 'american-express', 'fidelity-investments', 'jump-trading', 'susquehanna-international-group-sig',
       'capital-one', 'mastercard', 'paypal',
       'stripe', 'brex', 'ramp', 'affirm', 'sofi', 'mercury', 'carta', 'betterment', 'robinhood',
       'wise', 'coinbase', 'ripple', 'gemini', 'jane-street', 'imc', 'optiver', 'drw',
@@ -145,12 +155,14 @@ export const SECTORS: Sector[] = [
     key: 'banking',
     label: 'Banking',
     companies: [
+      'goldman-sachs', 'royal-bank-of-canada', 'citizens-financial-group', 'navy-federal',
       'capital-one','chime', 'monzo', 'mercury', 'sofi', 'brex', 'ramp', 'tala', 'trade-republic'],
   },
   {
     key: 'accounting',
     label: 'Accounting',
-    companies: ['brex', 'ramp', 'carta', 'gusto'],
+    companies: [
+      'american-express', 'fidelity-investments','brex', 'ramp', 'carta', 'gusto'],
   },
 
   // ── Marketing, media and creative ────────────────────────────────────────────
@@ -158,46 +170,54 @@ export const SECTORS: Sector[] = [
     key: 'marketing',
     label: 'Marketing',
     companies: [
+      'procter-gamble', 'nike',
       'adobe', 'salesforce','klaviyo', 'braze', 'amplitude', 'unify', 'algolia'],
   },
   {
     key: 'advertising',
     label: 'Advertising',
     companies: [
+      'tiktok', 'publicis-groupe',
       'adobe','klaviyo', 'braze', 'reddit', 'pinterest'],
   },
   {
     key: 'sales',
     label: 'Sales',
     companies: [
+      'american-express', 'procter-gamble',
       'salesforce','unify', 'cresta', 'decagon', 'braze', 'klaviyo', 'faire'],
   },
   {
     key: 'communications',
     label: 'Communications',
-    companies: ['twilio', 'discord', 'elevenlabs', 'sierra', 'reddit'],
+    companies: [
+      'tiktok', 'meta', 'the-walt-disney-company','twilio', 'discord', 'elevenlabs', 'sierra', 'reddit'],
   },
   {
     key: 'journalism',
     label: 'Journalism',
-    companies: ['reddit', 'contentful', 'nextdoor'],
+    companies: [
+      'fox', 'newsbreak', 'the-walt-disney-company','reddit', 'contentful', 'nextdoor'],
   },
   {
     key: 'media-production',
     label: 'Media Production',
     companies: [
+      'the-walt-disney-company', 'netflix', 'sony-interactive-entertainment',
       'adobe','elevenlabs', 'epic-games', 'riot-games', 'roblox', 'contentful', 'scopely'],
   },
   {
     key: 'arts',
     label: 'Arts',
     companies: [
+      'the-walt-disney-company', 'autodesk',
       'adobe','figma', 'roblox', 'epic-games', 'squarespace', 'contentful'],
   },
   {
     key: 'design',
     label: 'Design',
     companies: [
+      'autodesk', 'the-walt-disney-company',
       'adobe','figma', 'contentful', 'squarespace', 'lovable'],
   },
 
@@ -205,56 +225,66 @@ export const SECTORS: Sector[] = [
   {
     key: 'healthcare',
     label: 'Healthcare',
-    companies: ['komodo-health', 'ophelia'],
+    companies: [
+      'johnson-johnson', 'stryker', 'medtronic', 'boston-scientific', 'ge-healthcare','komodo-health', 'ophelia'],
   },
   {
     key: 'medicine',
     label: 'Medicine',
-    companies: ['ophelia', 'komodo-health'],
+    companies: [
+      'johnson-johnson', 'merck', 'stryker', 'medtronic','ophelia', 'komodo-health'],
   },
   {
     key: 'public-health',
     label: 'Public Health',
-    companies: ['komodo-health', 'ophelia'],
+    companies: [
+      'johnson-johnson', 'merck', 'ge-healthcare','komodo-health', 'ophelia'],
   },
   {
     key: 'biotechnology',
     label: 'Biotechnology',
-    companies: ['komodo-health'],
+    companies: [
+      'amgen', 'moderna', 'merck', 'bio-techne','komodo-health'],
   },
   {
     key: 'pharmaceuticals',
     label: 'Pharmaceuticals',
-    companies: [],
+    companies: [
+      'merck', 'amgen', 'moderna', 'johnson-johnson',],
   },
 
   // ── Law, policy and government ───────────────────────────────────────────────
   {
     key: 'law',
     label: 'Law',
-    companies: ['vanta', 'secureframe', 'alloy', 'checkr', 'carta'],
+    companies: [
+      'lexisnexis-legal-professional','vanta', 'secureframe', 'alloy', 'checkr', 'carta'],
   },
   {
     key: 'public-policy',
     label: 'Public Policy',
-    companies: ['sylvera', 'axon', 'vannevar-labs'],
+    companies: [
+      'booz-allen', 'johns-hopkins-applied-physics-laboratory','sylvera', 'axon', 'vannevar-labs'],
   },
   {
     key: 'government',
     label: 'Government',
-    companies: ['anduril', 'axon', 'vannevar-labs', 'epirus', 'saronic'],
+    companies: [
+      'johns-hopkins-applied-physics-laboratory', 'booz-allen', 'leidos', 'lawrence-livermore-national-laboratory-llnl', 'l3harris-technologies', 'rtx', 'northrop-grumman', 'general-dynamics-mission-systems','anduril', 'axon', 'vannevar-labs', 'epirus', 'saronic'],
   },
   {
     key: 'international-affairs',
     label: 'International Affairs',
-    companies: ['wise', 'monzo', 'deel', 'trade-republic', 'deliveroo'],
+    companies: [
+      'goldman-sachs', 'royal-bank-of-canada', 'american-express','wise', 'monzo', 'deel', 'trade-republic', 'deliveroo'],
   },
 
   // ── Education, social and science ────────────────────────────────────────────
   {
     key: 'education',
     label: 'Education',
-    companies: ['duolingo', 'coursera', 'udemy', 'handshake'],
+    companies: [
+      'pennsylvania-state-university', 'arizona-state-university', 'university-of-rochester','duolingo', 'coursera', 'udemy', 'handshake'],
   },
   {
     key: 'psychology',
@@ -269,17 +299,20 @@ export const SECTORS: Sector[] = [
   {
     key: 'scientific-research',
     label: 'Scientific Research',
-    companies: ['anthropic', 'openai', 'cohere', 'graphcore', 'sambanova', 'komodo-health'],
+    companies: [
+      'lawrence-livermore-national-laboratory-llnl', 'johns-hopkins-applied-physics-laboratory', 'pacific-northwest-national-laboratory', 'amgen', 'moderna','anthropic', 'openai', 'cohere', 'graphcore', 'sambanova', 'komodo-health'],
   },
   {
     key: 'environmental-science',
     label: 'Environmental Science',
-    companies: ['sylvera'],
+    companies: [
+      'ge-vernova', 'xcel-energy', 'fervo-energy', 'constellation-energy','sylvera'],
   },
   {
     key: 'sustainability',
     label: 'Sustainability',
-    companies: ['sylvera'],
+    companies: [
+      'ge-vernova', 'xcel-energy', 'fervo-energy', 'the-nuclear-company','sylvera'],
   },
 
   // ── Built environment, industry and logistics ────────────────────────────────
@@ -296,22 +329,26 @@ export const SECTORS: Sector[] = [
   {
     key: 'manufacturing',
     label: 'Manufacturing',
-    companies: ['relativity-space', 'anduril', 'epirus', 'saronic', 'astranis'],
+    companies: [
+      'emerson-electric', 'ge-vernova', 'oshkosh', 'vertiv', 'garmin', 'micron-technology','relativity-space', 'anduril', 'epirus', 'saronic', 'astranis'],
   },
   {
     key: 'supply-chain',
     label: 'Supply Chain',
-    companies: ['flexport', 'samsara', 'motive'],
+    companies: [
+      'amazon', 'walmart', 'procter-gamble','flexport', 'samsara', 'motive'],
   },
   {
     key: 'logistics',
     label: 'Logistics',
-    companies: ['flexport', 'motive', 'samsara', 'deliveroo', 'doordash', 'instacart'],
+    companies: [
+      'amazon', 'walmart', 'oshkosh','flexport', 'motive', 'samsara', 'deliveroo', 'doordash', 'instacart'],
   },
   {
     key: 'human-resources',
     label: 'Human Resources',
     companies: [
+      'american-express',
       'workday','gusto', 'deel', 'lattice', 'handshake', 'checkr'],
   },
 
@@ -319,12 +356,14 @@ export const SECTORS: Sector[] = [
   {
     key: 'hospitality',
     label: 'Hospitality',
-    companies: ['deliveroo', 'doordash'],
+    companies: [
+      'the-walt-disney-company','deliveroo', 'doordash'],
   },
   {
     key: 'tourism',
     label: 'Tourism',
-    companies: ['via', 'lyft'],
+    companies: [
+      'the-walt-disney-company', 'republic-airways','via', 'lyft'],
   },
   {
     key: 'event-management',
@@ -334,22 +373,26 @@ export const SECTORS: Sector[] = [
   {
     key: 'sports-management',
     label: 'Sports Management',
-    companies: ['peloton'],
+    companies: [
+      'nike','peloton'],
   },
   {
     key: 'agriculture',
     label: 'Agriculture',
-    companies: [],
+    companies: [
+      'farm-credit-canada',],
   },
   {
     key: 'food-science',
     label: 'Food Science',
-    companies: ['instacart', 'doordash', 'deliveroo'],
+    companies: [
+      'procter-gamble','instacart', 'doordash', 'deliveroo'],
   },
   {
     key: 'real-estate',
     label: 'Real Estate',
-    companies: [],
+    companies: [
+      'first-national-bank',],
   },
   {
     key: 'nonprofit-work',
