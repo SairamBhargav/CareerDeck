@@ -7,6 +7,7 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DeleteAccountSheet } from '@/components/common/DeleteAccountSheet';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
   const [editingGoal, setEditingGoal] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const notify = useNotificationSettings(userId);
 
   /*
@@ -76,44 +78,35 @@ export default function SettingsScreen() {
   };
 
   /*
-   * Two steps, and plain about what it does.
+   * The confirmation is a sheet rather than a native alert, because the decision changed
+   * shape. An alert was proportionate while deletion was reversible for thirty days; it
+   * is not proportionate to something irreversible, where the destructive button sits the
+   * same size and the same distance from the thumb as the safe one.
    *
-   * This is the immediate purge, not the thirty-day one. Nothing requires the wait —
-   * GDPR Art. 17 says "without undue delay" and CCPA allows forty-five days, so a grace
-   * period is permitted rather than mandated and erasing now is the more compliant of
-   * the two. The window exists for three practical reasons: undoing a mistake, a
+   * Nothing requires the thirty days — GDPR Art. 17 says "without undue delay", CCPA
+   * allows forty-five, and Apple 5.1.1(v) asks that deletion be offered and happen rather
+   * than wait. The window earns its keep for three other reasons: undoing a mistake, a
    * subscription still mid-period, and a moderated account resetting its strikes by
    * deleting and registering again.
    *
-   * That last one is the reason to revisit this before launch. Phase 3 built strikes,
-   * blocks and a review queue, and an account that can be recreated on the same address
-   * in a minute defeats all three. Right now the app has five users and no abuse, and
-   * being able to start clean is worth more than a defence against a problem that does
-   * not exist yet. `requestAccountDeletion` is still in lib/api.ts for the day it does.
+   * That last one is why this is a decision to revisit before launch rather than a
+   * feature to forget. Phase 3 built strikes, blocks and a review queue, and an account
+   * recreatable on the same address in a minute defeats all three. At five users with no
+   * abuse, being able to start clean is worth more. `requestAccountDeletion` is still in
+   * lib/api.ts for the day that stops being true.
    */
-  const confirmDelete = () =>
-    Alert.alert(
-      'Delete your account?',
-      'This deletes everything now and cannot be undone — your profile, resumes, saved roles and applications. Your comments stay up with your name removed. You can sign up again with the same email straight away.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setDeleting(true);
-            deleteAccountNow()
-              // Sign out rather than refresh: the session names a user who no longer
-              // exists, so every read after this would fail on an account that is gone.
-              .then(() => signOut())
-              .catch((error: unknown) => {
-                setDeleting(false);
-                Alert.alert('Could not delete', error instanceof Error ? error.message : String(error));
-              });
-          },
-        },
-      ],
-    );
+  const runDelete = () => {
+    setDeleting(true);
+    deleteAccountNow()
+      // Sign out rather than refresh: the session names a user who no longer exists, so
+      // every read after this would fail against an account that is gone.
+      .then(() => signOut())
+      .catch((error: unknown) => {
+        setDeleting(false);
+        setDeleteOpen(false);
+        Alert.alert('Could not delete', error instanceof Error ? error.message : String(error));
+      });
+  };
 
   // Signing out is cheap to undo but expensive to do by accident — you lose whatever
   // was mid-edit and have to wait on an email for a new code.
@@ -247,7 +240,7 @@ export default function SettingsScreen() {
       icon: 'trash-outline',
       label: deleting ? 'Deleting…' : 'Delete account',
       hint: 'Immediate and permanent',
-      onPress: deleting ? undefined : confirmDelete,
+      onPress: deleting ? undefined : () => setDeleteOpen(true),
     },
   ];
 
@@ -295,6 +288,13 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <DeleteAccountSheet
+        visible={deleteOpen}
+        busy={deleting}
+        onConfirm={runDelete}
+        onClose={() => setDeleteOpen(false)}
+      />
 
       <GoalPickerSheet
         visible={editingGoal}
