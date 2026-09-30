@@ -59,8 +59,49 @@ const TITLE_RULES: { level: SeniorityLevel; pattern: RegExp }[] = [
 const DESCRIPTION_RULES: { level: SeniorityLevel; pattern: RegExp }[] = [
   { level: 'intern', pattern: /\b(currently (enrolled|pursuing)|rising (junior|senior)|must be a (current )?student|internship program|for the summer of 20\d\d)\b/i },
   { level: 'new_grad', pattern: /\b(0[-–]2 years|no prior (professional )?experience|recent graduate|graduating (in|by) (the )?(spring|fall|winter|summer|20\d\d)|within (the last )?12 months of graduat)/i },
-  { level: 'senior', pattern: /\b([5-9]|1\d)\+? years of (relevant |professional |industry )?experience\b/i },
 ];
+
+/*
+ * Every way a description states how many years it wants, each capturing the lowest number.
+ * Only phrasings that can't be about anything else: a bare "5 years" could be a vesting
+ * schedule or the company's age, so it has to carry a `+`, a range, "at least"/"minimum", or
+ * be followed by "experience" within a few words.
+ *
+ * The old single rule wanted exactly "N years of experience" and missed "8+ years of software
+ * engineering experience", "5+ years in B2B sales" and "minimum of 4 years" — 232 of the 407
+ * unranked jobs in one sophomore's deck on 2026-09-30.
+ */
+const YEARS_PATTERNS: RegExp[] = [
+  /\b(\d{1,2})\s*(?:\+|plus\b)\s*(?:years?|yrs?)\b/gi,
+  /\b(\d{1,2})\s*(?:-|–|—|to)\s*\d{1,2}\s*\+?\s*(?:years?|yrs?)\b/gi,
+  /\b(?:at least|minimum(?: of)?|min\.?|no less than)\s*(?:\(?\s*)(\d{1,2})\s*\)?\s*(?:years?|yrs?)\b/gi,
+  /\b(\d{1,2})\s*(?:or more\s+)?(?:years?|yrs?)(?:\s*\(?\s*\d{1,2}\s*\)?)?\s+(?:of\s+)?(?:[\w&/,'’-]+\s+){0,5}?(?:experience|exp\b)/gi,
+];
+
+/**
+ * The lowest number of years any requirement in the description asks for, or null when none
+ * does. The lowest, because a posting's smaller asks are usually the floor ("5+ years, 3 of
+ * them in customer marketing" still wants five, but "3+ years, 8 preferred" wants three) —
+ * and erring low keeps a posting in the deck rather than hiding a real fit.
+ */
+export function requiredYears(description: string): number | null {
+  let lowest: number | null = null;
+  for (const pattern of YEARS_PATTERNS) {
+    for (const match of description.matchAll(pattern)) {
+      const years = Number.parseInt(match[1] ?? '', 10);
+      // Above 20 is a date fragment or a headcount, not a requirement.
+      if (Number.isNaN(years) || years > 20) continue;
+      if (lowest === null || years < lowest) lowest = years;
+    }
+  }
+  return lowest;
+}
+
+function levelFromYears(years: number): SeniorityLevel {
+  if (years >= 5) return 'senior';
+  if (years >= 3) return 'mid';
+  return 'new_grad';
+}
 
 export function extractSeniority(title: string, description: string): SeniorityLevel | null {
   for (const rule of TITLE_RULES) {
@@ -69,6 +110,8 @@ export function extractSeniority(title: string, description: string): SeniorityL
   for (const rule of DESCRIPTION_RULES) {
     if (rule.pattern.test(description)) return rule.level;
   }
+  const years = requiredYears(description);
+  if (years !== null) return levelFromYears(years);
   // Null rather than a guess. `mid` is a claim, and an unranked posting should sort on
   // its other merits rather than be filed under something nobody said.
   return null;

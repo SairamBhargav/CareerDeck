@@ -71,13 +71,14 @@ for (const source of sources) {
 
 // ── 2. individual rows ────────────────────────────────────────────────────────
 const jobs = await pages(() => db.from('jobs')
-  .select('id, source_id, external_id, title, location_raw, location_country, location_type, seniority, status').order('id'), 1000);
+  .select('id, source_id, external_id, title, description_text, location_raw, location_country, location_type, seniority, status').order('id'), 1000);
 
 const foreignJobIds = [];
 for (const job of jobs) {
-  // A row stored "unranked" before a seniority rule existed is judged by the current rules,
-  // from its title: "Engineering Manager" was unranked until 2026-09-29.
-  const level = job.seniority ?? extractSeniority(job.title, '');
+  // A row stored "unranked" before a seniority rule existed is judged by the current rules:
+  // "Engineering Manager" was unranked until 2026-09-29, and "8+ years of experience" in the
+  // description until 2026-09-30.
+  const level = job.seniority ?? extractSeniority(job.title, job.description_text ?? '');
   if (foreignPostings.has(`${job.source_id}|${job.external_id}`) || EXCLUDED_SENIORITY.has(level ?? '')) {
     foreignJobIds.push(job.id);
     continue;

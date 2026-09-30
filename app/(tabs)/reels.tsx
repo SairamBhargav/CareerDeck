@@ -381,10 +381,15 @@ export default function ReelsScreen() {
         logoUrl={detailsJob?.companyLogoUrl ?? undefined}
         visible={detailsJob !== null}
         onClose={() => setDetailsJob(null)}
-        onApply={() => {
+        onAutoApply={() => {
           const job = detailsJob;
           setDetailsJob(null);
           if (job) handleAutoApply(job);
+        }}
+        onApply={() => {
+          const job = detailsJob;
+          setDetailsJob(null);
+          if (job) setApplyJob(job);
         }}
       />
 
