@@ -304,10 +304,17 @@ export const workday: SourceAdapter = {
     const total = asRecord(JSON.parse(body)).total;
     const seen = offset + postings.length;
 
-    // Stopping on an empty page as well as on the count: tenants that report a wrong
-    // `total` exist — usually the unfiltered one — and would otherwise page forever.
+    /*
+     * Workday reports `total` on the first page only and 0 on every page after — checked
+     * against NVIDIA's tenant on 2026-09-29: offset 0 said 2000, offsets 20 and 40 said 0.
+     * Reading that 0 as the count stopped every board at 40 postings. So `total` is believed
+     * only when it is positive, and a short or empty page is what ends the walk. MAX_PAGES in
+     * ../pipeline.ts still bounds a tenant that never sends a short page.
+     */
     const exhausted =
-      postings.length === 0 || typeof total !== 'number' || seen >= total;
+      postings.length === 0 ||
+      postings.length < PAGE_SIZE ||
+      (typeof total === 'number' && total > 0 && seen >= total);
 
     return { postings, next: exhausted ? null : listRequest(tenant, seen) };
   },

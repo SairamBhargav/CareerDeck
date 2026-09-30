@@ -23,11 +23,13 @@
 #
 # ── Cost ──────────────────────────────────────────────────────────────────────────
 #
-# A full pass is ~2 minutes of crawling plus install, so call it 5 minutes a night: about
-# 150 of a private repository's 2,000 free Actions minutes per month, and nothing at all
-# on a public one. Four-hourly would cost 600, which is why this is nightly — §4.1's
+# Measured 2026-09-29: ~15 minutes for the Greenhouse, Lever and Ashby boards, plus up to ~20
+# for the seven Workday boards, which fetch every in-scope posting's detail page. Call it 35
+# minutes a night: about 1,050 of a private repository's 2,000 free Actions minutes per month,
+# and nothing at all on a public one. (It was ~5 minutes when this file was written, against a
+# far smaller board list.) Anything more often than nightly would not fit. §4.1's
 # per-source `crawl_interval` is still honoured *within* a run, so a source that is not
-# due is skipped and tightening the cadence later is one line of cron.
+# due is skipped, and tightening the cadence later is one line of cron.
 
 name: Ingest jobs
 
@@ -52,7 +54,11 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60, up from 30 (2026-09-29). The seven Workday boards added then fetch each in-scope
+    # posting's detail page one polite request at a time: NVIDIA alone measured 5.5 minutes in
+    # a dry run, and a full pass of the other boards had already measured ~15. A job that times
+    # out mid-crawl skips the sweep and maintenance steps' useful work for the night.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4

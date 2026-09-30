@@ -462,14 +462,23 @@ export async function crawlSource(
       return { source: label, status: 'not_modified', ...totals };
     }
 
-    const listed = await readBoard(adapter, request, response.body);
+    const everything = await readBoard(adapter, request, response.body);
+    /*
+     * Scoped before hydration too, when hydration costs a request per posting (Workday). The
+     * listing carries the title and location, which is enough to drop a foreign or senior
+     * posting without fetching its detail page — thousands of requests on a board NVIDIA's
+     * size. The pass after hydration still runs, for what only the full posting can say.
+     */
+    const listed = adapter.detailRequest
+      ? everything.filter((posting) => postingInScope(adapter.parse(posting)))
+      : everything;
     const hydrated = await hydrate(adapter, listed, (message) => log(`      ${label} — ${message}`));
     // Filtered before landing, so an unwanted posting costs no storage and no Disk IO at all —
     // landing it and discarding it later would re-store its payload on every crawl.
     const postings = hydrated.filter((posting) => postingInScope(adapter.parse(posting)));
     totals.postingsSeen = postings.length;
-    if (postings.length < hydrated.length) {
-      log(`      ${label} — ${hydrated.length - postings.length} posting(s) outside the US/Canada or above new-grad level skipped`);
+    if (postings.length < everything.length) {
+      log(`      ${label} — ${everything.length - postings.length} posting(s) outside the US/Canada or above new-grad level skipped`);
     }
 
     const changed = options.dryRun

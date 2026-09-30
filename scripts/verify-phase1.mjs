@@ -34,7 +34,7 @@ import { compileDictionary, extractSkills } from '../server/src/ingest/normalize
 import { scoreQuality } from '../server/src/ingest/normalize/quality.ts';
 import { extractRequirements, htmlToText } from '../server/src/ingest/normalize/html.ts';
 import { contentHash, postingInMarket, postingInScope } from '../server/src/ingest/pipeline.ts';
-import { ashby, greenhouse, lever } from '../server/src/ingest/sources/index.ts';
+import { ashby, greenhouse, lever, workday } from '../server/src/ingest/sources/index.ts';
 import { crawlSimplifyFeed } from '../server/src/ingest/aggregators/simplify.ts';
 import { SKILLS } from './skills-dictionary.ts';
 
@@ -461,6 +461,41 @@ check('a real range with nines in it survives',
 
 check('a structured range beats the description', parseSalary({ min: 90, max: 110, period: 'hour', currency: 'USD' }, 'Base pay range is $1 - $2 per year.')?.min === 90);
 check('salary_is_estimated is never true in phase 1', parseSalary(null, 'The base pay range is $120,000 - $150,000.')?.isEstimated === false);
+
+section('workday pagination and addressing');
+
+{
+  // The shape job_sources holds after 20261006000000: tenant in the URL host, site as the token.
+  const source = {
+    boardUrl: 'https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite',
+    boardToken: 'NVIDIAExternalCareerSite',
+  };
+  const first = workday.request(source);
+  check('the list URL is /wday/cxs/{tenant}/{site}/jobs',
+    first.url === 'https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs', first.url);
+
+  const page = (count, total, from = 0) => JSON.stringify({
+    total,
+    jobPostings: Array.from({ length: count }, (_, i) => ({
+      title: `Role ${from + i}`,
+      externalPath: `/job/Santa-Clara/Role_${from + i}`,
+      locationsText: 'US, CA, Santa Clara',
+      bulletFields: [`JR${from + i}`],
+    })),
+  });
+
+  // Workday's real behaviour (NVIDIA, 2026-09-29): total on page one, 0 on every page after.
+  const one = workday.extractPage(page(20, 2000), first);
+  check('page one continues', one.next !== null);
+  const two = workday.extractPage(page(20, 0, 20), one.next);
+  check('a later page reporting total 0 still continues — it is not the count',
+    two.next !== null, 'stopped at 40, as every Workday board did before the fix');
+  const last = workday.extractPage(page(7, 0, 40), two.next);
+  check('a short page ends the walk', last.next === null);
+  check('an empty page ends it too', workday.extractPage(page(0, 0, 60), two.next).next === null);
+  check('the tenant is stamped on every posting, for replay',
+    one.postings.every((p) => p.payload.__tenant === 'nvidia' && p.payload.__site === 'NVIDIAExternalCareerSite'));
+}
 
 section('seniority, employment type and titles');
 

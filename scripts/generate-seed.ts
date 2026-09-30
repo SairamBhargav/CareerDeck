@@ -268,12 +268,22 @@ function companiesSql(companies: CompanySeed[]): string {
 
 // ── job_sources ────────────────────────────────────────────────────────────────
 
+/**
+ * What `job_sources.board_token` holds. For Workday that is the career site alone: the adapter
+ * (server/src/ingest/sources/workday.ts, tenantFromBoardUrl) takes the tenant from the board
+ * URL's host and uses the token as the site. Storing board-list's whole `tenant.wdN/Site`
+ * put it into the request path, and every Workday board answered 400.
+ */
+function storedTokenFor(board: BoardEntry): string {
+  return board.kind === 'workday' ? (board.token.split('/').pop() ?? board.token) : board.token;
+}
+
 function sourcesSql(boards: BoardEntry[]): string {
   const rows = boards
     .map(
       (board) =>
         `  (${quote(board.slug)}, ${quote(board.kind)}::public.ats_kind, ` +
-        `${quote(boardUrlFor(board))}, ${quote(board.token)})`,
+        `${quote(boardUrlFor(board))}, ${quote(storedTokenFor(board))})`,
     )
     .join(',\n');
 
