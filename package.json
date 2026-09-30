@@ -33,7 +33,9 @@
     "jobs": "node --env-file-if-exists=server/.env server/src/jobs.ts",
     "server:dev": "npm --prefix server run dev",
     "ingest": "node --env-file-if-exists=server/.env server/src/ingest/run.ts",
-    "ingest:sweep": "node --env-file-if-exists=server/.env server/src/ingest/run.ts --sweep"
+    "ingest:sweep": "node --env-file-if-exists=server/.env server/src/ingest/run.ts --sweep",
+    "ingest:verify-live": "node --env-file-if-exists=server/.env server/src/ingest/aggregators/liveness.ts",
+    "ingest:backfill-descriptions":"node --env-file-if-exists=server/.env server/src/ingest/backfill-descriptions.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

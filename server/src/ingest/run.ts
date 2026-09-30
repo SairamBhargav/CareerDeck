@@ -30,6 +30,7 @@ import {
 } from './db.ts';
 import { crawlSource, replaySource, type CrawlOutcome, type ReplayOutcome } from './pipeline.ts';
 import { crawlSimplifyFeed, type AggregatorOutcome } from './aggregators/simplify.ts';
+import { closeDeadFeedPostings } from './aggregators/liveness.ts';
 import { sweep } from './staleness.ts';
 
 /**
@@ -270,6 +271,15 @@ async function main(): Promise<void> {
   const aggregatorOutcomes: AggregatorOutcome[] = runAggregators
     ? [await crawlSimplifyFeed(client, { dictionary, dryRun: args.dryRun, log: (message) => console.log(message) })]
     : [];
+
+  // Simplify lags employers by days; ask the employers which of its postings are already gone.
+  if (!args.dryRun && aggregatorOutcomes.some((outcome) => outcome.status === 'success')) {
+    try {
+      await closeDeadFeedPostings(client, { log: (message) => console.log(message) });
+    } catch (error) {
+      console.error('live  feed liveness check failed', error);
+    }
+  }
 
   if (!args.dryRun) {
     const corrected = await refreshOpenJobCounts(client);

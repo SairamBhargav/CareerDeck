@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +22,22 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 /** Matches `otp_length` in supabase/config.toml. */
 const CODE_LENGTH = 6;
+
+/** The hosted project's minimum gap between codes to one address (Auth → Rate limits). */
+const RESEND_SECONDS = 60;
+
+/**
+ * Supabase's per-address cooldown: "For security purposes, you can only request this after
+ * 47 seconds." Returns the seconds it names, or null when the error is something else.
+ * Distinct from the hourly email cap ("email rate limit exceeded"), which a wait of a
+ * minute does not fix and so stays an error.
+ */
+function cooldownSeconds(error: unknown): number | null {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (!/security purposes/i.test(raw)) return null;
+  const match = raw.match(/(\d+)\s*seconds?/i);
+  return match ? Number(match[1]) : RESEND_SECONDS;
+}
 
 /**
  * The way in. Rendered only when there is no session — see app/_layout.tsx.
@@ -70,16 +86,50 @@ export default function SignInScreen() {
     [],
   );
 
-  const handleSendCode = () =>
-    // `false`: this screen is for people who already have an account, so an unknown
-    // address is a wrong turn rather than a signup.
-    run('email', () => sendEmailCode(email, false), () => {
-      setStep('code');
-      setCode('');
-      // The keyboard is already up from the email field; moving focus rather than
-      // dismissing it keeps the two steps feeling like one form.
-      requestAnimationFrame(() => codeInput.current?.focus());
-    });
+  // Seconds until another code may be requested, and a one-line note under the code box.
+  const [cooldown, setCooldown] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const showCodeStep = () => {
+    setStep('code');
+    setCode('');
+    // The keyboard is already up from the email field; moving focus rather than
+    // dismissing it keeps the two steps feeling like one form.
+    requestAnimationFrame(() => codeInput.current?.focus());
+  };
+
+  const handleSendCode = async () => {
+    if (busy !== null || cooldown > 0) return;
+    setBusy('email');
+    setError(null);
+    setNotice(null);
+    try {
+      // `false`: this screen is for people who already have an account, so an unknown
+      // address is a wrong turn rather than a signup.
+      await sendEmailCode(email, false);
+      setCooldown(RESEND_SECONDS);
+      showCodeStep();
+    } catch (caught) {
+      const wait = cooldownSeconds(caught);
+      if (wait !== null) {
+        // Supabase refuses a second code inside its cooldown, but the first one is still
+        // valid and on its way. Say so and put them at the box rather than on an error.
+        setCooldown(wait);
+        setNotice('We already sent you a code a moment ago. Enter it below.');
+        showCodeStep();
+      } else if (!(caught instanceof SignInCancelled)) {
+        setError(messageFor(caught, 'email'));
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const handleVerify = (value: string) => run('code', () => verifyEmailCode(email, value));
 
@@ -136,7 +186,7 @@ export default function SignInScreen() {
             ) : (
               <>
                 <Text style={styles.label}>Six-digit code</Text>
-                <Text style={styles.sentTo}>Sent to {email.trim()}</Text>
+                <Text style={styles.sentTo}>{notice ?? `Sent to ${email.trim()}`}</Text>
                 <TextInput
                   ref={codeInput}
                   value={code}
@@ -177,9 +227,11 @@ export default function SignInScreen() {
                   <Pressable
                     onPress={handleSendCode}
                     hitSlop={8}
-                    disabled={busy !== null}
+                    disabled={busy !== null || cooldown > 0}
                     accessibilityRole="button">
-                    <Text style={styles.link}>Resend</Text>
+                    <Text style={[styles.link, cooldown > 0 ? styles.linkDisabled : null]}>
+                      {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend'}
+                    </Text>
                   </Pressable>
                 </View>
               </>
@@ -287,7 +339,9 @@ function messageFor(error: unknown, kind: SignInKind): string {
     return NO_ACCOUNT;
   }
   if (lower.includes('rate limit') || lower.includes('too many') || lower.includes('security purposes')) {
-    return 'Too many attempts. Wait a minute and try again.';
+    return kind === 'email'
+      ? 'Too many codes requested for now. Try again in a little while, or use Apple or Google.'
+      : 'Too many attempts. Wait a minute and try again.';
   }
   if (lower.includes('network') || lower.includes('fetch')) {
     return 'Could not reach the server. Check your connection.';
@@ -377,6 +431,9 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     fontWeight: '600',
     color: colors.textSecondary,
+  },
+  linkDisabled: {
+    color: colors.textTertiary,
   },
   footnote: {
     fontSize: fontSize.small,

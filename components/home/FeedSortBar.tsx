@@ -14,6 +14,8 @@ import type { JobSort } from '@/hooks/useJobFeeds';
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const OPTIONS: { key: JobSort; label: string }[] = [
+  // The ranked deck: major, student stage and resume skills (PHASE8.md). First, and the default.
+  { key: 'recommended', label: 'Relevant' },
   { key: 'recent', label: 'Most recent' },
   { key: 'salary', label: 'Top salary' },
   { key: 'company', label: 'Company A–Z' },
@@ -85,7 +87,7 @@ function SortChip({ label, selected, onPress }: SortChipProps) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`Sort by ${label.toLowerCase()}`}
+      accessibilityLabel={label === 'Relevant' ? 'Show jobs relevant to you' : `Sort by ${label.toLowerCase()}`}
       style={[styles.chip, chipStyle]}>
       <Animated.Text style={[styles.chipLabel, labelStyle]}>{label}</Animated.Text>
     </AnimatedPressable>

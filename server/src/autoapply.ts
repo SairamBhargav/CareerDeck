@@ -38,6 +38,7 @@ import {
   type DraftAnswer,
 } from './autoapply/draft.ts';
 import { formForJob, type ApplicationForm, type FormField } from './autoapply/form.ts';
+import { checkPostingLive } from './ingest/aggregators/detail.ts';
 import { canEncrypt, open } from './resumes/crypto.ts';
 import { logAccess } from './resumes.ts';
 
@@ -335,6 +336,8 @@ autoApply.post('/', async (c) => {
     });
   }
 
+  await refuseIfGone(jobId);
+
   const started = await adminClient
     .rpc('start_auto_apply', { p_user_id: user.id, p_job_id: jobId, p_resume_id: resumeId })
     .single<{ run_id: string; status: RunRow['status']; charged: boolean; balance: number }>();
@@ -401,6 +404,125 @@ autoApply.get('/:id', async (c) => {
   const run = await ownedRun(uuidOrThrow(c.req.param('id'), 'id'), user.id);
   return c.json({ run: await runView(run, user) });
 });
+
+/**
+ * `POST /v1/auto-apply/:id/questions` — answers for the questions autofill could not fill.
+ *
+ * The run's draft answers the form we could see in advance: Greenhouse's real one, or the
+ * standard set everywhere else. The page the reader actually opens often asks more — Lever's and
+ * Ashby's custom questions, company essays, "current company". Autofill collects what is still
+ * empty and sends it here; the same drafter, under the same rules (null when the data does not
+ * say, "inferred" answers flagged for review), answers them against the same resume.
+ *
+ * Only for a run the reader has already reviewed or is reviewing, so it costs no credit of its
+ * own: the credit bought the application, and this is the rest of that application. Bounded per
+ * run so a page that re-renders forever cannot turn one credit into unbounded model calls.
+ */
+const MAX_QUESTION_CALLS_PER_RUN = 6;
+const MAX_QUESTIONS_PER_CALL = 20;
+const questionCalls = new Map<string, number>();
+
+/** Never sent to a model: self-identification, and anything asking the reader to attest. */
+const NOT_FOR_A_MODEL =
+  /gender|\brace\b|ethnic|hispanic|latin[oax]|veteran|disabilit|pronoun|sexual orientation|transgender|essential functions|accommodation|i (agree|acknowledge|certify|consent)|privacy|attest|signature/i;
+
+autoApply.post('/:id/questions', async (c) => {
+  const user = c.get('user');
+  const run = await ownedRun(uuidOrThrow(c.req.param('id'), 'id'), user.id);
+  if (run.status !== 'ready' && run.status !== 'reviewed') {
+    throw new HTTPException(409, { message: 'This draft is closed.', cause: 'closed' });
+  }
+
+  const calls = questionCalls.get(run.id) ?? 0;
+  if (calls >= MAX_QUESTION_CALLS_PER_RUN) return c.json({ answers: [] });
+  questionCalls.set(run.id, calls + 1);
+
+  const body = (await c.req.json().catch(() => ({}))) as { questions?: unknown };
+  const raw = Array.isArray(body.questions) ? body.questions : [];
+  const fields: FormField[] = raw
+    .map((entry) => (entry ?? {}) as Record<string, unknown>)
+    .filter((q) => typeof q.key === 'string' && typeof q.label === 'string' && q.label.trim().length > 1)
+    .filter((q) => !NOT_FOR_A_MODEL.test(q.label as string))
+    .slice(0, MAX_QUESTIONS_PER_CALL)
+    .map((q) => {
+      const options = Array.isArray(q.options)
+        ? q.options.filter((o): o is string => typeof o === 'string' && o.trim() !== '').slice(0, 60)
+        : null;
+      const kind: FormField['kind'] =
+        q.kind === 'long_text' ? 'long_text' : q.kind === 'multi_select' ? 'multi_select'
+          : options && options.length > 0 ? 'select' : 'text';
+      return {
+        key: (q.key as string).slice(0, 200),
+        label: (q.label as string).trim().slice(0, 500),
+        description: null,
+        required: q.required === true,
+        kind,
+        options: options && options.length > 0 ? options : null,
+        role: 'answer' as const,
+        contact: null,
+      };
+    });
+  if (fields.length === 0) return c.json({ answers: [] });
+
+  const gathered = await draftInputs(run, user);
+  const result = await draftApplication({ source: 'standard', fields }, gathered.input);
+
+  // Added to the run's own totals, so `cost_usd` per run stays the whole cost of an application.
+  const { data: totals } = await adminClient
+    .from('auto_apply_runs').select('tokens_in, tokens_out, cost_usd').eq('id', run.id).single();
+  await adminClient.from('auto_apply_runs').update({
+    tokens_in: (totals?.tokens_in ?? 0) + result.tokensIn,
+    tokens_out: (totals?.tokens_out ?? 0) + result.tokensOut,
+    cost_usd: Number(totals?.cost_usd ?? 0) + (result.costUsd ?? 0),
+  }).eq('id', run.id);
+
+  const answers = fields.flatMap((f) => {
+    const answer = result.draft.fields[f.key];
+    if (!answer || answer.value === null) return [];
+    return [{
+      key: f.key,
+      value: Array.isArray(answer.value) ? answer.value : answer.value,
+      confidence: answer.confidence,
+      source: answer.source,
+    }];
+  });
+  return c.json({ answers, costUsd: result.costUsd });
+});
+
+/** Long enough for one ATS round trip; past it, the posting is assumed open rather than blocking the reader. */
+const LIVENESS_TIMEOUT_MS = 6_000;
+
+/**
+ * Asks the employer's ATS whether the posting is still up, before a credit is reserved or a
+ * model is called. The Simplify feed lags employers by days, and a draft for a posting whose
+ * form opens on "page not found" costs the reader a credit and us a model call for nothing.
+ *
+ * A posting the ATS says is gone is closed here — every fan-out row sharing its apply URL — so it
+ * also leaves every feed, and the reader gets the sheet's existing "This posting has closed".
+ * Anything short of a clear "gone" (timeout, bot wall, unknown host) lets the run go ahead.
+ */
+async function refuseIfGone(jobId: string): Promise<void> {
+  const { data: job } = await adminClient.from('jobs').select('apply_url, status').eq('id', jobId).maybeSingle();
+  if (!job || job.status !== 'open' || !job.apply_url) return; // start_auto_apply reports these itself
+
+  const liveness = await Promise.race([
+    checkPostingLive(job.apply_url as string).catch(() => 'unknown' as const),
+    new Promise<'unknown'>((resolve) => setTimeout(() => resolve('unknown'), LIVENESS_TIMEOUT_MS)),
+  ]);
+  if (liveness !== 'gone') return;
+
+  const { error } = await adminClient
+    .from('jobs')
+    .update({ status: 'closed' })
+    .eq('apply_url', job.apply_url)
+    .eq('status', 'open');
+  if (error) console.error('[autoapply] could not close a dead posting', jobId, error);
+
+  throw new HTTPException(410, {
+    message: 'The employer has taken this posting down.',
+    cause: 'job_closed',
+  });
+}
 
 async function balanceOf(userId: string): Promise<number> {
   const { data, error } = await adminClient.rpc('credit_balance', { p_user_id: userId });

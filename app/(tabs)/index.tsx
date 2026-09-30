@@ -21,7 +21,8 @@ import { makeStyles } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useListImpressions } from '@/hooks/useImpressions';
-import { useJobFeed, useSuggestedCompanies, type JobSort } from '@/hooks/useJobFeeds';
+import { RelevantHint } from '@/components/home/RelevantHint';
+import { useDeckProfile, useJobFeed, useSuggestedCompanies, type JobSort } from '@/hooks/useJobFeeds';
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Company, Job, StoryGroup } from '@/types';
@@ -41,8 +42,10 @@ export default function HomeScreen() {
   const styles = useStyles();
   const { isInitialLoading, user, seenNewsIds, toggleFollow, toggleSave, markNewsSeen } = useCareerDeck();
 
-  const [sort, setSort] = useState<JobSort>('recent');
-  const feed = useJobFeed(sort);
+  // Relevant by default: a student opening the app wants roles for them, not the newest anything.
+  const [sort, setSort] = useState<JobSort>('recommended');
+  const feed = useJobFeed(sort, 'home');
+  const { profile: deckProfile } = useDeckProfile();
   const { companies: suggestedCompanies, isLoading: suggestionsLoading } = useSuggestedCompanies();
   const directory = useCompanyDirectory();
   const storyGroups = useStoryGroups();
@@ -116,6 +119,14 @@ export default function HomeScreen() {
         </View>
 
         <FeedSortBar sort={sort} onChange={setSort} />
+
+        {sort === 'recommended' && deckProfile ? (
+          <RelevantHint
+            knowsNothing={deckProfile.families === null && deckProfile.seniorities === null}
+            missingField={deckProfile.families === null && deckProfile.seniorities !== null}
+            onPress={() => router.push('/profile')}
+          />
+        ) : null}
       </View>
     </View>
   );

@@ -91,6 +91,8 @@ export interface FeedQuery {
   companySlugs?: string[];
   cursor?: string | null;
   limit?: number;
+  /** Which screen a ranked feed is for. Each surface gets its own session, so Home and Reels page independently. */
+  surface?: 'reels' | 'home';
 }
 
 /** Matches the `job_card` composite type in the phase 1 migration. */
@@ -257,7 +259,7 @@ export async function fetchFeed(query: FeedQuery = {}): Promise<Page<JobEnvelope
     const ranked = await supabase.rpc('ranked_feed', {
       p_cursor: query.cursor ?? undefined,
       p_limit: limit,
-      p_surface: 'reels',
+      p_surface: query.surface ?? 'reels',
     });
     if (ranked.error) throw ranked.error;
     return pageOf((ranked.data ?? []) as JobCardRow[], limit, toEnvelope);
@@ -325,6 +327,24 @@ export async function fetchJob(id: string): Promise<JobEnvelope | null> {
   const { data, error } = await supabase.from('jobs').select(JOB_SELECT).eq('id', id).maybeSingle();
   if (error) throw error;
   return data ? toEnvelope(fromEmbedded(data as unknown as EmbeddedJobRow)) : null;
+}
+
+/**
+ * What the ranker knows about the reader: the job families their major, onboarding and resume
+ * map to, and the levels their stage allows. Null means "nothing known", which is when a
+ * Relevant feed is only as good as recency and the screen should say how to fix that.
+ */
+export interface DeckProfile {
+  families: string[] | null;
+  seniorities: string[] | null;
+  stage: string | null;
+}
+
+export async function fetchDeckProfile(): Promise<DeckProfile> {
+  const { data, error } = await supabase.rpc('my_deck_profile');
+  if (error) throw error;
+  const row = (data ?? {}) as Partial<DeckProfile>;
+  return { families: row.families ?? null, seniorities: row.seniorities ?? null, stage: row.stage ?? null };
 }
 
 /** Batch resolve. Used where a screen holds ids and no page that contains them. */
@@ -1491,6 +1511,33 @@ export interface ApplicationAnswers {
   earliestStart: string | null;
   willingToRelocate: boolean | null;
   fromResume: ('degree' | 'fieldOfStudy')[];
+
+  // ── for autofill: the rest of what forms ask (migration 20261007000000) ──
+  preferredName: string | null;
+  phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  stateRegion: string | null;
+  postalCode: string | null;
+  country: string | null;
+  schoolName: string | null;
+  graduationDate: string | null;
+  gpa: string | null;
+  over18: boolean | null;
+  usCitizen: boolean | null;
+  hasClearance: boolean | null;
+  howHeard: string | null;
+  desiredPay: string | null;
+  pronouns: string | null;
+  /** Voluntary self-identification. Null leaves the question for the student; 'decline' answers it. */
+  gender: 'male' | 'female' | 'non_binary' | 'decline' | null;
+  hispanicLatino: 'yes' | 'no' | 'decline' | null;
+  race: 'american_indian' | 'asian' | 'black' | 'pacific_islander' | 'white' | 'two_or_more' | 'decline' | null;
+  veteranStatus: 'not_veteran' | 'protected_veteran' | 'decline' | null;
+  disabilityStatus: 'yes' | 'no' | 'decline' | null;
+  sexualOrientation: 'heterosexual' | 'gay_lesbian' | 'bisexual' | 'other' | 'decline' | null;
+  transgender: 'yes' | 'no' | 'decline' | null;
 }
 
 export const EMPTY_APPLICATION_ANSWERS: ApplicationAnswers = {
@@ -1504,7 +1551,59 @@ export const EMPTY_APPLICATION_ANSWERS: ApplicationAnswers = {
   earliestStart: null,
   willingToRelocate: null,
   fromResume: [],
+  preferredName: null,
+  phone: null,
+  addressLine1: null,
+  addressLine2: null,
+  city: null,
+  stateRegion: null,
+  postalCode: null,
+  country: null,
+  schoolName: null,
+  graduationDate: null,
+  gpa: null,
+  over18: null,
+  usCitizen: null,
+  hasClearance: null,
+  howHeard: null,
+  desiredPay: null,
+  pronouns: null,
+  gender: null,
+  hispanicLatino: null,
+  race: null,
+  veteranStatus: null,
+  disabilityStatus: null,
+  sexualOrientation: null,
+  transgender: null,
 };
+
+/** camelCase field ↔ column, for the autofill columns that map one to one. */
+const AUTOFILL_COLUMNS = {
+  preferredName: 'preferred_name',
+  phone: 'phone',
+  addressLine1: 'address_line1',
+  addressLine2: 'address_line2',
+  city: 'city',
+  stateRegion: 'state_region',
+  postalCode: 'postal_code',
+  country: 'country',
+  schoolName: 'school_name',
+  graduationDate: 'graduation_date',
+  gpa: 'gpa',
+  over18: 'over_18',
+  usCitizen: 'us_citizen',
+  hasClearance: 'has_clearance',
+  howHeard: 'how_heard',
+  desiredPay: 'desired_pay',
+  pronouns: 'pronouns',
+  gender: 'gender',
+  hispanicLatino: 'hispanic_latino',
+  race: 'race',
+  veteranStatus: 'veteran_status',
+  disabilityStatus: 'disability_status',
+  sexualOrientation: 'sexual_orientation',
+  transgender: 'transgender',
+} as const satisfies Partial<Record<keyof ApplicationAnswers, string>>;
 
 export async function fetchApplicationAnswers(userId: string): Promise<ApplicationAnswers> {
   const { data, error } = await supabase
@@ -1512,7 +1611,12 @@ export async function fetchApplicationAnswers(userId: string): Promise<Applicati
   if (error) throw error;
   if (!data) return EMPTY_APPLICATION_ANSWERS;
   const sources = (data.sources ?? {}) as Record<string, string>;
+  const row = data as unknown as Record<string, unknown>;
+  const autofill = Object.fromEntries(
+    Object.entries(AUTOFILL_COLUMNS).map(([field, column]) => [field, row[column] ?? null]),
+  ) as Pick<ApplicationAnswers, keyof typeof AUTOFILL_COLUMNS>;
   return {
+    ...autofill,
     degree: data.degree,
     fieldOfStudy: data.field_of_study,
     workAuthorizedUs: data.work_authorized_us,
@@ -1546,7 +1650,14 @@ function normalizeLink(value: string | null): string | null {
 }
 
 export async function saveApplicationAnswers(userId: string, answers: ApplicationAnswers): Promise<void> {
+  const autofill = Object.fromEntries(
+    Object.entries(AUTOFILL_COLUMNS).map(([field, column]) => {
+      const value = answers[field as keyof typeof AUTOFILL_COLUMNS];
+      return [column, typeof value === 'string' ? blankToNull(value) : value];
+    }),
+  );
   const { error } = await supabase.from('application_answers').upsert({
+    ...autofill,
     user_id: userId,
     degree: blankToNull(answers.degree),
     field_of_study: blankToNull(answers.fieldOfStudy),
@@ -1761,6 +1872,35 @@ export async function startAutoApply(jobId: string, resumeId?: string | null): P
 export async function fetchAutoApplyRun(runId: string): Promise<AutoApplyRun> {
   const { run } = await serviceFetch<{ run: AutoApplyRun }>(`/v1/auto-apply/${runId}`, { method: 'GET' });
   return run;
+}
+
+/** A question autofill found on the page and could not fill from the draft or saved answers. */
+export interface PageQuestion {
+  key: string;
+  label: string;
+  kind: 'text' | 'long_text' | 'select' | 'multi_select';
+  options: string[] | null;
+  required: boolean;
+}
+
+export interface PageAnswer {
+  key: string;
+  value: string | string[];
+  confidence: 'high' | 'medium' | 'low' | null;
+  source: DraftSource;
+}
+
+/**
+ * Drafts the page's leftover questions against the same resume and rules as the run's draft.
+ * Free to the reader — the run's credit already paid for the application.
+ */
+export async function draftPageQuestions(runId: string, questions: PageQuestion[]): Promise<PageAnswer[]> {
+  const { answers } = await serviceFetch<{ answers: PageAnswer[] }>(`/v1/auto-apply/${runId}/questions`, {
+    method: 'POST',
+    body: { questions },
+    timeoutMs: 90_000,
+  });
+  return answers;
 }
 
 /**

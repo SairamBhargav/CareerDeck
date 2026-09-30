@@ -104,6 +104,9 @@ export function useResumes(userId: string | null): ResumeState {
      * happens to refetch.
      */
     await queryClient.invalidateQueries({ queryKey: ['match', 'scores'] });
+    // The resume's skills and field of study feed the Relevant ranking too.
+    await queryClient.invalidateQueries({ queryKey: ['deckProfile'] });
+    await queryClient.invalidateQueries({ queryKey: ['feed', 'all', 'recommended'] });
   }, [queryClient, key]);
 
   const uploadMutation = useMutation({

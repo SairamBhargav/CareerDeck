@@ -4,7 +4,9 @@ import { useMemo } from 'react';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import {
   fetchCompanyJobs,
+  fetchDeckProfile,
   fetchFeed,
+  type DeckProfile,
   fetchJob,
   fetchJobsByIds,
   fetchSuggestedCompanies,
@@ -113,12 +115,14 @@ function toFeed(
  * The main feed. `sort` is served by the database, not by the client — sorting a page of
  * twenty and calling it a sorted feed would be a lie once there are more than twenty.
  */
-export function useJobFeed(sort: JobSort = 'recent'): JobFeed {
+export function useJobFeed(sort: JobSort = 'recent', surface: 'reels' | 'home' = 'reels'): JobFeed {
   const sets = useViewerSets();
 
   const query = useInfiniteQuery({
-    queryKey: ['feed', 'all', sort],
-    queryFn: ({ pageParam }) => fetchFeed({ sort, cursor: pageParam }),
+    // The surface is only in the key for the ranked sort: the explicit sorts are one list
+    // wherever they're shown, while each ranked surface pages through its own session.
+    queryKey: ['feed', 'all', sort, sort === 'recommended' ? surface : null],
+    queryFn: ({ pageParam }) => fetchFeed({ sort, cursor: pageParam, surface }),
     ...pageParams(),
   });
 
@@ -222,6 +226,15 @@ export function useJobsByIds(ids: string[]): { jobs: Job[]; isLoading: boolean }
   );
 
   return { jobs, isLoading: query.isPending && key.length > 0 };
+}
+
+/**
+ * What the Relevant feed is personalized on. Refetched when the screen regains focus is not
+ * needed: a new major or resume invalidates `['deckProfile']` where it is saved.
+ */
+export function useDeckProfile(): { profile: DeckProfile | undefined; isLoading: boolean } {
+  const query = useQuery({ queryKey: ['deckProfile'], queryFn: fetchDeckProfile, staleTime: 60_000 });
+  return { profile: query.data, isLoading: query.isPending };
 }
 
 /**

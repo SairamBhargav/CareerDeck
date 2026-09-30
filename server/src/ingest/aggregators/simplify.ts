@@ -48,9 +48,9 @@ import { writeBatches } from '../batches.ts';
 import { politeFetch } from '../http.ts';
 import { parseLocations } from '../normalize/location.ts';
 import { normalizeTitle } from '../normalize/seniority.ts';
-import { classifyFamily } from '../normalize/family.ts';
-import { extractSkills, type SkillDictionary } from '../normalize/skills.ts';
+import { type SkillDictionary } from '../normalize/skills.ts';
 import { scoreQuality } from '../normalize/quality.ts';
+import { describePosting, fetchPostingDetails, type PostingDetail } from './detail.ts';
 import { isoDate, type RawPosting } from '../sources/types.ts';
 
 /** The bot-generated JSON the repo's own README points readers at for programmatic use. */
@@ -113,35 +113,6 @@ function applyHostFor(url: string): string {
   }
 }
 
-/**
- * Turns one listing into the description this source cannot otherwise provide.
- *
- * There is no free-text description field in this feed — only a title, a company, a
- * location and a link. Rather than leave `description_text` as a bare title (which would
- * make every posting from this source look identical to a spam listing under
- * quality.ts's ordinary rules), this synthesizes a short, factual, honestly-labelled
- * stand-in: what the role is, who it is with, and where it actually came from. It never
- * claims to be the employer's own copy, and it never invents a requirement or a
- * qualification the source did not state.
- */
-function synthesizeDescription(listing: {
-  title: string;
-  companyName: string;
-  terms: string[];
-  degrees: string[];
-}): string {
-  const parts = [`${listing.title} — an internship at ${listing.companyName}.`];
-
-  if (listing.terms.length > 0) parts.push(`Term(s): ${listing.terms.join(', ')}.`);
-  if (listing.degrees.length > 0) parts.push(`Open to: ${listing.degrees.join(', ')} students.`);
-
-  parts.push(
-    'Sourced from the Simplify community internship tracker ' +
-      '(github.com/SimplifyJobs/Summer2027-Internships). Apply directly with the employer.',
-  );
-
-  return parts.join(' ');
-}
 
 export interface AggregatorOptions {
   dictionary: SkillDictionary;
@@ -306,6 +277,20 @@ export async function crawlSimplifyFeed(
       if (name) companySizes.set(name, (companySizes.get(name) ?? 0) + 1);
     }
 
+    /*
+     * The feed has no descriptions, so each changed posting's is read from the employer's own
+     * ATS (./detail.ts). Only changed ones: an unchanged listing already has its row, and this
+     * is one request per posting.
+     */
+    const details = options.dryRun
+      ? new Map<string, PostingDetail | null>()
+      : await fetchPostingDetails(
+          changed.map((posting) => String((posting.payload as { url: string }).url)),
+          { log },
+        );
+    const described = [...details.values()].filter((detail) => detail !== null).length;
+    log(`      ${label} — employer description read for ${described} of ${details.size} posting(s)`);
+
     const pending: NormalizedJob[] = [];
     for (const posting of changed) {
       const p = posting.payload as {
@@ -329,22 +314,15 @@ export async function crawlSimplifyFeed(
       const locations = parseLocations(primaryLocation ?? null, extraLocations, null)
         .filter((location) => !location.abroad);
       if (locations.length === 0) continue;
-      const description = synthesizeDescription({
-        title: p.title,
-        companyName: p.company_name,
-        terms: p.terms,
-        degrees: p.degrees,
-      });
-      const requirements = p.degrees.length > 0 ? [`Open to ${p.degrees.join(', ')} students`] : [];
-      const skills = extractSkills(options.dictionary, p.title, requirements, '');
-      const family = classifyFamily(p.title, skills);
+      const facts = { title: p.title, companyName: p.company_name, terms: p.terms, degrees: p.degrees };
+      const info = describePosting(facts, details.get(p.url) ?? null, options.dictionary);
 
       const quality = scoreQuality({
         title: p.title,
-        descriptionText: description,
-        requirements,
-        skills,
-        hasStructuredSalary: false,
+        descriptionText: info.description_text,
+        requirements: info.requirements,
+        skills: info.skills,
+        hasStructuredSalary: info.hasStructuredSalary,
         // This source's own postings-per-company count, not the corpus-wide count — a
         // company this feed lists three internships for reads as a real program the same
         // way it would from a direct crawl.
@@ -354,7 +332,7 @@ export async function crawlSimplifyFeed(
         // sources that mix seniority levels.
         seniority: 'intern',
         hasCompanyDomain: false,
-        hasFullDescription: false,
+        hasFullDescription: info.hasFullDescription,
       });
 
       const groupId = crypto.randomUUID();
@@ -375,21 +353,21 @@ export async function crawlSimplifyFeed(
           location_country: location.country,
           location_type: location.type,
           employment_type: 'Internship',
-          salary_min: null,
-          salary_max: null,
-          salary_period: null,
+          salary_min: info.salary?.min ?? null,
+          salary_max: info.salary?.max ?? null,
+          salary_period: info.salary?.period ?? null,
           salary_currency: 'USD',
-          description_text: description,
+          description_text: info.description_text,
           description_html: null,
-          requirements,
-          skills,
+          requirements: info.requirements,
+          skills: info.skills,
           apply_url: p.url,
           apply_host: applyHostFor(p.url),
           posted_at: isoDate(p.date_posted),
           closes_at: null,
           dedup_group_id: groupId,
           quality_score: quality,
-          job_family: family,
+          job_family: info.job_family,
         });
       }
     }
