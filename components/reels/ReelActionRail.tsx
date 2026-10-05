@@ -59,26 +59,34 @@ export function ReelActionRail({
         accessibilityLabel={`More options for ${jobTitle}`}
       />
 
-      <View>
-        <Pressable
-          onPress={onAutoApply}
-          accessibilityRole="button"
-          accessibilityLabel={`Auto apply to ${jobTitle}. ${autoApplyCredits} left this week.`}
-          accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
-          style={({ pressed }) => [
-            styles.applyButton,
-            autoApplyCredits === 0 ? styles.applyButtonSpent : null,
-            pressed ? styles.pressed : null,
-          ]}>
-          <Ionicons name="flash" size={22} color={colors.autoApply} />
-          <Text style={styles.applyLabel}>Auto Apply</Text>
-        </Pressable>
+      {/*
+        * Same shape as every other action — circle on top, label underneath — so the rail
+        * reads as one column rather than three icons and a puck. What makes this the hero
+        * is the brand fill and a few extra points of diameter, not a different anatomy.
+        */}
+      <View style={styles.action}>
+        <View>
+          <Pressable
+            onPress={onAutoApply}
+            accessibilityRole="button"
+            accessibilityLabel={`Auto apply to ${jobTitle}. ${autoApplyCredits} left this week.`}
+            accessibilityHint="Opens the application sheet. Nothing is submitted automatically."
+            style={({ pressed }) => [
+              styles.applyButton,
+              autoApplyCredits === 0 ? styles.applyButtonSpent : null,
+              pressed ? styles.pressed : null,
+            ]}>
+            <Ionicons name="flash" size={21} color={colors.textOnBrand} />
+          </Pressable>
 
-        {/* The balance rides on the button rather than sitting under it: the rail is
-            already a column of labels, and one more line would read as another action. */}
-        <View style={styles.creditBadge}>
-          <Text style={styles.creditCount}>{autoApplyCredits}</Text>
+          {/* The balance rides on the button rather than sitting under it: the rail is
+              already a column of labels, and one more line would read as another action. */}
+          <View style={styles.creditBadge}>
+            <Text style={styles.creditCount}>{autoApplyCredits}</Text>
+          </View>
         </View>
+
+        <Text style={styles.applyLabel}>Auto Apply</Text>
       </View>
     </View>
   );
@@ -148,18 +156,29 @@ const useStyles = makeStyles((colors) => ({
   applyButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    width: 64,
-    height: 64,
+    /*
+     * 52 against the rail's 44, rather than 64. Big enough to be the obvious one, close
+     * enough that it belongs to the same column — at 64 it stopped being emphasis and
+     * started being a different component.
+     */
+    width: 52,
+    height: 52,
     borderRadius: radius.pill,
-    // Deliberately its own fill rather than `accent` — inverting to white in dark would
-    // cost this the "one AI-assisted action" identity the violet glow gives it.
-    backgroundColor: colors.autoApplySurface,
+    /*
+     * The brand violet, filled, with a white glyph — one colour doing the work.
+     *
+     * It used to be a near-black puck with a violet icon inside it, which meant two
+     * strong colours competing in a 64pt circle on top of an already company-tinted
+     * card. The violet was the part carrying the meaning, so it became the whole button.
+     */
+    backgroundColor: colors.autoApply,
+    // A hint of lift, not a halo. The old glow was opacity 0.9 at radius 16, which on a
+    // pale reel read as a smudge around the button rather than a shadow under it.
     shadowColor: colors.autoApplyGlow,
-    shadowOpacity: 0.9,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 10,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   // Keeps its shape when empty — the button still opens the ordinary apply sheet, so
   // dimming it would promise a wall that isn't there.
@@ -178,19 +197,26 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.autoApply,
+    /*
+     * Inverted now that the button is violet. It used to be a violet pill with a
+     * near-black ring, which worked when it sat on a near-black puck and would now be
+     * violet on violet. A light counter reads as something placed on the button.
+     */
+    backgroundColor: colors.controlSurface,
     borderWidth: 2,
-    borderColor: colors.autoApplySurface,
+    borderColor: colors.autoApply,
   },
   creditCount: {
     fontSize: 10,
     fontWeight: '800',
-    color: colors.textOnBrand,
+    color: colors.autoApply,
   },
   applyLabel: {
-    fontSize: 9,
+    // Matches actionLabel's size and weight; only the colour differs, which is the one
+    // signal this action needs that the others do not.
+    fontSize: fontSize.caption,
     fontWeight: '700',
-    color: colors.autoApplyLabel,
+    color: colors.autoApply,
     textAlign: 'center',
   },
   pressed: {
