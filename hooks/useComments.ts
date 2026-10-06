@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -10,6 +10,7 @@ import {
   fetchCommentCounts,
   fetchJobComments,
   postComment,
+  type Page,
   reportComment,
   setBlockFromComment,
 } from '@/lib/api';
@@ -325,15 +326,49 @@ export function useCommentActions(jobId: string | undefined) {
         gifId: input.gifId ?? null,
         idempotencyKey: idempotencyKey.current,
       }),
-    onSuccess: (comment) => {
+    /*
+     * The comment appears the moment Send is tapped, dimmed as `pending`. The server's answer
+     * takes seconds (the moderation classifier is in the write path by design), and a composer
+     * that empties and shows nothing for that long reads as a lost comment.
+     */
+    onMutate: async (input) => {
+      if (jobId === undefined) return { tempId: null };
+      const tempId = `pending-${idempotencyKey.current}`;
+      const temp = pendingComment(queryClient, jobId, tempId, input);
+
+      if (input.parentId === null) {
+        await queryClient.cancelQueries({ queryKey: commentsKey(jobId) });
+        // Newest first, so a new comment leads the first page.
+        queryClient.setQueryData<CommentPages>(commentsKey(jobId), (data) =>
+          data ? { ...data, pages: data.pages.map((page, i) => (i === 0 ? { ...page, items: [temp, ...page.items] } : page)) } : data,
+        );
+      } else {
+        const parentId = input.parentId;
+        await queryClient.cancelQueries({ queryKey: repliesKey(parentId) });
+        // Oldest first, so a reply joins the end of its thread.
+        queryClient.setQueryData<JobComment[]>(repliesKey(parentId), (replies) => [...(replies ?? []), temp]);
+        bumpReplyCount(queryClient, jobId, parentId, 1);
+      }
+      return { tempId };
+    },
+    onSuccess: (comment, input, context) => {
       idempotencyKey.current = newKey();
 
+      // Swap the dimmed row for the real one in place, so nothing jumps while the refetch runs.
+      if (jobId !== undefined && context?.tempId) {
+        replaceComment(queryClient, jobId, input.parentId, context.tempId, comment);
+      }
       if (comment.parentId !== null) {
         void queryClient.invalidateQueries({ queryKey: repliesKey(comment.parentId) });
       }
       invalidate();
     },
-    onError: (error) => {
+    onError: (error, input, context) => {
+      // The composer puts the draft back with the reason; the dimmed row has to go with it.
+      if (jobId !== undefined && context?.tempId) {
+        replaceComment(queryClient, jobId, input.parentId, context.tempId, null);
+        if (input.parentId !== null) bumpReplyCount(queryClient, jobId, input.parentId, -1);
+      }
       // Reported, and also rethrown to the caller — the composer needs to keep the draft and say
       // what happened, and the log is what tells us the classifier is misbehaving at scale.
       reportError(error, { where: 'postComment', jobId });
@@ -374,6 +409,84 @@ export function useCommentActions(jobId: string | undefined) {
     report: report.mutateAsync,
     block: block.mutate,
   };
+}
+
+type CommentPages = InfiniteData<Page<JobComment>, string | null>;
+
+/** Used for the dimmed row until the server's answer brings the account's real colour. */
+const PENDING_COLOR = '#8A8AA0';
+
+/**
+ * The row drawn before the server answers: the account's own pseudonym and badge from the gate,
+ * and its colour from any comment of its own already on screen.
+ */
+function pendingComment(
+  queryClient: QueryClient,
+  jobId: string,
+  id: string,
+  input: { body: string; parentId: string | null; gifId?: string },
+): JobComment {
+  const gate = queryClient.getQueryData<CommentGate>(commentGateKey());
+  const own = queryClient
+    .getQueryData<CommentPages>(commentsKey(jobId))
+    ?.pages.flatMap((page) => page.items)
+    .find((comment) => comment.isYou);
+
+  return {
+    id,
+    jobId,
+    parentId: input.parentId,
+    authorHandle: gate?.handle ?? own?.authorHandle ?? 'You',
+    authorBadge: gate?.badge ?? own?.authorBadge ?? null,
+    authorColor: own?.authorColor ?? PENDING_COLOR,
+    isYou: true,
+    body: input.body,
+    ...(input.gifId === undefined ? {} : { gifId: input.gifId }),
+    createdAt: new Date().toISOString(),
+    editedAt: null,
+    likeCount: 0,
+    replyCount: 0,
+    pending: true,
+  };
+}
+
+/** Puts `next` where the pending row was, or removes the row when `next` is null. */
+function replaceComment(
+  queryClient: QueryClient,
+  jobId: string,
+  parentId: string | null,
+  tempId: string,
+  next: JobComment | null,
+) {
+  const swap = (items: JobComment[]) =>
+    next === null
+      ? items.filter((item) => item.id !== tempId)
+      : items.map((item) => (item.id === tempId ? next : item));
+
+  if (parentId === null) {
+    queryClient.setQueryData<CommentPages>(commentsKey(jobId), (data) =>
+      data ? { ...data, pages: data.pages.map((page) => ({ ...page, items: swap(page.items) })) } : data,
+    );
+  } else {
+    queryClient.setQueryData<JobComment[]>(repliesKey(parentId), (replies) => (replies ? swap(replies) : replies));
+  }
+}
+
+/** Keeps "View n replies" honest while a reply is pending, and puts it back if the post fails. */
+function bumpReplyCount(queryClient: QueryClient, jobId: string, parentId: string, by: number) {
+  queryClient.setQueryData<CommentPages>(commentsKey(jobId), (data) =>
+    data
+      ? {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item) =>
+              item.id === parentId ? { ...item, replyCount: Math.max(0, item.replyCount + by) } : item,
+            ),
+          })),
+        }
+      : data,
+  );
 }
 
 function newKey(): string {

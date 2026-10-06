@@ -269,12 +269,15 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     setGifOpen(false);
     setPostError(null);
 
+    // A reply lands inside a thread, so open it — otherwise the writer's own reply is behind a
+    // "View 1 reply" link and reads as having vanished. Opened before the post, because the
+    // reply now appears (dimmed) the moment it is sent rather than when the server answers.
+    if (parentId !== null) openThread(parentId);
+    // The send itself is the moment worth confirming; the server's answer arrives seconds later.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     try {
       await post({ body, parentId, ...(gifId === undefined ? {} : { gifId }) });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // A reply lands inside a thread, so open it — otherwise the writer's own reply is behind a
-      // "View 1 reply" link and reads as having vanished.
-      if (parentId !== null) openThread(parentId);
     } catch (error) {
       setDraft(body);
       if (parentId !== null && replyTo) setReplyTo(replyTo);
@@ -387,7 +390,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                         <CommentRow
                           comment={comment}
                           liked={isCommentLiked(comment.id)}
-                          onDelete={comment.isYou ? () => handleDelete(comment.id) : undefined}
+                          onDelete={comment.isYou && !comment.pending ? () => handleDelete(comment.id) : undefined}
                           onReport={
                             comment.isYou
                               ? undefined
@@ -432,7 +435,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                                 comment={reply}
                                 isReply
                                 liked={isCommentLiked(reply.id)}
-                                onDelete={reply.isYou ? () => handleDelete(reply.id) : undefined}
+                                onDelete={reply.isYou && !reply.pending ? () => handleDelete(reply.id) : undefined}
                                 onReport={
                                   reply.isYou
                                     ? undefined
