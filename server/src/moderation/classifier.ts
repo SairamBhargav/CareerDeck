@@ -179,9 +179,11 @@ function client(): Anthropic | null {
     cached = new Anthropic({
       apiKey: env.anthropicApiKey,
       // The route has its own deadline and falls back to `flagged`; the SDK must not keep
-      // retrying past it. One retry covers a dropped connection and nothing more.
+      // retrying past it. No retry: the SDK retries timeouts too, and a retry after a timeout
+      // only starts the wait over (that doubled Opus's worst case to 5.4 s). A dropped
+      // connection flags the comment for review instead.
       timeout: env.moderationTimeoutMs,
-      maxRetries: 1,
+      maxRetries: 0,
     });
   }
   return cached;
@@ -194,6 +196,20 @@ interface VerdictInput {
   reason: string;
 }
 
+/**
+ * Haiku 4.5 takes neither adaptive thinking nor `effort`, and runs without thinking here: the
+ * forced `verdict` call below is what guarantees a structured answer, and thinking would cost
+ * the latency this model was chosen for.
+ *
+ * Every newer model keeps adaptive thinking at the lowest effort. With thinking off, Opus
+ * occasionally writes a tool call into its visible text instead of emitting a tool_use block,
+ * which here would look exactly like a classifier that silently stopped classifying.
+ */
+function thinkingFor(model: string) {
+  if (model.startsWith('claude-haiku')) return {};
+  return { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } };
+}
+
 async function modelVerdict(text: string): Promise<Verdict | null> {
   const anthropic = client();
   if (!anthropic) return null;
@@ -202,12 +218,7 @@ async function modelVerdict(text: string): Promise<Verdict | null> {
     model: env.moderationModel,
     max_tokens: 1024,
     system: SYSTEM,
-    // Adaptive thinking at the lowest effort. Thinking stays on deliberately: with it
-    // disabled, Opus occasionally writes a tool call into its visible text instead of
-    // emitting a tool_use block, which here would look exactly like a classifier that
-    // silently stopped classifying.
-    thinking: { type: 'adaptive' },
-    output_config: { effort: 'low' },
+    ...thinkingFor(env.moderationModel),
     tools: [VERDICT_TOOL],
     // Forced, because there is no conversational answer wanted — one structured verdict or
     // nothing. `strict: true` on the tool is what makes the input safe to read without
