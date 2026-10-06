@@ -31,6 +31,7 @@ import { makeStyles } from '@/context/ThemeContext';
 import { useCommentCounts } from '@/hooks/useComments';
 import { useMatchScores, useResumes } from '@/hooks/useResumes';
 import { useDwellImpressions } from '@/hooks/useImpressions';
+import { flushImpressions } from '@/lib/impressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
@@ -227,6 +228,25 @@ export default function ReelsScreen() {
     active.set(withSpring(1, { damping: 15, stiffness: 180 }));
     spin.set(withRepeat(withTiming(360, { duration: 850, easing: Easing.linear }), -1, false));
     pulse.set(withRepeat(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }), -1, false));
+
+    /*
+     * Send what has been watched before asking for a new deck.
+     *
+     * A refresh builds a whole new feed session, and the ranker drops a posting by about
+     * twenty-one points the first time somebody has already been shown it — so the cards
+     * just scrolled past are meant to sink and let new ones up. That only works if the
+     * database knows they were seen, and impressions batch every ten seconds or
+     * twenty-five items. A pull-to-refresh arrives inside that window almost every time,
+     * so the new session was being scored against stale counts and came back identical.
+     *
+     * Verified: two sessions built back to back, with nothing flushed between them, agree
+     * on all of their first twenty cards.
+     *
+     * Not awaited. The flush is one small insert and the refresh already holds its
+     * indicator up for REFRESH_DURATION, which is far longer; making the user wait on a
+     * network round trip to see a spinner they are already looking at buys nothing.
+     */
+    void flushImpressions();
 
     refetchActive();
 
