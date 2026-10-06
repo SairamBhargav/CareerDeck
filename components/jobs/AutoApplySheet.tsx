@@ -34,6 +34,7 @@ import {
 import { useApplicationAnswers } from '@/hooks/useApplicationAnswers';
 import { savedAnswers, type AutofillAnswer, type AutofillResume } from '@/lib/autofill';
 import { reportError } from '@/lib/observability';
+import { claimPaywallMoment } from '@/lib/paywallPrompts';
 import { ServiceError } from '@/lib/service';
 import type { Job } from '@/types';
 import { localDateKey } from '@/utils/week';
@@ -263,12 +264,20 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
       openRun.current = null;
       void queryClient.invalidateQueries({ queryKey: applicationsKey(userId) });
       onClose();
+      /*
+       * Their first Auto Apply just handed off, the moment they know what one is worth: the
+       * paywall opens once, per account. After the sheet's own slide-out, because pushing a
+       * route while a Modal is still dismissing drops the push on iOS.
+       */
+      if (userId && !credits.isPro && (await claimPaywallMoment('first-auto-apply', userId))) {
+        setTimeout(() => router.push({ pathname: '/paywall', params: { from: 'first-auto-apply' } }), 450);
+      }
     } catch (error) {
       reportError(error, { where: 'AutoApplySheet.complete' });
     } finally {
       setBusy(false);
     }
-  }, [step, queryClient, userId, onClose]);
+  }, [step, queryClient, userId, onClose, credits.isPro, router]);
 
   if (!job) return null;
 
@@ -298,7 +307,7 @@ export function AutoApplySheet({ job, visible, onClose, onApplyWithoutDraft }: A
             message={step.message}
             onUpgrade={() => {
               close();
-              router.push('/paywall');
+              router.push({ pathname: '/paywall', params: { from: 'limit' } });
             }}
             onApplyWithoutDraft={() => {
               onClose();

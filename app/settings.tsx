@@ -148,7 +148,7 @@ export default function SettingsScreen() {
       icon: 'sparkles-outline',
       label: credits.isPro ? 'CareerDeck Pro' : 'Get Pro',
       hint: credits.isPro ? 'Manage your subscription' : 'More Auto Applies and resume slots',
-      onPress: () => router.push('/paywall'),
+      onPress: () => router.push({ pathname: '/paywall', params: { from: 'settings' } }),
     },
   ];
 

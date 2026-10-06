@@ -119,8 +119,12 @@ function RootNavigator() {
           />
           <Stack.Screen name="collection/[type]" options={{ headerShown: false }} />
           {/* Phase 6. A modal for the same reason as resume-review: it is reached from inside a
-              flow (an empty Auto Apply balance), and closing it should land back in that flow. */}
-          <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
+              flow (an empty Auto Apply balance), and closing it should land back in that flow.
+              Full screen since 2026-10-06: the paywall is its own dark stage, not a card. */}
+          <Stack.Screen
+            name="paywall"
+            options={{ presentation: 'fullScreenModal', headerShown: false, contentStyle: { backgroundColor: scheme === 'dark' ? '#07060D' : '#F7F5FF' } }}
+          />
           <Stack.Screen name="job/[id]" options={{ presentation: 'modal', title: 'Job details' }} />
           <Stack.Screen name="company/[id]" options={{ title: '' }} />
         </Stack.Protected>

@@ -83,9 +83,25 @@ export interface PlanOffer {
   id: string;
   /** "Monthly", "Annual" — RevenueCat's package type, humanised. */
   label: string;
+  /** RevenueCat's package type: "MONTHLY", "ANNUAL", … */
+  packageType: string;
   price: string;
+  /** The same price as a number, in `currencyCode`, for working out a saving. */
+  priceAmount: number;
+  /** "$2.08" for an annual plan; null where the store cannot say. */
+  pricePerMonth: string | null;
+  /** Length of a free introductory trial, in days. 0 when the product has none. */
+  freeTrialDays: number;
   period: string | null;
   pkg: PurchasesPackage;
+}
+
+const DAYS_PER_UNIT: Record<string, number> = { DAY: 1, WEEK: 7, MONTH: 30, YEAR: 365 };
+
+function freeTrialDays(pkg: PurchasesPackage): number {
+  const intro = pkg.product.introPrice;
+  if (!intro || intro.price !== 0) return 0;
+  return (DAYS_PER_UNIT[String(intro.periodUnit)] ?? 0) * intro.periodNumberOfUnits * Math.max(1, intro.cycles);
 }
 
 const LABEL: Record<string, string> = {
@@ -108,7 +124,11 @@ export async function fetchOffers(): Promise<PlanOffer[]> {
   return packages.map((pkg) => ({
     id: pkg.identifier,
     label: LABEL[String(pkg.packageType)] ?? pkg.product.title,
+    packageType: String(pkg.packageType),
     price: pkg.product.priceString,
+    priceAmount: pkg.product.price,
+    pricePerMonth: pkg.product.pricePerMonthString,
+    freeTrialDays: freeTrialDays(pkg),
     period: pkg.product.subscriptionPeriod ?? null,
     pkg,
   }));

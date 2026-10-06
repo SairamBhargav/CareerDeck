@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
 import { NotificationCard } from '@/components/activity/NotificationCard';
+import { ProCard } from '@/components/activity/ProCard';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
 import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
 import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
@@ -64,6 +65,7 @@ export default function ActivityScreen() {
     markAllNotificationsRead,
     weeklyGoal,
     setWeeklyGoal,
+    credits,
   } = useCareerDeck();
 
   const {
@@ -226,6 +228,11 @@ export default function ActivityScreen() {
         </View>
 
         <WeeklyGoalCard goal={goal} onEditGoal={() => setEditingGoal(true)} />
+
+        {/* Pro's standing place in the app. Gone once they subscribe. */}
+        {credits.isPro ? null : (
+          <ProCard onPress={() => router.push({ pathname: '/paywall', params: { from: 'activity' } })} />
+        )}
 
         <ResumeShelf
           resumes={resumes}
