@@ -15,6 +15,8 @@ export interface Palette {
   /** App shell. */
   background: string;
   backgroundMuted: string;
+  /** A whole page one step off `background`: the Deck behind its reels. Dark keeps this near-black, unlike muted fills. */
+  canvasMuted: string;
   surface: string;
   /**
    * Controls that float *on top* of content rather than sitting in the page — the reel
@@ -60,6 +62,17 @@ export interface Palette {
   /** The rail button's fill — deliberately not `accent`, so the action keeps its identity. */
   autoApplySurface: string;
   autoApplyLabel: string;
+  /** The flash glyph on the Auto Apply button: white on violet in light, violet on its dark plate in dark. */
+  autoApplyIcon: string;
+  /** The credit count riding on the button's corner. */
+  autoApplyBadge: string;
+  autoApplyBadgeText: string;
+
+  /**
+   * The plate a company's logo image sits on. Pure white in light; a soft off-white in dark,
+   * where a full-white square glares against the page.
+   */
+  logoPlate: string;
 
   /** The floating tab bar's blurred capsule, dark in both schemes. */
   chromeSurface: string;
@@ -84,6 +97,7 @@ export interface Palette {
 const lightPalette: Palette = {
   background: '#FFFFFF',
   backgroundMuted: '#F6F6F7',
+  canvasMuted: '#F6F6F7',
   surface: '#FFFFFF',
   controlSurface: '#FFFFFF',
 
@@ -110,8 +124,13 @@ const lightPalette: Palette = {
 
   autoApply: '#7B5CFA',
   autoApplyGlow: 'rgba(123, 92, 250, 0.45)',
-  autoApplySurface: '#111114',
+  autoApplySurface: '#7B5CFA',
   autoApplyLabel: '#FFFFFF',
+  autoApplyIcon: '#FFFFFF',
+  autoApplyBadge: '#FFFFFF',
+  autoApplyBadgeText: '#5B3DE0',
+
+  logoPlate: '#FFFFFF',
 
   chromeSurface: 'rgba(255,255,255,0.06)',
   chromeText: '#FFFFFF',
@@ -141,16 +160,22 @@ const lightPalette: Palette = {
 const darkPalette: Palette = {
   // The same near-black the splash screen and Android adaptive icon already use.
   background: '#0E0F13',
-  backgroundMuted: '#17181E',
-  surface: '#17181E',
+  // Lighter than surface, as light mode's muted grey is darker than white: either way a
+  // muted fill has to read inside a card. These were the same colour, which made every ring
+  // track, progress track and chip inside a card disappear.
+  backgroundMuted: '#24252D',
+  canvasMuted: '#13141A',
+  surface: '#18191F',
   controlSurface: 'rgba(255,255,255,0.13)',
 
-  border: '#26272F',
-  borderStrong: '#3B3C46',
+  // A step lighter than before: hairlines on near-black were close to invisible, and
+  // borders are what separates surfaces in dark, where shadows cannot.
+  border: '#2C2D36',
+  borderStrong: '#45464F',
 
-  text: '#F4F4F7',
-  textSecondary: '#A9A9B6',
-  textTertiary: '#7C7C8A',
+  text: '#F7F7FA',
+  textSecondary: '#B5B5C1',
+  textTertiary: '#8A8A98',
   textInverse: '#0E0F13',
   textOnBrand: '#FFFFFF',
 
@@ -173,6 +198,11 @@ const darkPalette: Palette = {
   autoApplyGlow: 'rgba(167, 139, 255, 0.55)',
   autoApplySurface: '#2A2340',
   autoApplyLabel: '#F0EBFF',
+  autoApplyIcon: '#A78BFF',
+  autoApplyBadge: '#A78BFF',
+  autoApplyBadgeText: '#FFFFFF',
+
+  logoPlate: '#EEEEF2',
 
   chromeSurface: 'rgba(255,255,255,0.10)',
   chromeText: '#FFFFFF',

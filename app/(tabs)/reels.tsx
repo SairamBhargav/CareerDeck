@@ -453,7 +453,7 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     // Matches each reel's own background wash, so the strip held open behind the list
     // during a refresh reads as part of the surface rather than a gap.
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: colors.canvasMuted,
   },
   listWrap: {
     flex: 1,

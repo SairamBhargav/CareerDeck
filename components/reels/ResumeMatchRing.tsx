@@ -166,7 +166,8 @@ function captionFor(explain: MatchExplanation | null | undefined): string {
 
   const candidates: { label: string; value: number | undefined }[] = [
     { label: 'SKILLS', value: explain.skills },
-    { label: 'FIELD', value: explain.field },
+    // Field is the broadest of the three, so leading on it reads as a plain match rather than a reason.
+    { label: 'MATCH', value: explain.field },
     { label: 'LEVEL', value: explain.seniority },
   ];
 

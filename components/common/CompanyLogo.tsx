@@ -59,7 +59,7 @@ export function CompanyLogo({ logo, name, color, size = 'md', shape = 'rounded' 
           borderRadius: isCircle ? dimensions.box / 2 : dimensions.radius,
           // Real logos are nearly always dark-on-transparent, so they keep a light plate
           // in both schemes; a monogram sits directly on the company's brand colour.
-          backgroundColor: showImage ? '#FFFFFF' : tint,
+          backgroundColor: showImage ? colors.logoPlate : tint,
         },
       ]}>
       {showImage ? (
@@ -90,7 +90,8 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    // borderStrong: a dark brand's monogram plate needs a visible edge on a dark page.
+    borderColor: colors.borderStrong,
     overflow: 'hidden',
   },
   image: {

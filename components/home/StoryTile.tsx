@@ -14,6 +14,7 @@ import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { StoryGroup } from '@/types';
+import { legibleOn } from '@/utils/color';
 
 const AVATAR = 62;
 /** Gap between the ring and the logo plate, the way Instagram insets its avatars. */
@@ -58,7 +59,9 @@ export function StoryTile({ group, onPress }: StoryTileProps) {
   const styles = useStyles();
   const [pressed, setPressed] = useState(false);
 
-  const brandColor = group.logoColor ?? colors.accent;
+  // The brand's own hue, lifted just enough to be seen: a navy or black brand ring vanished
+  // on the dark page, and a white one on the light page.
+  const brandColor = legibleOn(group.logoColor ?? colors.accent, colors.background);
 
   // 1 while the group still has something unwatched, 0 once it doesn't.
   const unseen = useDerivedValue(

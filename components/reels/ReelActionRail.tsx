@@ -70,7 +70,7 @@ export function ReelActionRail({
             autoApplyCredits === 0 ? styles.applyButtonSpent : null,
             pressed ? styles.pressed : null,
           ]}>
-          <Ionicons name="flash" size={22} color={colors.autoApply} />
+          <Ionicons name="flash" size={22} color={colors.autoApplyIcon} />
           <Text style={styles.applyLabel}>Auto Apply</Text>
         </Pressable>
 
@@ -152,8 +152,8 @@ const useStyles = makeStyles((colors) => ({
     width: 64,
     height: 64,
     borderRadius: radius.pill,
-    // Deliberately its own fill rather than `accent` — inverting to white in dark would
-    // cost this the "one AI-assisted action" identity the violet glow gives it.
+    // Deliberately its own fill rather than `accent`: violet in light (the paywall's colour),
+    // a violet-black plate in dark. Either way it is the one AI-assisted action on the rail.
     backgroundColor: colors.autoApplySurface,
     shadowColor: colors.autoApplyGlow,
     shadowOpacity: 0.9,
@@ -178,14 +178,14 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.autoApply,
+    backgroundColor: colors.autoApplyBadge,
     borderWidth: 2,
     borderColor: colors.autoApplySurface,
   },
   creditCount: {
     fontSize: 10,
     fontWeight: '800',
-    color: colors.textOnBrand,
+    color: colors.autoApplyBadgeText,
   },
   applyLabel: {
     fontSize: 9,
