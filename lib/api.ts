@@ -144,6 +144,7 @@ interface CompanyCardRow {
   follower_count: number;
   open_job_count: number;
   rank: number | null;
+  linkedin_follower_count?: number | null;
 }
 
 /** "NVIDIA" → "NV". The last-resort monogram when a row has neither logo nor monogram. */
@@ -213,6 +214,7 @@ function toCompany(row: CompanyCardRow): Company {
     logoColor: row.logo_color ?? '#111114',
     industry: row.industry ?? '',
     followerCount: row.follower_count,
+    linkedinFollowerCount: row.linkedin_follower_count ?? null,
     openJobCount: row.open_job_count,
     isFollowing: false,
   };
@@ -359,7 +361,7 @@ export async function fetchJobsByIds(ids: string[]): Promise<JobEnvelope[]> {
 
 const COMPANY_SELECT =
   'id, slug, name, domain, logo_url, logo_monogram, logo_color, industry, hq_location, ' +
-  'description, follower_count, open_job_count';
+  'description, follower_count, open_job_count, linkedin_follower_count';
 
 export async function fetchCompany(slug: string): Promise<Company | null> {
   const { data, error } = await supabase.from('companies').select(COMPANY_SELECT).eq('slug', slug).maybeSingle();

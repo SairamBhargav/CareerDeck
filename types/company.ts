@@ -9,7 +9,10 @@ export interface Company {
   /** Brand tint used as the fallback background behind the logo. */
   logoColor: string;
   industry: string;
+  /** CareerDeck's own follows — every Follow tap. */
   followerCount: number;
+  /** The company's LinkedIn audience, a dated snapshot shown until `followerCount` is meaningful. */
+  linkedinFollowerCount: number | null;
   /** Open postings right now. Ranks the suggestion rail and sorts company search. */
   openJobCount: number;
   isFollowing: boolean;

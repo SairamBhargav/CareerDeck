@@ -1,4 +1,4 @@
-import type { Job } from '@/types';
+import type { Company, Job } from '@/types';
 
 /**
  * "$40-$60/hr" for hourly roles, "$138k - $186k" for salaried ones.
@@ -38,6 +38,32 @@ export function formatFollowerCount(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
   return String(count);
+}
+
+/**
+ * Follows on CareerDeck at which a company's own count replaces its LinkedIn snapshot. Below
+ * it, "2 followers" undersells every company in the app.
+ */
+const OWN_FOLLOWERS_THRESHOLD = 100;
+
+/**
+ * The audience line for a company: CareerDeck's own followers once there are enough of them,
+ * otherwise its LinkedIn audience — always labelled as LinkedIn's, so it is never read as
+ * CareerDeck users — and failing both, how many roles it has open.
+ */
+export function companyAudience(
+  company: Pick<Company, 'followerCount' | 'linkedinFollowerCount' | 'openJobCount'>,
+): string {
+  if (company.followerCount >= OWN_FOLLOWERS_THRESHOLD) {
+    return `${formatFollowerCount(company.followerCount)} followers`;
+  }
+  if (company.linkedinFollowerCount) {
+    return `${formatFollowerCount(company.linkedinFollowerCount)} on LinkedIn`;
+  }
+  if (company.openJobCount > 0) {
+    return `${company.openJobCount} open ${company.openJobCount === 1 ? 'role' : 'roles'}`;
+  }
+  return `${formatFollowerCount(company.followerCount)} followers`;
 }
 
 /** "Santa Clara, CA · Hybrid" */

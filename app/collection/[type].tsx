@@ -17,7 +17,7 @@ import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useJobsByIds } from '@/hooks/useJobFeeds';
 import type { Company } from '@/types';
-import { formatFollowerCount } from '@/utils/format';
+import { companyAudience } from '@/utils/format';
 
 /** Per-row stagger, capped so a long list's tail isn't left waiting. */
 const STAGGER_MS = 45;
@@ -143,7 +143,7 @@ export default function CollectionScreen() {
                       {company.name}
                     </Text>
                     <Text style={styles.companyMeta} numberOfLines={1}>
-                      {formatFollowerCount(company.followerCount)} followers
+                      {companyAudience(company)}
                     </Text>
                   </View>
 

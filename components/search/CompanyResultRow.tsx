@@ -5,7 +5,7 @@ import { FollowButton } from '@/components/common/FollowButton';
 import { fontSize, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
-import { formatFollowerCount } from '@/utils/format';
+import { companyAudience } from '@/utils/format';
 
 interface CompanyResultRowProps {
   company: Company;
@@ -34,7 +34,7 @@ export function CompanyResultRow({ company, onPress, onToggleFollow }: CompanyRe
           {company.name}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {company.industry} · {formatFollowerCount(company.followerCount)} followers
+          {company.industry} · {companyAudience(company)}
         </Text>
       </View>
 

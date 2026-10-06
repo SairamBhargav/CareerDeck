@@ -5,7 +5,7 @@ import { FollowButton } from '@/components/common/FollowButton';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
-import { formatFollowerCount } from '@/utils/format';
+import { companyAudience } from '@/utils/format';
 
 export const SUGGESTION_CARD_WIDTH = 132;
 
@@ -34,7 +34,7 @@ export function CompanySuggestionCard({ company, onPress, onToggleFollow }: Comp
           {company.name}
         </Text>
         <Text style={styles.followers} numberOfLines={1}>
-          {formatFollowerCount(company.followerCount)} followers
+          {companyAudience(company)}
         </Text>
       </View>
 

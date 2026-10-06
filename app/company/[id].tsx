@@ -15,7 +15,7 @@ import { useCompany } from '@/hooks/useCompanies';
 import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useCompanyJobs } from '@/hooks/useJobFeeds';
 import { hexToRgba } from '@/utils/color';
-import { formatFollowerCount } from '@/utils/format';
+import { companyAudience } from '@/utils/format';
 import type { Job } from '@/types';
 
 /** Per-card stagger down the openings list, capped so the tail doesn't crawl in. */
@@ -73,7 +73,7 @@ export default function CompanyDetailScreen() {
 
         <Text style={styles.name}>{company.name}</Text>
         <Text style={styles.meta}>
-          {company.industry} · {formatFollowerCount(company.followerCount)} followers
+          {company.industry} · {companyAudience(company)}
         </Text>
 
         <View style={styles.action}>

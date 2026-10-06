@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -346,6 +347,9 @@ export default function ReelsScreen() {
                   onComment={() => setCommentsJob(item)}
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
+                  onCompanyPress={() =>
+                    router.push({ pathname: '/company/[id]', params: { id: item.companySlug } })
+                  }
                   autoApplyCredits={autoApplyCredits}
                 />
               )}

@@ -52,6 +52,8 @@ interface JobReelCardProps {
   onComment: () => void;
   onMore: () => void;
   onAutoApply: () => void;
+  /** Tapping the logo or company name. */
+  onCompanyPress: () => void;
   autoApplyCredits: number;
 }
 
@@ -67,6 +69,7 @@ export function JobReelCard({
   onComment,
   onMore,
   onAutoApply,
+  onCompanyPress,
   autoApplyCredits,
 }: JobReelCardProps) {
   const { colors } = useTheme();
@@ -180,7 +183,13 @@ export function JobReelCard({
                 report the true un-clamped height. contentBox's fixed height still clips
                 that pass; once the description is clamped, everything fits inside it. */}
             <View style={styles.contentInner} onLayout={capture('content')}>
-              <View style={styles.companyRow}>
+              {/* The logo and name open the company's page, as a profile picture does. */}
+              <Pressable
+                onPress={onCompanyPress}
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${job.companyName}'s page`}
+                hitSlop={6}
+                style={({ pressed }) => [styles.companyRow, pressed ? styles.readMorePressed : null]}>
                 <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
                 <View style={styles.companyText}>
                   <Text style={styles.companyName} numberOfLines={1}>
@@ -188,7 +197,7 @@ export function JobReelCard({
                   </Text>
                   <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
                 </View>
-              </View>
+              </Pressable>
 
               <Text style={styles.title} numberOfLines={MAX_TITLE_LINES}>
                 {job.title}
