@@ -128,7 +128,7 @@ export const BOARDS: BoardEntry[] = [
   { slug: 'astranis', name: 'Astranis', domain: 'astranis.com', kind: 'greenhouse', token: 'astranis', industry: 'Satellite Communications', logoColor: '#0E2A47' },
   { slug: 'relativity-space', name: 'Relativity Space', domain: 'relativityspace.com', kind: 'greenhouse', token: 'relativity', industry: 'Launch Vehicles', logoColor: '#1A1A1A' },
   { slug: 'waymo', name: 'Waymo', domain: 'waymo.com', kind: 'greenhouse', token: 'waymo', industry: 'Autonomous Driving', logoColor: '#5F6368' },
-  { slug: 'wayve', name: 'Wayve', domain: 'wayve.ai', kind: 'greenhouse', token: 'wayve', industry: 'Autonomous Driving', logoColor: '#0F62FE' },
+  { slug: 'wayve', name: 'Wayve', domain: 'wayve.ai', kind: 'ashby', token: 'wayve', industry: 'Autonomous Driving', logoColor: '#0F62FE' },
 
   // ── Enterprise and platform ──────────────────────────────────────────────────
   { slug: 'verkada', name: 'Verkada', domain: 'verkada.com', kind: 'greenhouse', token: 'verkada', industry: 'Physical Security', logoColor: '#0E4DA4' },

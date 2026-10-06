@@ -612,7 +612,7 @@ select c.id, v.kind, v.board_url, v.board_token
   ('astranis', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/astranis', 'astranis'),
   ('relativity-space', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/relativity', 'relativity'),
   ('waymo', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/waymo', 'waymo'),
-  ('wayve', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/wayve', 'wayve'),
+  ('wayve', 'ashby'::public.ats_kind, 'https://jobs.ashbyhq.com/wayve', 'wayve'),
   ('verkada', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/verkada', 'verkada'),
   ('klaviyo', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/klaviyo', 'klaviyo'),
   ('braze', 'greenhouse'::public.ats_kind, 'https://boards.greenhouse.io/braze', 'braze'),
