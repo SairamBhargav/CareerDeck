@@ -1166,9 +1166,13 @@ export async function findResumeByContentHash(contentHash: string): Promise<Resu
 interface MatchScoreRow {
   job_id: string;
   score: number;
-  components: Record<string, number> | null;
+  components: Record<string, unknown> | null;
   computed_at: string;
 }
+
+const numberOrUndefined = (value: unknown) => (typeof value === 'number' ? value : undefined);
+const stringList = (value: unknown) =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
 /**
  * Match scores for the postings on screen — §3.10.
@@ -1190,11 +1194,20 @@ export async function fetchMatchScores(jobIds: string[]): Promise<Map<string, Ma
 
   const scores = new Map<string, MatchScore>();
   for (const row of (data ?? []) as MatchScoreRow[]) {
-    const { coverage, ...components } = row.components ?? {};
+    const raw = row.components ?? {};
     scores.set(row.job_id, {
       score: row.score,
-      components,
-      coverage: typeof coverage === 'number' ? coverage : 1,
+      components: {
+        skills: numberOrUndefined(raw.skills),
+        field: numberOrUndefined(raw.field),
+        seniority: numberOrUndefined(raw.seniority),
+        location: numberOrUndefined(raw.location),
+        matched: stringList(raw.matched),
+        missing: stringList(raw.missing),
+        jobFamily: typeof raw.jobFamily === 'string' ? raw.jobFamily : undefined,
+        limited: raw.limited === true,
+      },
+      coverage: numberOrUndefined(raw.coverage) ?? 1,
       computedAt: row.computed_at,
     });
   }

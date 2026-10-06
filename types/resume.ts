@@ -79,10 +79,20 @@ export interface Resume {
  */
 export interface MatchScore {
   score: number;
+  /** Scorer v2 (20261010000000_match_score_v2.sql). */
   components: {
-    skillOverlap?: number;
+    /** Share of the posting's core skills the resume has, 0–1, with 60% scored as full marks. */
+    skills?: number;
+    /** The posting's field against the reader's degree and major, 0–1. */
+    field?: number;
     seniority?: number;
     location?: number;
+    /** The posting's skills the resume has, and the core ones it does not, as the posting labels them. */
+    matched: string[];
+    missing: string[];
+    jobFamily?: string;
+    /** The posting listed no core skills to compare, so the score is capped and an estimate. */
+    limited: boolean;
   };
   /**
    * How much of the formula had an input, 0–1. A posting that lists no skills is scored on

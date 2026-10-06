@@ -24,6 +24,7 @@ import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
 import { INDICATOR_TRAVEL, ReelsRefreshIndicator } from '@/components/reels/ReelsRefreshIndicator';
+import { MatchExplainSheet } from '@/components/reels/MatchExplainSheet';
 import { MATCH_RING_SIZE, ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
@@ -185,11 +186,23 @@ export default function ReelsScreen() {
     [pageHeight],
   );
 
-  const activeExplanation = useMemo(() => {
-    const job = jobs[Math.min(Math.max(activeIndex, 0), Math.max(jobs.length - 1, 0))];
-    const match = job ? matchMap.get(job.id) : undefined;
-    return match ? { ...match.components, coverage: match.coverage } : null;
-  }, [jobs, activeIndex, matchMap]);
+  const activeJob = jobs[Math.min(Math.max(activeIndex, 0), Math.max(jobs.length - 1, 0))] ?? null;
+  const activeMatch = activeJob ? matchMap.get(activeJob.id) ?? null : null;
+  const activeExplanation = useMemo(
+    () =>
+      activeMatch
+        ? {
+            skills: activeMatch.components.skills,
+            field: activeMatch.components.field,
+            seniority: activeMatch.components.seniority,
+            location: activeMatch.components.location,
+            limited: activeMatch.components.limited,
+          }
+        : null,
+    [activeMatch],
+  );
+  // Tapping the ring: the breakdown for whichever posting is on screen at that moment.
+  const [explainJob, setExplainJob] = useState<Job | null>(null);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setPageHeight(event.nativeEvent.layout.height);
@@ -371,9 +384,20 @@ export default function ReelsScreen() {
             styles.matchRingWrap,
             { top: insets.top + (TOGGLE_HEIGHT - MATCH_RING_SIZE) / 2 + MATCH_RING_DROP },
           ]}>
-          <ResumeMatchRing progress={matchProgress} explain={activeExplanation} />
+          <ResumeMatchRing
+            progress={matchProgress}
+            explain={activeExplanation}
+            onPress={() => setExplainJob(activeJob)}
+          />
         </View>
       ) : null}
+
+      <MatchExplainSheet
+        job={explainJob}
+        match={explainJob ? matchMap.get(explainJob.id) ?? null : null}
+        visible={explainJob !== null}
+        onClose={() => setExplainJob(null)}
+      />
 
       <JobDetailsModal
         job={detailsJob}

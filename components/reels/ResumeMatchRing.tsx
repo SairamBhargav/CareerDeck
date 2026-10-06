@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import Animated, {
   interpolate,
   interpolateColor,
@@ -26,6 +26,7 @@ const STROKE_WIDTH = 4.5;
 const RADIUS = (MATCH_RING_SIZE - STROKE_WIDTH) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const CENTER = MATCH_RING_SIZE / 2;
+const CAPTION_WIDTH = 88;
 
 // Fixed rather than themed, so a given score reads the same in light and dark.
 // Worth revisiting: red/amber/green is borrowed from status indicators, where red means
@@ -48,14 +49,17 @@ interface ResumeMatchRingProps {
    * behind it, the caption says which part of it is carrying the score.
    */
   explain?: MatchExplanation | null;
+  /** Opens the breakdown for the posting on screen. */
+  onPress?: () => void;
 }
 
 export interface MatchExplanation {
-  skillOverlap?: number;
+  skills?: number;
+  field?: number;
   seniority?: number;
   location?: number;
-  /** 0-1. How much of the formula had an input at all. */
-  coverage: number;
+  /** The posting listed no core skills, so the score is an estimate. */
+  limited: boolean;
 }
 
 /**
@@ -68,7 +72,7 @@ export interface MatchExplanation {
  * the word underneath is doing the real work: it says the figure is a percentage *of a
  * resume against this posting*, not a level of something filling up.
  */
-export function ResumeMatchRing({ progress, explain }: ResumeMatchRingProps) {
+export function ResumeMatchRing({ progress, explain, onPress }: ResumeMatchRingProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -104,9 +108,18 @@ export function ResumeMatchRing({ progress, explain }: ResumeMatchRingProps) {
     };
   });
 
+  // No score for this posting (nothing to compare it on): a dash, never "0%", which reads as a verdict.
+  const scored = explain !== null && explain !== undefined;
+
   return (
     <Animated.View style={[styles.wrap, entranceStyle]}>
-      <View style={styles.ring}>
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress || !scored}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={scored ? `Resume match ${label} percent. Shows why.` : 'No match score for this job'}
+        style={({ pressed }) => [styles.ring, pressed ? styles.pressed : null]}>
         <Svg width={MATCH_RING_SIZE} height={MATCH_RING_SIZE} style={StyleSheet.absoluteFill}>
           <Circle cx={CENTER} cy={CENTER} r={RADIUS} stroke={colors.border} strokeWidth={STROKE_WIDTH} fill="none" />
           <AnimatedCircle
@@ -123,8 +136,8 @@ export function ResumeMatchRing({ progress, explain }: ResumeMatchRingProps) {
           />
         </Svg>
 
-        <Text style={styles.label}>{label}%</Text>
-      </View>
+        <Text style={styles.label}>{scored ? `${label}%` : '—'}</Text>
+      </Pressable>
 
       <Text style={styles.caption} numberOfLines={1}>
         {captionFor(explain)}
@@ -142,18 +155,19 @@ export function ResumeMatchRing({ progress, explain }: ResumeMatchRingProps) {
  * It is a deliberate step short of the eventual design and a long step past "MATCH", which is
  * what a ring over a hash function was entitled to say.
  *
- * `THIN` is the case worth having: a posting that lists no skills is scored on seniority and
- * location alone and renormalized, so it can read 90 on a quarter of the formula. Saying so is
- * the difference between a confident number and a number that looks confident.
+ * `ESTIMATE` is the case worth having: a posting that lists no skills is scored on field and
+ * level alone (and capped for it). Saying so is the difference between a confident number and a
+ * number that looks confident. Tapping the ring gives the full sentence.
  */
 function captionFor(explain: MatchExplanation | null | undefined): string {
-  if (!explain) return 'MATCH';
-  if (explain.coverage < 0.6) return 'PARTIAL';
+  if (!explain) return 'NO SCORE';
+  if (explain.limited) return 'ESTIMATE';
+  if (typeof explain.field === 'number' && explain.field <= 0.35) return 'OFF FIELD';
 
   const candidates: { label: string; value: number | undefined }[] = [
-    { label: 'SKILLS', value: explain.skillOverlap },
+    { label: 'SKILLS', value: explain.skills },
+    { label: 'FIELD', value: explain.field },
     { label: 'LEVEL', value: explain.seniority },
-    { label: 'PLACE', value: explain.location },
   ];
 
   let best: { label: string; value: number } | null = null;
@@ -182,6 +196,9 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pressed: {
+    opacity: 0.7,
+  },
   // No text shadow on either of these. A soft dark halo was standing in for a backing
   // plate, but at this size it fattens the strokes into a smudge instead of lifting the
   // text — the reel's own background is close enough to the page that the palette's
@@ -193,8 +210,13 @@ const useStyles = makeStyles((colors) => ({
     color: colors.text,
     letterSpacing: -0.3,
   },
+  // Wider than the ring and centred under it, so "ESTIMATE" and "OFF FIELD" are not clipped to
+  // the ring's 48pt; overflow is visible because the wrap itself stays ring-sized.
   caption: {
     marginTop: 2,
+    width: CAPTION_WIDTH,
+    marginHorizontal: (MATCH_RING_SIZE - CAPTION_WIDTH) / 2,
+    textAlign: 'center',
     fontSize: fontSize.caption,
     fontWeight: '700',
     letterSpacing: 0.6,
