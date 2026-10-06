@@ -1,18 +1,31 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { GoalRing } from '@/components/activity/GoalRing';
 import { IconButton } from '@/components/common/IconButton';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing, type Palette } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import type { WeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { daysLeftInWeek } from '@/utils/week';
 
-/** Per-column stagger on the history strip. */
-const STAGGER_MS = 40;
+/** Per-bar stagger as the history strip grows in. */
+const STAGGER_MS = 70;
+/** The card shows the last few weeks; the hook keeps more for the streak. */
+const VISIBLE_WEEKS = 5;
+const BAR_HEIGHT = 30;
+/** A missed week still reads as a week, not a gap. */
+const MIN_BAR = 0.32;
 
 interface WeeklyGoalCardProps {
   goal: WeeklyGoal;
@@ -75,41 +88,74 @@ export function WeeklyGoalCard({ goal, onEditGoal }: WeeklyGoalCardProps) {
       </View>
 
       <View style={styles.history} accessibilityRole="summary" accessibilityLabel={historyLabel(goal)}>
-        {goal.history.map((week, index) => (
-          <Animated.View
-            key={week.key}
-            entering={FadeInDown.duration(260).delay(index * STAGGER_MS)}
-            style={styles.week}>
-            <View style={styles.trackWrap}>
-              <View
-                style={[
-                  styles.track,
-                  {
-                    height: `${Math.min(week.count / Math.max(goal.target, 1), 1) * 100}%`,
-                    backgroundColor: week.met ? colors.goalMet : colors.borderStrong,
-                  },
-                  // An empty week still needs to read as a week rather than as a gap.
-                  week.count === 0 ? styles.trackEmpty : null,
-                ]}
+        {goal.history.slice(-VISIBLE_WEEKS).map((week, index, shown) => {
+          const isNow = index === shown.length - 1;
+          return (
+            <View key={week.key} style={styles.week}>
+              <WeekBar
+                fill={Math.max(MIN_BAR, Math.min(week.count / Math.max(goal.target, 1), 1))}
+                tone={barTone(week.met, isNow, week.count, colors)}
+                delay={index * STAGGER_MS}
               />
+              <Text style={[styles.weekLabel, isNow ? styles.weekLabelNow : null]}>
+                {isNow ? 'This wk' : `W${index + 1}`}
+              </Text>
             </View>
-            <Text style={[styles.weekLabel, index === goal.history.length - 1 ? styles.weekLabelNow : null]}>
-              {week.label}
-            </Text>
-          </Animated.View>
-        ))}
+          );
+        })}
       </View>
 
       <View style={styles.reward}>
-        <View style={styles.credits}>
-          <Ionicons name="flash" size={13} color={colors.autoApply} />
-          <Text style={styles.creditsText}>
-            {autoApplyCredits} Auto {autoApplyCredits === 1 ? 'Apply' : 'Applies'} left
+        <Text style={styles.creditsText}>
+          {autoApplyCredits} Auto {autoApplyCredits === 1 ? 'Apply' : 'Applies'} left
+        </Text>
+
+        <View style={[styles.rewardPill, goal.met ? styles.rewardPillMet : null]}>
+          <Text style={[styles.rewardNote, goal.met ? styles.rewardNoteMet : null]}>
+            {rewardNoteFor(goal, awarded)}
           </Text>
         </View>
-
-        <Text style={styles.rewardNote}>{rewardNoteFor(goal, awarded)}</Text>
       </View>
+    </View>
+  );
+}
+
+interface BarTone {
+  color: string;
+  opacity: number;
+}
+
+/**
+ * Past weeks that met the goal in a lighter green, this week in the full one, missed weeks
+ * in grey. This week, before it is met, shows its progress in a faint green.
+ */
+function barTone(met: boolean, isNow: boolean, count: number, colors: Palette): BarTone {
+  if (isNow) return count > 0 ? { color: colors.goalMet, opacity: met ? 1 : 0.45 } : { color: colors.border, opacity: 1 };
+  return met ? { color: colors.goalMet, opacity: 0.7 } : { color: colors.border, opacity: 1 };
+}
+
+/** One week's bar, growing up from its baseline when the card appears. */
+function WeekBar({ fill, tone, delay }: { fill: number; tone: BarTone; delay: number }) {
+  const styles = useStyles();
+  const reduced = useReducedMotion();
+  const grow = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    if (reduced) return;
+    grow.set(withDelay(delay, withTiming(1, { duration: 420, easing: Easing.bezier(0.23, 1, 0.32, 1) })));
+  }, [reduced, delay, grow]);
+
+  const style = useAnimatedStyle(() => ({ transform: [{ scaleY: grow.get() }] }));
+
+  return (
+    <View style={styles.barSlot}>
+      <Animated.View
+        style={[
+          styles.bar,
+          { height: BAR_HEIGHT * fill, backgroundColor: tone.color, opacity: tone.opacity, transformOrigin: 'bottom' },
+          style,
+        ]}
+      />
     </View>
   );
 }
@@ -150,10 +196,12 @@ const useStyles = makeStyles((colors) => ({
   card: {
     gap: spacing.lg,
     padding: spacing.lg,
-    borderRadius: radius.lg,
+    borderRadius: radius.lg + 2,
     backgroundColor: colors.surface,
+    // A touch darker than the app's default card edge, so the card holds its shape on white.
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
+    ...colors.shadowSoft,
   },
   top: {
     flexDirection: 'row',
@@ -165,14 +213,15 @@ const useStyles = makeStyles((colors) => ({
     gap: 2,
   },
   headline: {
-    fontSize: fontSize.body,
-    fontWeight: '700',
+    fontSize: fontSize.title - 1,
+    fontWeight: '800',
     color: colors.text,
     letterSpacing: -0.3,
   },
   detail: {
     fontSize: fontSize.small,
-    color: colors.textTertiary,
+    lineHeight: 18,
+    color: colors.textSecondary,
   },
   streak: {
     flexDirection: 'row',
@@ -201,24 +250,17 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     gap: 5,
   },
-  trackWrap: {
+  barSlot: {
     width: '100%',
-    height: 34,
+    height: BAR_HEIGHT,
     justifyContent: 'flex-end',
-    backgroundColor: colors.backgroundMuted,
-    borderRadius: radius.md - 6,
-    overflow: 'hidden',
   },
-  track: {
+  bar: {
     width: '100%',
-    borderRadius: radius.md - 6,
-  },
-  trackEmpty: {
-    height: 3,
-    backgroundColor: colors.border,
+    borderRadius: 6,
   },
   weekLabel: {
-    fontSize: 9.5,
+    fontSize: 10,
     fontWeight: '600',
     color: colors.textTertiary,
   },
@@ -230,24 +272,28 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  credits: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   creditsText: {
     fontSize: fontSize.small,
     fontWeight: '700',
     color: colors.text,
   },
+  rewardPill: {
+    flexShrink: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.backgroundMuted,
+  },
+  rewardPillMet: {
+    backgroundColor: colors.goalMetSurface,
+  },
   rewardNote: {
     fontSize: fontSize.caption + 1,
-    color: colors.textTertiary,
-    flexShrink: 1,
-    textAlign: 'right',
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  rewardNoteMet: {
+    color: colors.goalMet,
   },
 }));

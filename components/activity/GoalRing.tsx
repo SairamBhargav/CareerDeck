@@ -5,8 +5,8 @@ import { Circle, Svg } from 'react-native-svg';
 import { fontSize } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 
-const SIZE = 84;
-const STROKE_WIDTH = 8;
+const SIZE = 68;
+const STROKE_WIDTH = 7;
 const RADIUS = (SIZE - STROKE_WIDTH) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const CENTER = SIZE / 2;
@@ -71,11 +71,10 @@ export function GoalRing({ count, target, progress, met }: GoalRingProps) {
         />
       </Svg>
 
-      <Text style={styles.value}>
-        {count}
-        <Text style={styles.target}>/{target}</Text>
+      {/* One figure, "7/7", green once the week is done. "This week" is in the label. */}
+      <Text style={[styles.value, met ? styles.valueMet : null]}>
+        {count}/{target}
       </Text>
-      <Text style={styles.caption}>this week</Text>
     </View>
   );
 }
@@ -88,24 +87,12 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: 'center',
   },
   value: {
-    fontSize: fontSize.heading,
-    fontWeight: '700',
+    fontSize: fontSize.title,
+    fontWeight: '800',
     color: colors.text,
-    letterSpacing: -0.6,
-    lineHeight: 24,
+    letterSpacing: -0.4,
   },
-  // Lighter than the figure beside it: the target is context for the count, not a
-  // second number competing with it.
-  target: {
-    fontSize: fontSize.small,
-    fontWeight: '600',
-    color: colors.textTertiary,
-  },
-  caption: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: colors.textTertiary,
+  valueMet: {
+    color: colors.goalMet,
   },
 }));
