@@ -3,6 +3,8 @@ export interface User {
   firstName: string;
   lastName: string;
   displayName: string;
+  /** The generated pseudonym other people see (`profiles.handle`); also seeds the avatar. */
+  handle: string;
   school: string;
   major: string;
   graduationYear: number;

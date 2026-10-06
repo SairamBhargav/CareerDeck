@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { UserAvatar } from '@/components/common/UserAvatar';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { gifById } from '@/data/mockGifs';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -63,7 +64,7 @@ interface CommentRowProps {
  * of an identity for this product: it says whether the person answering knows what they are
  * talking about, without saying who they are.
  *
- * The avatar therefore carries a letter taken from the pseudonym rather than from a name, which
+ * The avatar is therefore a blobatar seeded from the pseudonym rather than a face or a name, which
  * is also why it reads as a shape rather than as a person.
  */
 export function CommentRow({
@@ -123,8 +124,6 @@ export function CommentRow({
     });
 
   const replyTargetLabel = comment.isYou ? 'your comment' : comment.authorHandle;
-  // First letter of the pseudonym. Not a name's initial, because there is no name.
-  const initial = comment.authorHandle.charAt(0).toUpperCase();
 
   return (
     <View style={styles.wrapper}>
@@ -149,20 +148,7 @@ export function CommentRow({
             comment.pending ? styles.pendingRow : null,
             slideStyle,
           ]}>
-          <View
-            style={[
-              styles.avatar,
-              {
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                backgroundColor: comment.authorColor,
-              },
-            ]}>
-            <Text style={[styles.avatarText, isReply ? styles.avatarTextReply : null]}>
-              {initial}
-            </Text>
-          </View>
+          <UserAvatar handle={comment.authorHandle} size={size} />
 
           <View style={styles.body}>
             <View style={styles.meta}>
@@ -302,19 +288,6 @@ const useStyles = makeStyles((colors) => ({
   },
   rowReply: {
     paddingLeft: REPLY_INDENT,
-  },
-  avatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    // Always light: this sits on the commenter's own colour, not a themed surface.
-    color: '#FFFFFF',
-    fontSize: fontSize.caption,
-    fontWeight: '700',
-  },
-  avatarTextReply: {
-    fontSize: 9,
   },
   body: {
     flex: 1,

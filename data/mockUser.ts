@@ -5,6 +5,7 @@ export const mockUser: User = {
   firstName: 'Aswaanth',
   lastName: 'Karuppasamy',
   displayName: 'Aswaanth Karuppasamy',
+  handle: 'quiet-otter-17',
   school: 'University of Texas at Dallas',
   major: 'Computer Science',
   graduationYear: 2027,

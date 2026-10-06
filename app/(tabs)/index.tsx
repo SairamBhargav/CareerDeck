@@ -26,7 +26,7 @@ import { useDeckProfile, useJobFeed, useSuggestedCompanies, type JobSort } from 
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Company, Job, StoryGroup } from '@/types';
-import { greetingNameOf, initialsOf } from '@/utils/profile';
+import { greetingNameOf } from '@/utils/profile';
 
 /** Fade for the page's first paint, once the feed resolves. */
 const REVEAL_MS = 260;
@@ -96,7 +96,7 @@ export default function HomeScreen() {
       <View style={styles.top}>
         <HomeHeader
           firstName={greetingNameOf(user)}
-          initials={initialsOf(user)}
+          handle={user?.handle || null}
           onProfilePress={() => router.push('/profile')}
         />
 

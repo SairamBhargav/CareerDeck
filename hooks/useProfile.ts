@@ -30,7 +30,7 @@ interface PreferencesPatch {
   weeklyGoal?: number;
 }
 
-const PROFILE_COLUMNS = 'id, first_name, last_name, school_name_raw, major, graduation_year, location';
+const PROFILE_COLUMNS = 'id, handle, first_name, last_name, school_name_raw, major, graduation_year, location';
 const PREFERENCE_COLUMNS = 'preferred_roles, preferred_locations, weekly_goal';
 
 export function profileKey(userId: string) {
@@ -71,6 +71,7 @@ async function fetchProfile(userId: string): Promise<Profile> {
       // exactly this expression, and deriving it here keeps an optimistic edit and a
       // server round trip producing the same string.
       displayName: `${firstName} ${lastName}`.trim(),
+      handle: profile.handle ?? '',
       // The free-text school, never the verified one. `school_id` is set by §3.2's
       // verification flow and drives the comment badge; this is what they typed.
       school: profile.school_name_raw ?? '',

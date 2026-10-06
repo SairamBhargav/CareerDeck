@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { UserAvatar } from '@/components/common/UserAvatar';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { AppNotification } from '@/types';
@@ -74,12 +75,8 @@ export function NotificationCard({ entry, jobTitle, companyName, onPress }: Noti
             />
           </View>
         ) : (
-          <View style={[styles.avatar, { backgroundColor: entry.actorColor ?? colors.accent }]}>
-            {/* A letter off the pseudonym, not initials off a name — there is no name. */}
-            <Text style={styles.avatarText}>
-              {(entry.actorHandle ?? '?').charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          // The same creature this person has beside their comments — seeded from the pseudonym.
+          <UserAvatar handle={entry.actorHandle} size={34} />
         )}
 
         <View style={styles.headText}>
@@ -152,11 +149,6 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.backgroundMuted,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-  },
-  avatarText: {
-    fontSize: fontSize.small,
-    fontWeight: '700',
-    color: colors.textOnBrand,
   },
   headText: {
     flex: 1,

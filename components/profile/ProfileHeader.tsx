@@ -1,13 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { AnimatedBlobatar } from '@blobatar/react-native/animated';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
 import { AnimatedCount } from '@/components/common/AnimatedCount';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { User } from '@/types';
-import { initialsOf, studyLineOf } from '@/utils/profile';
+import { studyLineOf } from '@/utils/profile';
 
 const AVATAR_SIZE = 84;
 const RING_STROKE = 3;
@@ -58,8 +59,8 @@ export function ProfileHeader({
   // A brand-new account has an email and nothing else — §3.2 asks for nothing more at
   // signup. Each line below appears only once there is something to put in it, rather
   // than rendering an empty row or "Class of 0".
-  const initials = initialsOf(user);
   const studyLine = studyLineOf(user);
+  const reduceMotion = useReducedMotion();
 
   /*
    * The badge, or a way to get one. Never both, and never an empty space where one would be.
@@ -89,12 +90,10 @@ export function ProfileHeader({
           </Svg>
         ) : null}
 
+        {/* The one large avatar in the app, so the one that breathes and blinks — unless the
+            phone asks for reduced motion. Seeded from the pseudonym, as everywhere else. */}
         <View style={styles.avatar}>
-          {initials ? (
-            <Text style={styles.avatarText}>{initials}</Text>
-          ) : (
-            <Ionicons name="person" size={34} color={colors.accentText} />
-          )}
+          <AnimatedBlobatar name={user?.handle || 'careerdeck'} size={AVATAR_SIZE * 0.86} animate={!reduceMotion} />
         </View>
 
         {onStreak ? (
@@ -237,15 +236,10 @@ const useStyles = makeStyles((colors) => ({
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: radius.pill,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.backgroundMuted,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarText: {
-    color: colors.accentText,
-    fontSize: fontSize.heading + 2,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    overflow: 'hidden',
   },
   // Sits on the ring at the bottom, the way a badge sits on an avatar elsewhere —
   // close enough to read as part of it rather than as a floating chip.
