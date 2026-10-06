@@ -5,9 +5,9 @@ import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
-import { SkillChip } from '@/components/common/SkillChip';
 import { ApplicationModal } from '@/components/jobs/ApplicationModal';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
+import { JobSectionsView } from '@/components/jobs/JobSectionsView';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
@@ -64,23 +64,7 @@ export default function JobDetailScreen() {
         <Text style={styles.title}>{job.title}</Text>
         <JobMetadata job={job} emphasizeSalary />
 
-        <Text style={styles.sectionTitle}>About the role</Text>
-        <Text style={styles.body}>{job.description}</Text>
-
-        <Text style={styles.sectionTitle}>What they look for</Text>
-        {job.requirements.map((requirement) => (
-          <View key={requirement} style={styles.bulletRow}>
-            <Text style={styles.bullet}>{'•'}</Text>
-            <Text style={styles.body}>{requirement}</Text>
-          </View>
-        ))}
-
-        <Text style={styles.sectionTitle}>Skills</Text>
-        <View style={styles.skills}>
-          {job.skills.map((skill) => (
-            <SkillChip key={skill} label={skill} />
-          ))}
-        </View>
+        <JobSectionsView job={job} />
 
         <View style={styles.actions}>
           <PrimaryButton label="Apply" onPress={() => setApplyVisible(true)} />
@@ -138,32 +122,6 @@ const useStyles = makeStyles((colors) => ({
     color: colors.text,
     letterSpacing: -0.8,
     marginTop: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.title,
-    fontWeight: '700',
-    color: colors.text,
-    marginTop: spacing.xl,
-  },
-  body: {
-    flex: 1,
-    fontSize: fontSize.body,
-    lineHeight: 22,
-    color: colors.textSecondary,
-  },
-  bulletRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  bullet: {
-    fontSize: fontSize.body,
-    lineHeight: 22,
-    color: colors.textTertiary,
-  },
-  skills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
   },
   actions: {
     gap: spacing.sm,

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -21,8 +21,11 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Job } from '@/types';
 import { hexToRgba } from '@/utils/color';
 import { formatPostedAt } from '@/utils/format';
+import { parseJobSections } from '@/utils/jobSections';
 
 const MAX_SKILL_CHIPS = 6;
+/** A long title wraps to three lines at most; the rest is in the sheet. */
+const MAX_TITLE_LINES = 3;
 /** Width reserved on the right so caption text never runs under the action rail. */
 const RAIL_RESERVED_WIDTH = 92;
 /** Lifts the action rail (and Read more, which stays level with it) off the very bottom edge. */
@@ -31,11 +34,6 @@ const RAIL_LIFT = spacing.sm;
 const CONTENT_BOTTOM_GAP = spacing.xl;
 /** Must match `description`'s own lineHeight — it's what one clamped line gives back. */
 const DESCRIPTION_LINE_HEIGHT = 22;
-/**
- * A blurb this short is a stand-in (the employer's page could not be read), not a description.
- * It is set larger so the caption still reads as a caption rather than a stray line up top.
- */
-const SHORT_DESCRIPTION = 260;
 /** Never clamp the blurb below this, however tight the card gets. */
 const MIN_DESCRIPTION_LINES = 2;
 
@@ -75,6 +73,15 @@ export function JobReelCard({
   const styles = useStyles();
 
   const skills = job.skills.slice(0, MAX_SKILL_CHIPS);
+  /*
+   * The caption is the posting's own summary — one to three of the employer's sentences about
+   * the role, 130–300 characters — rather than whatever the raw text opened with. That is what
+   * makes every reel carry about the same amount of copy. utils/jobSections.ts.
+   */
+  const sections = useMemo(
+    () => parseJobSections(job.description, job),
+    [job],
+  );
   // How tall the caption's box actually is: the rail's own lift, plus extra room so the
   // text visibly stops short of the rail line instead of running right up to it.
   const availableContentHeight = height - paddingTop - paddingBottom - RAIL_LIFT - CONTENT_BOTTOM_GAP;
@@ -183,20 +190,31 @@ export function JobReelCard({
                 </View>
               </View>
 
-              <Text style={styles.title}>{job.title}</Text>
+              <Text style={styles.title} numberOfLines={MAX_TITLE_LINES}>
+                {job.title}
+              </Text>
 
               <JobMetadata job={job} emphasizeSalary />
 
               <View style={styles.descriptionBlock}>
                 <Text
-                  style={[
-                    styles.description,
-                    job.description.length < SHORT_DESCRIPTION ? styles.descriptionShort : null,
-                  ]}
+                  style={styles.description}
                   numberOfLines={descriptionLines}
                   onLayout={capture('description')}>
-                  {job.description}
+                  {sections.summary}
                 </Text>
+
+                {/* A posting whose employer page could not be read: say what the listing did. */}
+                {sections.facts.length > 0 ? (
+                  <View style={styles.facts}>
+                    {sections.facts.map((fact) => (
+                      <Text key={fact.label} style={styles.fact} numberOfLines={1}>
+                        <Text style={styles.factLabel}>{fact.label} </Text>
+                        {fact.value}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
 
                 {/* On every card, not just clamped ones: the sheet always carries the
                     full requirements list, which the reel never shows at all. */}
@@ -311,14 +329,23 @@ const useStyles = makeStyles((colors) => ({
     lineHeight: 22,
     color: colors.textSecondary,
   },
-  // Never clamped (it is too short to overflow), so its lineHeight never enters the clamp math.
-  descriptionShort: {
-    fontSize: fontSize.title,
-    lineHeight: 26,
+  facts: {
+    gap: 2,
   },
+  fact: {
+    fontSize: fontSize.small,
+    lineHeight: 18,
+    color: colors.textSecondary,
+  },
+  factLabel: {
+    fontWeight: '700',
+    color: colors.text,
+  },
+  // One row, clipped: a second row of chips is what pushed the caption past the rail.
   skills: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
     gap: spacing.sm,
     marginTop: spacing.xs,
   },

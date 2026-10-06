@@ -120,21 +120,27 @@ async function readWorkday(url: URL): Promise<PostingDetail | null> {
   }));
 }
 
-/** `jobs.smartrecruiters.com/{company}/{id}[-slug]` → the public postings API. */
-async function readSmartRecruiters(url: URL): Promise<PostingDetail | null> {
-  const [company, idSlug] = url.pathname.split('/').filter(Boolean);
-  const id = idSlug?.match(/^\d+/)?.[0];
-  if (!company || !id) return null;
+/**
+ * Oracle Cloud HCM: `{pod}.oraclecloud.com/hcmUI/CandidateExperience/{lang}/sites/{site}/job/{id}`
+ * → the requisition API the candidate site itself calls. The corporate and EEO blurbs come back
+ * as their own fields and are left out: they are the same paragraphs on every posting.
+ */
+async function readOracle(url: URL): Promise<PostingDetail | null> {
+  const match = url.pathname.match(/\/sites\/([^/]+)\/job\/(\d+)/);
+  if (!match) return null;
+  const [, site, id] = match;
 
+  const finder = `ById;Id="${id}",siteNumber=${site}`;
   const body = await json(
-    `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(company)}/postings/${id}`,
+    `https://${url.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails` +
+      `?expand=all&onlyData=true&finder=${encodeURIComponent(finder)}`,
   );
-  const sections = asRecord(asRecord(body.jobAd).sections);
-  const html = ['jobDescription', 'qualifications', 'additionalInformation', 'companyDescription']
-    .map((key) => asRecord(sections[key]))
-    .filter((section) => str(section.text))
-    .map((section) => `<h3>${str(section.title) ?? ''}</h3>${str(section.text)}`)
-    .join('\n');
+  const item = asRecord(asArray(body.items)[0]);
+  const html = [
+    str(item.ExternalDescriptionStr),
+    str(item.ExternalResponsibilitiesStr) ? `<h3>Responsibilities</h3>${str(item.ExternalResponsibilitiesStr)}` : null,
+    str(item.ExternalQualificationsStr) ? `<h3>Qualifications</h3>${str(item.ExternalQualificationsStr)}` : null,
+  ].filter(Boolean).join('\n');
   return html ? { descriptionHtml: html, descriptionText: null, salary: null } : null;
 }
 
@@ -155,14 +161,26 @@ async function readWorkable(url: URL): Promise<PostingDetail | null> {
 }
 
 /**
- * Anything else: the page's own schema.org `JobPosting`. iCIMS and most enterprise career sites
- * publish one for search engines; single-page apps that render client-side do not, and those
- * return null.
+ * Anything else: the posting page itself, read for whichever of the machine-readable forms it
+ * publishes, in the order they are most trustworthy:
+ *
+ *   1. a schema.org `JobPosting` in JSON-LD — iCIMS and most enterprise career sites;
+ *   2. the same vocabulary as microdata (`itemprop="description"`) — SmartRecruiters and SAP
+ *      SuccessFactors, which between them carry hundreds of employers;
+ *   3. a Next.js page's `__NEXT_DATA__` — Rippling;
+ *   4. a React Server Components stream (`self.__next_f`) — TikTok.
+ *
+ * A single-page app that fetches its posting after load (ByteDance) has none of these and
+ * returns null, as it always did.
  */
-async function readJsonLd(url: URL): Promise<PostingDetail | null> {
+async function readPage(url: URL): Promise<PostingDetail | null> {
   const response = await politeFetch({ url: url.toString(), headers: { accept: 'text/html' } });
   const page = response.body ?? '';
+  const html = fromJsonLd(page) ?? fromMicrodata(page) ?? fromNextData(page) ?? fromServerComponents(page);
+  return html ? { descriptionHtml: html, descriptionText: null, salary: null } : null;
+}
 
+function fromJsonLd(page: string): string | null {
   for (const match of page.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     let parsed: unknown;
     try {
@@ -174,9 +192,108 @@ async function readJsonLd(url: URL): Promise<PostingDetail | null> {
     const posting = nodes.find((node) => String(node['@type']).includes('JobPosting'));
     const description = str(posting?.description);
     // Some sites entity-escape the HTML inside the JSON, as Greenhouse does in its API.
-    if (description) return { descriptionHtml: decodeEntities(description), descriptionText: null, salary: null };
+    if (description) return decodeEntities(description);
   }
   return null;
+}
+
+/**
+ * schema.org microdata. `description` usually wraps the whole posting; where a site marks up
+ * responsibilities and qualifications as siblings instead, they are appended under headings.
+ */
+function fromMicrodata(page: string): string | null {
+  const description = itempropHtml(page, 'description');
+  const parts = [description];
+  for (const [prop, heading] of [['responsibilities', 'Responsibilities'], ['qualifications', 'Qualifications']]) {
+    const section = itempropHtml(page, prop!);
+    if (section && !description?.includes(section)) parts.push(`<h3>${heading}</h3>${section}`);
+  }
+  const html = parts.filter(Boolean).join('\n');
+  return htmlToText(html).length >= MIN_REAL_DESCRIPTION ? html : null;
+}
+
+/** The inner HTML of the first element carrying `itemprop="{prop}"`, by counting its own tag. */
+function itempropHtml(page: string, prop: string): string | null {
+  const open = new RegExp(`<(div|span|section|article)\\b[^>]*\\bitemprop="${prop}"[^>]*>`, 'i').exec(page);
+  if (!open) return null;
+  const tag = open[1]!.toLowerCase();
+  const tags = new RegExp(`<(/?)${tag}\\b[^>]*>`, 'gi');
+  tags.lastIndex = open.index + open[0].length;
+  let depth = 1;
+  for (let match = tags.exec(page); match; match = tags.exec(page)) {
+    depth += match[1] ? -1 : 1;
+    if (depth === 0) return page.slice(open.index + open[0].length, match.index);
+  }
+  return null;
+}
+
+/** Next.js pages: Rippling's posting is `pageProps.apiData.jobPost.description.role`. */
+function fromNextData(page: string): string | null {
+  const match = page.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!match) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(match[1]!);
+  } catch {
+    return null;
+  }
+  const post = asRecord(asRecord(asRecord(asRecord(data).props).pageProps).apiData).jobPost;
+  const description = asRecord(asRecord(post).description);
+  return str(description.role) ?? null;
+}
+
+/**
+ * React Server Components, as TikTok's career site streams them: the page is a series of
+ * `self.__next_f.push([1, "..."])` chunks whose concatenation is a list of rows. Each posting
+ * section is a heading paragraph followed by a body paragraph, and a long body is a reference
+ * (`"$33"`) to a text row (`33:T<hex length>,<text>`) instead of an inline string.
+ */
+function fromServerComponents(page: string): string | null {
+  let flight = '';
+  for (const chunk of page.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) {
+    try {
+      flight += JSON.parse(chunk[1]!) as string;
+    } catch {
+      return null;
+    }
+  }
+  if (!flight) return null;
+
+  const textRows = new Map<string, string>();
+  for (const row of flight.matchAll(/(?:^|\n)([0-9a-f]+):T([0-9a-f]+),/g)) {
+    const start = row.index + row[0].length;
+    textRows.set(row[1]!, flight.slice(start, start + parseInt(row[2]!, 16)));
+  }
+
+  const sections: string[] = [];
+  const pair = /"children":"([A-Z][^"\\]{2,60})"\}\],\["\$","p",null,\{[^{}]*?"children":("(?:[^"\\]|\\.)*")/g;
+  for (const match of flight.matchAll(pair)) {
+    let body: string;
+    try {
+      body = JSON.parse(match[2]!) as string;
+    } catch {
+      continue;
+    }
+    const resolved = /^\$[0-9a-f]+$/.test(body) ? textRows.get(body.slice(1)) : body;
+    if (!resolved) continue;
+    // TikTok files its whole "About the Team … Responsibilities: …" text under the first
+    // heading; repeating that heading above it would label the team blurb as duties.
+    const hasOwnHeadings = /(^|\n)(About|Responsibilities|Qualifications|Minimum Qualifications)\b[^\n]{0,40}:?\s*\n/i.test(resolved);
+    sections.push(`${hasOwnHeadings ? '' : `<h3>${match[1]}</h3>`}${textToHtml(resolved)}`);
+  }
+  const html = sections.join('\n');
+  return htmlToText(html).length >= MIN_REAL_DESCRIPTION ? html : null;
+}
+
+/** Plain text with newlines and `- ` bullets, as HTML that htmlToText reads back faithfully. */
+function textToHtml(text: string): string {
+  const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => (/^[-•*]\s+/.test(line) ? `<li>${escape(line.replace(/^[-•*]\s+/, ''))}</li>` : `<p>${escape(line)}</p>`))
+    .join('');
 }
 
 function asArray(value: unknown): unknown[] {
@@ -198,12 +315,12 @@ export async function fetchPostingDetail(applyUrl: string): Promise<PostingDetai
   if (host.endsWith('lever.co')) return readLever(url);
   if (host === 'jobs.ashbyhq.com') return readAshby(url);
   if (host.endsWith('myworkdayjobs.com')) return readWorkday(url);
-  if (host === 'jobs.smartrecruiters.com') return readSmartRecruiters(url);
   if (host === 'apply.workable.com') return readWorkable(url);
-  // Oracle Cloud HCM renders client-side (no JSON-LD to read), and its per-tenant hosts trip
-  // antivirus phishing heuristics on developer machines. Nothing to gain by requesting them.
-  if (host.endsWith('oraclecloud.com')) return null;
-  return readJsonLd(url);
+  // Its per-tenant hosts can trip antivirus phishing heuristics on a developer machine; the
+  // nightly runner is unaffected. SmartRecruiters has no reader of its own any more: its API
+  // host's robots.txt disallows everything, while the posting page allows it (readPage).
+  if (host.endsWith('oraclecloud.com')) return readOracle(url);
+  return readPage(url);
 }
 
 /** Forgets cached Ashby boards between runs, so a long-lived process does not serve stale ones. */
@@ -246,8 +363,7 @@ export async function checkPostingLive(applyUrl: string): Promise<Liveness> {
     }
     if (host.endsWith('myworkdayjobs.com')) return await workdayLive(url);
     if (
-      host.endsWith('greenhouse.io') || host.endsWith('lever.co') ||
-      host === 'jobs.smartrecruiters.com' || host === 'apply.workable.com'
+      host.endsWith('greenhouse.io') || host.endsWith('lever.co') || host === 'apply.workable.com'
     ) {
       return (await fetchPostingDetail(applyUrl)) ? 'live' : 'unknown';
     }
