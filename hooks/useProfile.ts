@@ -128,6 +128,8 @@ export function useProfile(userId: string | null) {
     // A new major changes what the Relevant feed ranks on; the next Relevant page is a new session.
     void queryClient.invalidateQueries({ queryKey: ['deckProfile'] });
     void queryClient.invalidateQueries({ queryKey: ['feed', 'all', 'recommended'] });
+    // Locations and major are both match-score inputs, and the scores ride on the Deck's pages.
+    void queryClient.invalidateQueries({ queryKey: ['feed', 'following'] });
   }, [queryClient, key]);
 
   const identityMutation = useMutation({

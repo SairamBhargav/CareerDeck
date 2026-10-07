@@ -4,7 +4,6 @@ import { useCallback, useMemo } from 'react';
 import {
   confirmResumeProfile,
   deleteResume,
-  fetchMatchScores,
   fetchResumeUrl,
   fetchResumes,
   parseResume,
@@ -13,7 +12,7 @@ import {
 } from '@/lib/api';
 import { isServiceConfigured } from '@/lib/service';
 import type { UploadedResume } from '@/lib/api';
-import type { MatchScore, Resume, ResumeSeniority } from '@/types';
+import type { Resume, ResumeSeniority } from '@/types';
 
 /**
  * Resumes — README §3.9, moved out of `CareerDeckContext` and into a real read.
@@ -97,16 +96,16 @@ export function useResumes(userId: string | null): ResumeState {
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: key });
-    /*
-     * Every cached match score was computed against the resume that just changed. The database
-     * has already dropped them (`invalidate_match_scores`), so this is only the client catching
-     * up — but without it the ring keeps showing yesterday's number until something else
-     * happens to refetch.
-     */
-    await queryClient.invalidateQueries({ queryKey: ['match', 'scores'] });
     // The resume's skills and field of study feed the Relevant ranking too.
     await queryClient.invalidateQueries({ queryKey: ['deckProfile'] });
+    /*
+     * Every match score on a loaded Deck page was computed against the resume that just changed.
+     * The database has already dropped them (`invalidate_match_scores`), and the scores ride on
+     * the feed pages, so refetching both Deck feeds is what moves the ring. Without it the ring
+     * keeps showing yesterday's number until something else happens to refetch.
+     */
     await queryClient.invalidateQueries({ queryKey: ['feed', 'all', 'recommended'] });
+    await queryClient.invalidateQueries({ queryKey: ['feed', 'following'] });
   }, [queryClient, key]);
 
   const uploadMutation = useMutation({
@@ -235,39 +234,4 @@ export function useResumePreviewUrls(
     });
     return map;
   }, [resumes, urls]);
-}
-
-/**
- * Match scores for whatever is on screen — README §3.10.
- *
- * Deliberately the same shape as `useCommentCounts`, because it is the same decision one phase
- * later: a per-reader number that would make every feed page uncacheable if it rode on the card.
- *
- * The one difference worth knowing about is that this read *writes*. `match_scores()` computes
- * and stores the pairs it does not already hold, so the first scroll through a feed is doing
- * real work and the second is a cache hit. That is §3.10's "recomputed lazily on feed build for
- * the candidate set only, never for the whole corpus" — the alternative is scoring 30,800
- * postings against every account for the handful anyone will ever see.
- *
- * An empty map is the honest answer for a user with no parsed resume, and the ring reads that
- * as "hide" rather than as 0%.
- */
-export function useMatchScores(jobIds: string[]): Map<string, MatchScore> {
-  // Sorted and joined so a re-render producing an equal-but-new array does not refetch.
-  const key = useMemo(() => [...jobIds].sort().join(','), [jobIds]);
-
-  const query = useQuery({
-    queryKey: ['match', 'scores', key],
-    queryFn: () => fetchMatchScores(jobIds),
-    enabled: jobIds.length > 0,
-    /*
-     * Longer than the comment counts' minute. A score moves only when the resume or the
-     * preferences move, and both of those invalidate this key explicitly — so re-reading on a
-     * timer would be a request per scroll for a number that is already correct.
-     */
-    staleTime: 10 * 60_000,
-  });
-
-  const empty = useMemo(() => new Map<string, MatchScore>(), []);
-  return query.data ?? empty;
 }

@@ -60,8 +60,12 @@ export interface JobViewerState {
   liked: boolean;
   saved: boolean;
   applied: boolean;
-  /** Phase 4 fills this from `job_match_scores`. Null until then. */
-  matchScore: number | null;
+  /**
+   * The default resume against this posting, from `job_match_scores`. Filled only on pages
+   * fetched with `withMatch`, and null when the reader has no parsed resume, the posting gave
+   * the scorer nothing to work with, or scoring the page failed.
+   */
+  match: MatchScore | null;
 }
 
 export interface JobEnvelope {
@@ -93,6 +97,11 @@ export interface FeedQuery {
   limit?: number;
   /** Which screen a ranked feed is for. Each surface gets its own session, so Home and Reels page independently. */
   surface?: 'reels' | 'home';
+  /**
+   * Score each posting against the reader's resume before the page resolves, so the page and
+   * its scores land in the cache together. Only the Deck shows a score, so only it pays for one.
+   */
+  withMatch?: boolean;
 }
 
 /** Matches the `job_card` composite type in the phase 1 migration. */
@@ -197,7 +206,7 @@ function toJob(row: JobCardRow): Job {
   };
 }
 
-const DEFAULT_VIEWER: JobViewerState = { liked: false, saved: false, applied: false, matchScore: null };
+const DEFAULT_VIEWER: JobViewerState = { liked: false, saved: false, applied: false, match: null };
 
 function toEnvelope(row: JobCardRow): JobEnvelope {
   return { job: toJob(row), viewer: { ...DEFAULT_VIEWER } };
@@ -264,7 +273,8 @@ export async function fetchFeed(query: FeedQuery = {}): Promise<Page<JobEnvelope
       p_surface: query.surface ?? 'reels',
     });
     if (ranked.error) throw ranked.error;
-    return pageOf((ranked.data ?? []) as JobCardRow[], limit, toEnvelope);
+    const page = pageOf((ranked.data ?? []) as JobCardRow[], limit, toEnvelope);
+    return query.withMatch ? withMatches(page) : page;
   }
 
   const { data, error } = await supabase.rpc('feed_jobs', {
@@ -288,7 +298,44 @@ export async function fetchFeed(query: FeedQuery = {}): Promise<Page<JobEnvelope
   });
 
   if (error) throw error;
-  return pageOf((data ?? []) as JobCardRow[], limit, toEnvelope);
+  const page = pageOf((data ?? []) as JobCardRow[], limit, toEnvelope);
+  return query.withMatch ? withMatches(page) : page;
+}
+
+/**
+ * Scores a page before it resolves, so a card never reaches the screen ahead of its score.
+ *
+ * This replaced a separate `match_scores` query keyed on every job loaded so far. Each new page
+ * changed that key, so the ring went blank at every page boundary while all of it was
+ * re-requested. It also failed outright when one call held too many unscored postings (57014,
+ * 2026-10-07). Scoring per page keeps each call to one page of new work, and a loaded page is
+ * never asked again.
+ *
+ * A failed score never costs the reader the cards. One retry, then the page goes out unscored
+ * and the ring stays hidden for it.
+ */
+async function withMatches(page: Page<JobEnvelope>): Promise<Page<JobEnvelope>> {
+  if (page.items.length === 0) return page;
+
+  const ids = page.items.map((item) => item.job.id);
+  let scores: Map<string, MatchScore> | null = null;
+  for (let attempt = 1; attempt <= 2 && !scores; attempt += 1) {
+    try {
+      scores = await fetchMatchScores(ids);
+    } catch (error) {
+      if (attempt === 2) reportError(error, { where: 'fetchFeed.withMatches', jobs: ids.length });
+    }
+  }
+  if (!scores) return page;
+
+  const found = scores;
+  return {
+    ...page,
+    items: page.items.map((item) => ({
+      ...item,
+      viewer: { ...item.viewer, match: found.get(item.job.id) ?? null },
+    })),
+  };
 }
 
 export async function fetchCompanyJobs(slug: string, cursor?: string | null): Promise<Page<JobEnvelope>> {
