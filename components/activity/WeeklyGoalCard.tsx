@@ -1,31 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  Easing,
-  FadeIn,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { GoalRing } from '@/components/activity/GoalRing';
+import { GoalSpline } from '@/components/activity/GoalSpline';
 import { IconButton } from '@/components/common/IconButton';
-import { fontSize, radius, spacing, type Palette } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import type { WeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { daysLeftInWeek } from '@/utils/week';
-
-/** Per-bar stagger as the history strip grows in. */
-const STAGGER_MS = 70;
-/** The card shows the last few weeks; the hook keeps more for the streak. */
-const VISIBLE_WEEKS = 5;
-const BAR_HEIGHT = 30;
-/** A missed week still reads as a week, not a gap. */
-const MIN_BAR = 0.32;
 
 interface WeeklyGoalCardProps {
   goal: WeeklyGoal;
@@ -87,23 +72,7 @@ export function WeeklyGoalCard({ goal, onEditGoal }: WeeklyGoalCardProps) {
         />
       </View>
 
-      <View style={styles.history} accessibilityRole="summary" accessibilityLabel={historyLabel(goal)}>
-        {goal.history.slice(-VISIBLE_WEEKS).map((week, index, shown) => {
-          const isNow = index === shown.length - 1;
-          return (
-            <View key={week.key} style={styles.week}>
-              <WeekBar
-                fill={Math.max(MIN_BAR, Math.min(week.count / Math.max(goal.target, 1), 1))}
-                tone={barTone(week.met, isNow, week.count, colors)}
-                delay={index * STAGGER_MS}
-              />
-              <Text style={[styles.weekLabel, isNow ? styles.weekLabelNow : null]}>
-                {isNow ? 'This wk' : `W${index + 1}`}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
+      <GoalSpline weeks={goal.history} target={goal.target} met={goal.met} />
 
       <View style={styles.reward}>
         <Text style={styles.creditsText}>
@@ -116,46 +85,6 @@ export function WeeklyGoalCard({ goal, onEditGoal }: WeeklyGoalCardProps) {
           </Text>
         </View>
       </View>
-    </View>
-  );
-}
-
-interface BarTone {
-  color: string;
-  opacity: number;
-}
-
-/**
- * Past weeks that met the goal in a lighter green, this week in the full one, missed weeks
- * in grey. This week, before it is met, shows its progress in a faint green.
- */
-function barTone(met: boolean, isNow: boolean, count: number, colors: Palette): BarTone {
-  if (isNow) return count > 0 ? { color: colors.goalMet, opacity: met ? 1 : 0.45 } : { color: colors.border, opacity: 1 };
-  return met ? { color: colors.goalMet, opacity: 0.7 } : { color: colors.border, opacity: 1 };
-}
-
-/** One week's bar, growing up from its baseline when the card appears. */
-function WeekBar({ fill, tone, delay }: { fill: number; tone: BarTone; delay: number }) {
-  const styles = useStyles();
-  const reduced = useReducedMotion();
-  const grow = useSharedValue(reduced ? 1 : 0);
-
-  useEffect(() => {
-    if (reduced) return;
-    grow.set(withDelay(delay, withTiming(1, { duration: 420, easing: Easing.bezier(0.23, 1, 0.32, 1) })));
-  }, [reduced, delay, grow]);
-
-  const style = useAnimatedStyle(() => ({ transform: [{ scaleY: grow.get() }] }));
-
-  return (
-    <View style={styles.barSlot}>
-      <Animated.View
-        style={[
-          styles.bar,
-          { height: BAR_HEIGHT * fill, backgroundColor: tone.color, opacity: tone.opacity, transformOrigin: 'bottom' },
-          style,
-        ]}
-      />
     </View>
   );
 }
@@ -186,10 +115,6 @@ function detailFor(goal: WeeklyGoal): string {
 
   if (daysLeft === 1) return 'Last day — the week resets tomorrow.';
   return `${daysLeft} days left in the week.`;
-}
-
-function historyLabel(goal: WeeklyGoal): string {
-  return `Applications per week: ${goal.history.map((week) => `${week.label}, ${week.count}`).join('; ')}`;
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -240,32 +165,6 @@ const useStyles = makeStyles((colors) => ({
     alignSelf: 'flex-start',
     marginTop: -spacing.xs,
     marginRight: -spacing.xs,
-  },
-  history: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  week: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 5,
-  },
-  barSlot: {
-    width: '100%',
-    height: BAR_HEIGHT,
-    justifyContent: 'flex-end',
-  },
-  bar: {
-    width: '100%',
-    borderRadius: 6,
-  },
-  weekLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.textTertiary,
-  },
-  weekLabelNow: {
-    color: colors.text,
   },
   reward: {
     flexDirection: 'row',
