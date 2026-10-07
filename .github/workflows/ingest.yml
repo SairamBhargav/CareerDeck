@@ -110,6 +110,45 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node server/src/ingest/run.ts --sweep
 
+      # Companies arrive from the crawl with a name and nothing else, so they render as a
+      # two-letter monogram until somebody resolves a domain for them. That is roughly ten
+      # new ones a night, and they are the worst ten to be missing: a company that just
+      # appeared has fresh postings, which the ranker pushes towards the top of the deck.
+      # Left alone, the gap reopens from the most-visible end.
+      #
+      # Unattended is safe here because the script's judgement is conservative rather than
+      # because the lookup is reliable. It writes only when Brandfetch's name agrees with
+      # ours *and* the domain corroborates it; the genuinely ambiguous ones — Oshkosh, which
+      # resolves to the babywear company that owns OshKosh B'Gosh — accumulate for a human
+      # instead of being guessed at. See the script's header for why no string rule settles
+      # those.
+      #
+      # After the sweep, because it orders by open_job_count and that is what the sweep has
+      # just reconciled. The ordering is also the reason the limit is safe: a backlog gets
+      # covered from the most-hiring end down, so the bound costs the quietest companies.
+      - name: Resolve company logos
+        # Cosmetic. A Brandfetch outage or a rate-limit wall must not redden a run whose
+        # crawl succeeded, or a real ingestion failure stops standing out.
+        continue-on-error: true
+        if: steps.guard.outputs.configured == 'true' && !cancelled()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BRANDFETCH_CLIENT_ID: ${{ secrets.BRANDFETCH_CLIENT_ID }}
+        run: |
+          if [ -z "$BRANDFETCH_CLIENT_ID" ]; then
+            echo "::notice::Logo resolution is off. Set the BRANDFETCH_CLIENT_ID repository \
+            secret to enable it — a free client id from https://brandfetch.com/developers \
+            authorises both the search API and the logo CDN."
+            exit 0
+          fi
+          # Same link as the Maintain step: scripts/ sits outside server/, so Node resolves
+          # @supabase/supabase-js from the repository root, where nothing is installed.
+          [ -e node_modules ] || ln -s server/node_modules node_modules
+          # 300 at ~350 ms a lookup is about two minutes, against a 60-minute budget the
+          # crawl has first claim on. A normal night uses thirty seconds of it.
+          node scripts/resolve-company-logos.mjs --apply --limit=300
+
       # Partition creation, retention and the follower-count reconcile — PHASE2.md §7 — plus
       # phase 3's comment-count reconcile, school-verification expiry and notification
       # retention (PHASE3.md §2.3, and §3.2's "do not silently revoke").
