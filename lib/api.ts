@@ -860,8 +860,17 @@ export interface NewComment {
  * Throws `ServiceError` with a `code` the composer branches on: `not_verified`,
  * `policy_not_accepted`, `rate_limited`, `rejected`, `blocked`, `offline`.
  */
-export async function postComment(input: NewComment): Promise<JobComment> {
-  const { comment } = await serviceFetch<{ comment: CommentCardRow }>('/v1/comments', {
+export interface PostedComment {
+  comment: JobComment;
+  /**
+   * The classifier flagged it, so it was written hidden and queued for a moderator. Its author
+   * gets a notice in Updates; nobody else sees it unless a moderator restores it.
+   */
+  takenDown: boolean;
+}
+
+export async function postComment(input: NewComment): Promise<PostedComment> {
+  const { comment, takenDown } = await serviceFetch<{ comment: CommentCardRow; takenDown?: boolean }>('/v1/comments', {
     body: {
       jobId: input.jobId,
       body: input.body,
@@ -873,7 +882,7 @@ export async function postComment(input: NewComment): Promise<JobComment> {
     timeoutMs: 20_000,
   });
 
-  return toComment(comment);
+  return { comment: toComment(comment), takenDown: takenDown === true };
 }
 
 /** Sets a comment like to a state. Phase 2's contract, so the outbox can replay it safely. */

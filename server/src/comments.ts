@@ -23,7 +23,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import { adminClient, type AuthedUser } from './auth.ts';
-import { classify } from './moderation/classifier.ts';
+import { classify, type Category } from './moderation/classifier.ts';
 
 type Env = { Variables: { user: AuthedUser } };
 
@@ -62,6 +62,17 @@ const STATUS_BY_CODE: Record<string, { status: 403 | 404 | 422 | 428 | 429; code
   23503: { status: 404, code: 'not_found' },
   23514: { status: 422, code: 'invalid' },
   22001: { status: 422, code: 'invalid' },
+};
+
+/** Completes "It looked like …" in a takedown notice: plain words, never a policy citation. */
+const TAKEDOWN_REASON: Record<Category, string> = {
+  harassment: 'harassment of a person',
+  threat: 'a threat',
+  sexual: 'sexual content',
+  doxxing: 'personal information about someone',
+  spam: 'spam or self-promotion',
+  employer_claim: 'an unverified claim about a company or someone who works there',
+  none: 'something against the content policy',
 };
 
 comments.post('/', async (c) => {
@@ -121,13 +132,22 @@ comments.post('/', async (c) => {
     );
   }
 
+  /*
+   * A comment the classifier flags is taken down: written as `pending`, which every public read
+   * hides and the review queue still lists, so a moderator can restore a false positive. Its
+   * author is told (2026-10-06, the owner's call). A flag that only means the classifier did not
+   * answer in time stays published and queued as before: an outage of the model must not take
+   * down every comment written during it.
+   */
+  const takenDown = verdict.decision === 'flag' && verdict.source !== 'unavailable';
+
   const { data, error } = await adminClient.rpc('post_comment', {
     p_author_id: user.id,
     p_job_id: jobId,
     p_body: body,
     p_parent_id: parentId,
     p_gif_id: gifId,
-    p_status: verdict.decision === 'flag' ? 'flagged' : 'approved',
+    p_status: takenDown ? 'pending' : verdict.decision === 'flag' ? 'flagged' : 'approved',
     p_scores: verdict.scores,
     p_reason: verdict.decision === 'flag' ? `${verdict.source}: ${verdict.category}` : null,
     p_idempotency_key: idempotencyKey,
@@ -148,12 +168,24 @@ comments.post('/', async (c) => {
   }
 
   /*
-   * `flagged` is returned as a normal success and the client is not told.
+   * A taken-down comment is answered as a success with `takenDown`, and its author also gets a
+   * notification in Updates, so the removal is explained rather than looking like a bug.
    *
-   * Telling somebody their comment is under review teaches the small number of people who are
-   * probing the classifier exactly where its threshold is, and tells the much larger number who
-   * tripped it accidentally that they are suspected of something. It is published, it is
-   * visible, and a human will read it. §10's flag is a queue entry, not a punishment.
+   * This reverses the original rule that a flag was never disclosed (it teaches somebody probing
+   * the classifier where its threshold sits). The owner chose to tell people instead.
    */
-  return c.json({ comment: data }, 201);
+  if (takenDown) {
+    const notified = await adminClient.rpc('notify_moderation', {
+      p_user_id: user.id,
+      p_headline: 'Your comment was flagged and taken down',
+      p_detail: `It looked like ${TAKEDOWN_REASON[verdict.category]}. A moderator will review it, and it comes back if it was flagged by mistake.`,
+      p_subject_id: (data as { id: string }).id,
+    });
+    // A failed notification must not fail a comment that has already been written. A retried
+    // POST also lands here, and its duplicate notice is refused by the unread-notice index.
+    if (notified.error) console.error('[moderation] takedown notice failed:', notified.error.message);
+    return c.json({ comment: data, takenDown: true }, 201);
+  }
+
+  return c.json({ comment: data, takenDown: false }, 201);
 });

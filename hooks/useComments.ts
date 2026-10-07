@@ -327,9 +327,9 @@ export function useCommentActions(jobId: string | undefined) {
         idempotencyKey: idempotencyKey.current,
       }),
     /*
-     * The comment appears the moment Send is tapped, dimmed as `pending`. The server's answer
-     * takes seconds (the moderation classifier is in the write path by design), and a composer
-     * that empties and shows nothing for that long reads as a lost comment.
+     * The comment appears the moment Send is tapped, looking already posted. The server's answer
+     * takes a couple of seconds (the moderation classifier is in the write path by design), and
+     * a composer that empties and shows nothing for that long reads as a lost comment.
      */
     onMutate: async (input) => {
       if (jobId === undefined) return { tempId: null };
@@ -351,13 +351,17 @@ export function useCommentActions(jobId: string | undefined) {
       }
       return { tempId };
     },
-    onSuccess: (comment, input, context) => {
+    onSuccess: ({ comment, takenDown }, input, context) => {
       idempotencyKey.current = newKey();
 
-      // Swap the dimmed row for the real one in place, so nothing jumps while the refetch runs.
       if (jobId !== undefined && context?.tempId) {
-        replaceComment(queryClient, jobId, input.parentId, context.tempId, comment);
+        // Taken down: the comment that appeared on send goes, and the notice explaining why
+        // lands in Updates. Otherwise the stand-in is swapped for the real row in place, so
+        // nothing jumps while the refetch runs.
+        replaceComment(queryClient, jobId, input.parentId, context.tempId, takenDown ? null : comment);
+        if (takenDown && input.parentId !== null) bumpReplyCount(queryClient, jobId, input.parentId, -1);
       }
+      if (takenDown) void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       if (comment.parentId !== null) {
         void queryClient.invalidateQueries({ queryKey: repliesKey(comment.parentId) });
       }

@@ -277,7 +277,12 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      await post({ body, parentId, ...(gifId === undefined ? {} : { gifId }) });
+      const { takenDown } = await post({ body, parentId, ...(gifId === undefined ? {} : { gifId }) });
+      if (takenDown) {
+        // The comment already vanished from the thread; this says why, and Updates keeps a copy.
+        setPostError('Your comment was flagged and taken down. A moderator will review it.');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
     } catch (error) {
       setDraft(body);
       if (parentId !== null && replyTo) setReplyTo(replyTo);
