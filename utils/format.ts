@@ -48,17 +48,21 @@ const OWN_FOLLOWERS_THRESHOLD = 100;
 
 /**
  * The audience line for a company: CareerDeck's own followers once there are enough of them,
- * otherwise its LinkedIn audience — always labelled as LinkedIn's, so it is never read as
- * CareerDeck users — and failing both, how many roles it has open.
+ * otherwise its LinkedIn audience, and failing both, how many roles it has open.
+ *
+ * The LinkedIn number reads "12M followers", without "on LinkedIn" (2026-10-07, the owner's call),
+ * or bare ("12M") with `bare: true`, which Home's "Suggested for you" uses.
  */
 export function companyAudience(
   company: Pick<Company, 'followerCount' | 'linkedinFollowerCount' | 'openJobCount'>,
+  { bare = false }: { bare?: boolean } = {},
 ): string {
   if (company.followerCount >= OWN_FOLLOWERS_THRESHOLD) {
     return `${formatFollowerCount(company.followerCount)} followers`;
   }
   if (company.linkedinFollowerCount) {
-    return `${formatFollowerCount(company.linkedinFollowerCount)} on LinkedIn`;
+    const count = formatFollowerCount(company.linkedinFollowerCount);
+    return bare ? count : `${count} followers`;
   }
   if (company.openJobCount > 0) {
     return `${company.openJobCount} open ${company.openJobCount === 1 ? 'role' : 'roles'}`;
