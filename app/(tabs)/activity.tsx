@@ -11,10 +11,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActivityHeader } from '@/components/activity/ActivityHeader';
 import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
 import { NotificationCard } from '@/components/activity/NotificationCard';
@@ -26,7 +27,7 @@ import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
 import { EmptyState } from '@/components/common/EmptyState';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
-import { fontSize, screenPadding, spacing } from '@/constants/theme';
+import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
@@ -218,14 +219,7 @@ export default function ActivityScreen() {
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
-        <View style={styles.heading}>
-          <Text style={styles.title} accessibilityRole="header">
-            Activity
-          </Text>
-          <Text style={styles.subtitle}>
-            {counts.active} in play {'·'} {counts.closed} closed out
-          </Text>
-        </View>
+        <ActivityHeader counts={counts} />
 
         <WeeklyGoalCard goal={goal} onEditGoal={() => setEditingGoal(true)} />
 
@@ -381,20 +375,6 @@ const useStyles = makeStyles((colors) => ({
   content: {
     paddingHorizontal: screenPadding,
     gap: spacing.xl,
-  },
-  heading: {
-    paddingTop: spacing.sm,
-    gap: 2,
-  },
-  title: {
-    fontSize: fontSize.display,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: -0.7,
-  },
-  subtitle: {
-    fontSize: fontSize.small,
-    color: colors.textTertiary,
   },
   list: {
     gap: spacing.md,
