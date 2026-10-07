@@ -126,7 +126,13 @@ function RootNavigator() {
             options={{ presentation: 'fullScreenModal', headerShown: false, contentStyle: { backgroundColor: scheme === 'dark' ? '#07060D' : '#F7F5FF' } }}
           />
           <Stack.Screen name="job/[id]" options={{ presentation: 'modal', title: 'Job details' }} />
-          <Stack.Screen name="company/[id]" options={{ title: '' }} />
+          {/* Chevron only: iOS labels the back button with the previous screen's title, and the
+              tabs have none, so it read "(tabs)". A company opens from several places, so no
+              single label would be right anyway. */}
+          <Stack.Screen
+            name="company/[id]"
+            options={{ title: '', headerBackButtonDisplayMode: 'minimal' }}
+          />
         </Stack.Protected>
 
         <Stack.Protected guard={!isSignedIn}>

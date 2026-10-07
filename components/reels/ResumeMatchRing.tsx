@@ -44,9 +44,7 @@ interface ResumeMatchRingProps {
   /**
    * What the number is made of, for the posting currently on screen — §3.10's `components`.
    *
-   * Drives the caption under the ring. Phase 3 and earlier this said "MATCH" unconditionally,
-   * which was the honest label for a hash of two ids. Now that there is a real calculation
-   * behind it, the caption says which part of it is carrying the score.
+   * Null when the posting has no score: the ring then shows a dash and can't be tapped.
    */
   explain?: MatchExplanation | null;
   /** Opens the breakdown for the posting on screen. */
@@ -139,49 +137,14 @@ export function ResumeMatchRing({ progress, explain, onPress }: ResumeMatchRingP
         <Text style={styles.label}>{scored ? `${label}%` : '—'}</Text>
       </Pressable>
 
+      {/* Always "MATCH" (2026-10-07, the owner's call). It used to name the component carrying the
+          score (SKILLS, LEVEL, ESTIMATE, OFF FIELD), which read as inconsistent; tapping the
+          ring still gives the full breakdown. */}
       <Text style={styles.caption} numberOfLines={1}>
-        {captionFor(explain)}
+        MATCH
       </Text>
     </Animated.View>
   );
-}
-
-/**
- * One word for why the number is what it is — §13.3's "keeping `components` explainable isn't
- * only a UX nicety".
- *
- * The full sentence §3.10 imagines ("strong skills match, but they want 3 years") needs room
- * this badge does not have, so this is the one-word version: the component doing the most work.
- * It is a deliberate step short of the eventual design and a long step past "MATCH", which is
- * what a ring over a hash function was entitled to say.
- *
- * `ESTIMATE` is the case worth having: a posting that lists no skills is scored on field and
- * level alone (and capped for it). Saying so is the difference between a confident number and a
- * number that looks confident. Tapping the ring gives the full sentence.
- */
-function captionFor(explain: MatchExplanation | null | undefined): string {
-  if (!explain) return 'NO SCORE';
-  if (explain.limited) return 'ESTIMATE';
-  if (typeof explain.field === 'number' && explain.field <= 0.35) return 'OFF FIELD';
-
-  const candidates: { label: string; value: number | undefined }[] = [
-    { label: 'SKILLS', value: explain.skills },
-    // Field is the broadest of the three, so leading on it reads as a plain match rather than a reason.
-    { label: 'MATCH', value: explain.field },
-    { label: 'LEVEL', value: explain.seniority },
-  ];
-
-  let best: { label: string; value: number } | null = null;
-  for (const candidate of candidates) {
-    if (typeof candidate.value !== 'number') continue;
-    if (best === null || candidate.value > best.value) {
-      best = { label: candidate.label, value: candidate.value };
-    }
-  }
-
-  // Nothing scored well enough to be the reason. "MATCH" is then the honest caption: the
-  // number is a blend of three mediocre things rather than one good one.
-  return best !== null && best.value >= 0.6 ? best.label : 'MATCH';
 }
 
 const useStyles = makeStyles((colors) => ({

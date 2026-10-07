@@ -34,7 +34,7 @@ export function CompanySuggestionCard({ company, onPress, onToggleFollow }: Comp
           {company.name}
         </Text>
         <Text style={styles.followers} numberOfLines={1}>
-          {companyAudience(company)}
+          {companyAudience(company, { bare: true })}
         </Text>
       </View>
 

@@ -5,8 +5,8 @@ import { useCareerDeck } from '@/context/CareerDeckContext';
 import type { Application } from '@/types';
 import { formatWeekLabel, parseLocalDate, weekKey, weekStartBefore, weeksBefore } from '@/utils/week';
 
-/** How many past weeks the card draws behind the ring. */
-export const HISTORY_WEEKS = 6;
+/** How many past weeks the card's trend line draws, before the current one. */
+export const HISTORY_WEEKS = 7;
 
 export interface GoalWeek {
   /** The week's Monday, as `YYYY-MM-DD`. */

@@ -145,7 +145,6 @@ export function CommentRow({
           style={[
             styles.row,
             isReply ? styles.rowReply : null,
-            comment.pending ? styles.pendingRow : null,
             slideStyle,
           ]}>
           <UserAvatar handle={comment.authorHandle} size={size} />
@@ -179,33 +178,28 @@ export function CommentRow({
             ) : null}
 
             <View style={styles.actions}>
-              {/* A comment this device wrote and the server has not confirmed. It cannot be
-                  replied to or reported yet: it has no id anybody else could act on. */}
-              {comment.pending ? (
-                <Text style={styles.replyLabel}>Sending...</Text>
-              ) : (
-                <>
-                  <Pressable
-                    onPress={onReply}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={'Reply to ' + replyTargetLabel}
-                    style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
-                    <Text style={styles.replyLabel}>Reply</Text>
-                  </Pressable>
+              {/* A comment the server has not confirmed yet looks posted, but replying to it
+                  waits: it has no id anybody else could act on for the second or two until it
+                  lands. */}
+              <Pressable
+                onPress={comment.pending ? undefined : onReply}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={'Reply to ' + replyTargetLabel}
+                style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
+                <Text style={styles.replyLabel}>Reply</Text>
+              </Pressable>
 
-                  {onReport ? (
-                    <Pressable
-                      onPress={onReport}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel={'Report this comment, or block ' + replyTargetLabel}
-                      style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
-                      <Text style={styles.replyLabel}>Report</Text>
-                    </Pressable>
-                  ) : null}
-                </>
-              )}
+              {onReport ? (
+                <Pressable
+                  onPress={comment.pending ? undefined : onReport}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={'Report this comment, or block ' + replyTargetLabel}
+                  style={({ pressed }) => [styles.replyButton, pressed ? styles.pressed : null]}>
+                  <Text style={styles.replyLabel}>Report</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
 
@@ -239,9 +233,6 @@ export function CommentRow({
 const useStyles = makeStyles((colors) => ({
   // Dimmed rather than replaced by a spinner: the text is what the writer is looking at, and
   // taking it away to show progress is worse than showing it faintly.
-  pendingRow: {
-    opacity: 0.55,
-  },
   badge: {
     fontSize: fontSize.caption,
     color: colors.textTertiary,

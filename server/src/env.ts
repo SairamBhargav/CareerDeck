@@ -61,14 +61,19 @@ export const env = {
    * p95 — `claude-haiku-4-5` does, at a fraction of the cost and some accuracy. The default
    * is the more capable model; the trade is documented rather than made on the operator's
    * behalf. PHASE3.md §6.2.
+   *
+   * Made 2026-10-06: Haiku. On Opus a comment took 5–6 s to post, and a classifier that ran past
+   * the timeout published the comment as flagged. Set MODERATION_MODEL to go back.
    */
-  moderationModel: process.env.MODERATION_MODEL ?? 'claude-opus-5',
+  moderationModel: process.env.MODERATION_MODEL ?? 'claude-haiku-4-5',
   /**
    * How long to wait before giving up on the classifier and publishing the comment as
    * `flagged` instead. Fail-open-but-reviewed: a slow model must not stop a verified student
    * from answering a question, and it must not publish unchecked text either.
    */
-  moderationTimeoutMs: integer('MODERATION_TIMEOUT_MS', 2_500),
+  // 4 s since 2026-10-06: Haiku measured 1.1–2.7 s per comment, so 2.5 s flagged about a third
+  // of ordinary comments for review. The app shows the comment as sending meanwhile.
+  moderationTimeoutMs: integer('MODERATION_TIMEOUT_MS', 4_000),
 
   // ── verification (§3.2) ──────────────────────────────────────────────────────
 

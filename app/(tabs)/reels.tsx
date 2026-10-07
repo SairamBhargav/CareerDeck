@@ -31,7 +31,7 @@ import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCommentCounts } from '@/hooks/useComments';
-import { useMatchScores, useResumes } from '@/hooks/useResumes';
+import { useResumes } from '@/hooks/useResumes';
 import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
@@ -56,8 +56,12 @@ const PULL_THRESHOLD = 88;
  */
 const REFRESH_DURATION = 900;
 
-/** Cards left below the viewport when the next page starts loading. */
-const END_REACHED_THRESHOLD = 2;
+/**
+ * Cards left below the viewport when the next page starts loading. Each card is one viewport
+ * tall, so this counts cards. Eight leaves the next page (and its match scores) a few seconds of
+ * swiping to arrive in, where two left it a fast flick.
+ */
+const END_REACHED_THRESHOLD = 8;
 
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
@@ -129,18 +133,17 @@ export default function ReelsScreen() {
   // each posting, because the query already joins `companies` to build the card.
 
   /*
-   * How well the default resume matches each job on screen — §3.10, read from
-   * `job_match_scores` instead of hashed out of the two ids.
+   * How well the default resume matches each job on screen — §3.10, from `job_match_scores`.
    *
-   * Read separately from the feed for the reason the comment counts above are: a score is
-   * per-reader and changes when the resume changes, so folding it into `job_card` would make
-   * every feed page uncacheable. Same decision, one phase later.
+   * The scores arrive with the feed page that holds the cards, not in a query of their own: a
+   * page is scored before it resolves, so a card is never on screen ahead of its score. The
+   * score still isn't part of `job_card`; `fetchFeed` attaches it per reader, after the fetch.
    *
    * The map is empty for a user with no parsed resume, and `hasScores` below turns that into a
    * hidden ring rather than a row of zeros — 0% reads as a judgement, and the truth is that
    * nothing has been read yet.
    */
-  const matchMap = useMatchScores(useMemo(() => jobs.map((job) => job.id), [jobs]));
+  const matchMap = activeFeed.matches;
 
   // In the same order as `jobs`, so the scroll-position math below can index straight into it.
   const matchScores = useMemo(

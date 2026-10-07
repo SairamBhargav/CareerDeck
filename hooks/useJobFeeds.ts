@@ -14,7 +14,7 @@ import {
   type JobEnvelope,
   type Page,
 } from '@/lib/api';
-import type { Company, Job } from '@/types';
+import type { Company, Job, MatchScore } from '@/types';
 
 /**
  * The feeds, paginated — Appendix A's first named exception to "only `CareerDeckContext`
@@ -42,6 +42,11 @@ export type JobSort = FeedSort;
 /** Everything a screen needs to render a paginated feed. */
 export interface JobFeed {
   jobs: Job[];
+  /**
+   * Each loaded posting's match score, keyed by job id. Empty unless the feed was fetched with
+   * `withMatch`, and missing a posting the scorer had nothing to say about.
+   */
+  matches: ReadonlyMap<string, MatchScore>;
   isLoading: boolean;
   isFetchingNextPage: boolean;
   hasNextPage: boolean;
@@ -51,6 +56,11 @@ export interface JobFeed {
 }
 
 type EnvelopePage = Page<JobEnvelope>;
+
+interface FeedItems {
+  jobs: Job[];
+  matches: ReadonlyMap<string, MatchScore>;
+}
 
 function pageParams() {
   return {
@@ -86,6 +96,25 @@ function useViewerSets() {
   );
 }
 
+/**
+ * The pages flattened into what a screen renders, plus the scores that arrived with them.
+ *
+ * Memoized on the pages: an unmemoized merge handed the Deck's FlatList a new `data` array on
+ * every render of the screen, which re-rendered every mounted card.
+ */
+function useFeedItems(pages: EnvelopePage[] | undefined): FeedItems {
+  const { saved, liked } = useViewerSets();
+  return useMemo(() => {
+    const matches = new Map<string, MatchScore>();
+    for (const page of pages ?? []) {
+      for (const { job, viewer } of page.items) {
+        if (viewer.match) matches.set(job.id, viewer.match);
+      }
+    }
+    return { jobs: mergeViewer(pages, saved, liked), matches };
+  }, [pages, saved, liked]);
+}
+
 function toFeed(
   query: {
     data?: { pages: EnvelopePage[] };
@@ -96,10 +125,11 @@ function toFeed(
     refetch: () => unknown;
     error: Error | null;
   },
-  jobs: Job[],
+  { jobs, matches }: FeedItems,
 ): JobFeed {
   return {
     jobs,
+    matches,
     isLoading: query.isPending,
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
@@ -116,17 +146,19 @@ function toFeed(
  * twenty and calling it a sorted feed would be a lie once there are more than twenty.
  */
 export function useJobFeed(sort: JobSort = 'recent', surface: 'reels' | 'home' = 'reels'): JobFeed {
-  const sets = useViewerSets();
+  // The Deck shows a match ring on every card; Home shows none, so it skips the scoring call.
+  const withMatch = surface === 'reels';
 
   const query = useInfiniteQuery({
     // The surface is only in the key for the ranked sort: the explicit sorts are one list
     // wherever they're shown, while each ranked surface pages through its own session.
-    queryKey: ['feed', 'all', sort, sort === 'recommended' ? surface : null],
-    queryFn: ({ pageParam }) => fetchFeed({ sort, cursor: pageParam, surface }),
+    // `withMatch` is in it because a scored page and an unscored one are different data.
+    queryKey: ['feed', 'all', sort, sort === 'recommended' ? surface : null, withMatch],
+    queryFn: ({ pageParam }) => fetchFeed({ sort, cursor: pageParam, surface, withMatch }),
     ...pageParams(),
   });
 
-  return toFeed(query, mergeViewer(query.data?.pages, sets.saved, sets.liked));
+  return toFeed(query, useFeedItems(query.data?.pages));
 }
 
 /**
@@ -139,27 +171,25 @@ export function useJobFeed(sort: JobSort = 'recent', surface: 'reels' | 'home' =
  */
 export function useFollowingFeed(): JobFeed {
   const { followedCompanySlugs } = useCareerDeck();
-  const sets = useViewerSets();
 
   // Sorted so that following A then B and following B then A share one cache entry.
   const slugs = useMemo(() => [...followedCompanySlugs].sort(), [followedCompanySlugs]);
 
   const query = useInfiniteQuery({
     queryKey: ['feed', 'following', slugs],
-    queryFn: ({ pageParam }) => fetchFeed({ companySlugs: slugs, cursor: pageParam }),
+    // Only the Deck reads this feed, so its pages are always scored.
+    queryFn: ({ pageParam }) => fetchFeed({ companySlugs: slugs, cursor: pageParam, withMatch: true }),
     ...pageParams(),
     // Following nobody is not a query worth making: the answer is knowable here.
     enabled: slugs.length > 0,
   });
 
-  const feed = toFeed(query, mergeViewer(query.data?.pages, sets.saved, sets.liked));
+  const feed = toFeed(query, useFeedItems(query.data?.pages));
   return slugs.length === 0 ? { ...feed, isLoading: false, hasNextPage: false } : feed;
 }
 
 /** One company's openings — the list on its profile page. */
 export function useCompanyJobs(slug: string | undefined): JobFeed {
-  const sets = useViewerSets();
-
   const query = useInfiniteQuery({
     queryKey: ['feed', 'company', slug],
     queryFn: ({ pageParam }) => fetchCompanyJobs(slug as string, pageParam),
@@ -167,7 +197,7 @@ export function useCompanyJobs(slug: string | undefined): JobFeed {
     enabled: slug !== undefined,
   });
 
-  return toFeed(query, mergeViewer(query.data?.pages, sets.saved, sets.liked));
+  return toFeed(query, useFeedItems(query.data?.pages));
 }
 
 /**
