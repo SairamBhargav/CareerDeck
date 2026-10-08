@@ -13,6 +13,11 @@ interface JobFeedCardProps {
   logoUrl?: string;
   onPress: () => void;
   onToggleLike: () => void;
+  /**
+   * Opens the company. Optional, because the company's own page lists jobs too and a logo
+   * there would lead where the reader already is.
+   */
+  onCompanyPress?: () => void;
   /** Home only, and only for the accessibility actions — the gesture itself lives in
    *  SwipeableJobRow. Activity shows the same card with no swipe and passes neither. */
   onHide?: () => void;
@@ -30,6 +35,7 @@ export function JobFeedCard({
   logoUrl,
   onPress,
   onToggleLike,
+  onCompanyPress,
   onHide,
   onLike,
 }: JobFeedCardProps) {
@@ -61,7 +67,21 @@ export function JobFeedCard({
       }}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.header}>
-        <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="sm" />
+        {/* The mark is the company's, so it goes to the company — the same thing it does
+            on a Deck card and in a story header. Nested inside the card's own Pressable,
+            which the inner one wins, exactly as the like button already does. */}
+        {onCompanyPress ? (
+          <Pressable
+            onPress={onCompanyPress}
+            accessibilityRole="link"
+            accessibilityLabel={`Open ${job.companyName}`}
+            hitSlop={6}
+            style={({ pressed }) => (pressed ? styles.logoPressed : undefined)}>
+            <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="sm" />
+          </Pressable>
+        ) : (
+          <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="sm" />
+        )}
 
         <View style={styles.headerText}>
           <Text style={styles.company} numberOfLines={1}>
@@ -109,6 +129,9 @@ const useStyles = makeStyles((colors) => ({
   },
   pressed: {
     backgroundColor: colors.backgroundMuted,
+  },
+  logoPressed: {
+    opacity: 0.6,
   },
   header: {
     flexDirection: 'row',

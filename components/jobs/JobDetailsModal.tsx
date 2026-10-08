@@ -25,6 +25,11 @@ interface JobDetailsModalProps {
   onAutoApply: () => void;
   /** Plain apply: open the employer's page and track it, no draft and no credit spent. */
   onApply: () => void;
+  /**
+   * Opens the company. Optional, because the company's own page lists jobs too and a logo
+   * there would lead where the reader already is.
+   */
+  onCompanyPress?: () => void;
 }
 
 /** Same thresholds as CommentSheet, so every sheet in the app lets go at the same point. */
@@ -44,6 +49,7 @@ export function JobDetailsModal({
   onClose,
   onAutoApply,
   onApply,
+  onCompanyPress,
 }: JobDetailsModalProps) {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
@@ -111,7 +117,13 @@ export function JobDetailsModal({
           <ScrollView
             contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}
             showsVerticalScrollIndicator={false}>
-            <View style={styles.companyRow}>
+            <Pressable
+              onPress={onCompanyPress}
+              disabled={!onCompanyPress}
+              accessibilityRole={onCompanyPress ? 'link' : 'text'}
+              accessibilityLabel={onCompanyPress ? `Open ${job.companyName}` : job.companyName}
+              hitSlop={6}
+              style={({ pressed }) => [styles.companyRow, pressed ? styles.logoPressed : null]}>
               <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="lg" />
               <View style={styles.companyText}>
                 <Text style={styles.company} numberOfLines={1}>
@@ -119,7 +131,7 @@ export function JobDetailsModal({
                 </Text>
                 <Text style={styles.posted}>Posted {formatPostedAt(job.postedAt)}</Text>
               </View>
-            </View>
+            </Pressable>
 
             <Text style={styles.title}>{job.title}</Text>
             <JobMetadata job={job} emphasizeSalary />
@@ -186,6 +198,9 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: screenPadding,
     paddingTop: spacing.xs,
     gap: spacing.sm,
+  },
+  logoPressed: {
+    opacity: 0.6,
   },
   companyRow: {
     flexDirection: 'row',

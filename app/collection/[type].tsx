@@ -161,6 +161,7 @@ export default function CollectionScreen() {
                   logoUrl={job.companyLogoUrl ?? undefined}
                   onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })}
                   onToggleLike={() => toggleLike(job.id)}
+                  onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: job.companySlug } })}
                 />
               </Animated.View>
             ))}

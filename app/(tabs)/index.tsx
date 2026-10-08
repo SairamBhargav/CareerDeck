@@ -294,6 +294,7 @@ export default function HomeScreen() {
               logoUrl={item.companyLogoUrl ?? undefined}
               onPress={() => handlePressJob(item)}
               onToggleLike={() => toggleLike(item.id)}
+              onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: item.companySlug } })}
               onHide={() => handleSwipe(item, 'hide')}
               onLike={() => handleSwipe(item, 'like')}
             />
@@ -354,6 +355,9 @@ export default function HomeScreen() {
         onClose={() => setSearchOpen(false)}
         onPressJob={handlePressJob}
         onPressCompany={handlePressCompany}
+        onPressCompanySlug={(slug: string) =>
+          router.push({ pathname: '/company/[id]', params: { id: slug } })
+        }
       />
 
       {storySession ? (

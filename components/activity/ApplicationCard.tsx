@@ -34,6 +34,11 @@ interface ApplicationCardProps {
   onPress: () => void;
   onAdvance: (status: ApplicationStatus) => void;
   onOpenStatusPicker: () => void;
+  /**
+   * Opens the company. Optional, because the company's own page lists jobs too and a logo
+   * there would lead where the reader already is.
+   */
+  onCompanyPress?: () => void;
 }
 
 /**
@@ -41,7 +46,13 @@ interface ApplicationCardProps {
  * there to identify which application it belongs to — so it sits on its own line with
  * the one-tap advance beside it rather than being buried in the metadata row.
  */
-export function ApplicationCard({ entry, onPress, onAdvance, onOpenStatusPicker }: ApplicationCardProps) {
+export function ApplicationCard({
+  entry,
+  onPress,
+  onAdvance,
+  onOpenStatusPicker,
+  onCompanyPress,
+}: ApplicationCardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const { application, job } = entry;
@@ -55,12 +66,30 @@ export function ApplicationCard({ entry, onPress, onAdvance, onOpenStatusPicker 
       accessibilityLabel={`${job.title} at ${job.companyName}, ${STATUS_LABEL[application.status]}`}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.head}>
-        <CompanyLogo
-          logo={job.companyLogoUrl ?? job.companyLogo}
-          name={job.companyName}
-          color={job.companyLogoColor ?? undefined}
-          size="sm"
-        />
+        {/* The mark is the company's, so it opens the company — the same everywhere it
+            appears. Nested inside the card's Pressable, which the inner one wins. */}
+        {onCompanyPress ? (
+          <Pressable
+            onPress={onCompanyPress}
+            accessibilityRole="link"
+            accessibilityLabel={`Open ${job.companyName}`}
+            hitSlop={6}
+            style={({ pressed }) => (pressed ? styles.logoPressed : undefined)}>
+            <CompanyLogo
+              logo={job.companyLogoUrl ?? job.companyLogo}
+              name={job.companyName}
+              color={job.companyLogoColor ?? undefined}
+              size="sm"
+            />
+          </Pressable>
+        ) : (
+          <CompanyLogo
+            logo={job.companyLogoUrl ?? job.companyLogo}
+            name={job.companyName}
+            color={job.companyLogoColor ?? undefined}
+            size="sm"
+          />
+        )}
 
         <View style={styles.headText}>
           <Text style={styles.title} numberOfLines={1}>
@@ -110,6 +139,9 @@ export function ApplicationCard({ entry, onPress, onAdvance, onOpenStatusPicker 
 }
 
 const useStyles = makeStyles((colors) => ({
+  logoPressed: {
+    opacity: 0.6,
+  },
   card: {
     gap: spacing.md,
     padding: spacing.lg,

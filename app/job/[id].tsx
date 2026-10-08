@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -17,6 +17,7 @@ import { useResumes } from '@/hooks/useResumes';
 export default function JobDetailScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { user, toggleLike } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   const { job, isLoading } = useJobById(id);
@@ -51,7 +52,14 @@ export default function JobDetailScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.companyRow}>
+        {/* Was a plain View, which left the one screen entirely about a job with no way
+            to reach the company that posted it. */}
+        <Pressable
+          onPress={() => router.push({ pathname: '/company/[id]', params: { id: job.companySlug } })}
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${job.companyName}`}
+          hitSlop={6}
+          style={({ pressed }) => [styles.companyRow, pressed ? styles.companyPressed : null]}>
           <CompanyLogo
             logo={job.companyLogoUrl ?? job.companyLogo}
             name={job.companyName}
@@ -59,7 +67,7 @@ export default function JobDetailScreen() {
             size="lg"
           />
           <Text style={styles.company}>{job.companyName}</Text>
-        </View>
+        </Pressable>
 
         <Text style={styles.title}>{job.title}</Text>
         <JobMetadata job={job} emphasizeSalary />
@@ -102,6 +110,9 @@ const useStyles = makeStyles((colors) => ({
     padding: screenPadding,
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
+  },
+  companyPressed: {
+    opacity: 0.6,
   },
   companyRow: {
     flexDirection: 'row',

@@ -412,6 +412,15 @@ export default function ReelsScreen() {
         logoUrl={detailsJob?.companyLogoUrl ?? undefined}
         visible={detailsJob !== null}
         onClose={() => setDetailsJob(null)}
+        onCompanyPress={
+          detailsJob
+            ? () => {
+                const slug = detailsJob.companySlug;
+                setDetailsJob(null);
+                router.push({ pathname: '/company/[id]', params: { id: slug } });
+              }
+            : undefined
+        }
         onAutoApply={() => {
           const job = detailsJob;
           setDetailsJob(null);

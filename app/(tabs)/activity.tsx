@@ -257,6 +257,7 @@ export default function ActivityScreen() {
                     onPress={() => handlePressJob(entry.job)}
                     onAdvance={(status) => setApplicationStatus(entry.application.id, status)}
                     onOpenStatusPicker={() => setPickerFor(entry.application.id)}
+                    onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: entry.job.companySlug } })}
                   />
                 </Animated.View>
               ))
@@ -281,6 +282,7 @@ export default function ActivityScreen() {
                     logoUrl={job.companyLogoUrl ?? undefined}
                     onPress={() => handlePressJob(job)}
                     onToggleLike={() => toggleLike(job.id)}
+                    onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: job.companySlug } })}
                   />
                 </Animated.View>
               ))

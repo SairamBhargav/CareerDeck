@@ -47,6 +47,11 @@ interface SearchOverlayProps {
   onClose: () => void;
   onPressJob: (job: Job) => void;
   onPressCompany: (company: Company) => void;
+  /**
+   * By slug, for a job result's logo — a job knows its company's slug but not the whole
+   * `Company`, and fetching one just to navigate would be a round trip for a route param.
+   */
+  onPressCompanySlug: (companySlug: string) => void;
 }
 
 /**
@@ -60,7 +65,13 @@ interface SearchOverlayProps {
  * Recents live in component state and reset with the app, matching the rest of
  * Milestone 0's no-backend posture.
  */
-export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: SearchOverlayProps) {
+export function SearchOverlay({
+  visible,
+  onClose,
+  onPressJob,
+  onPressCompany,
+  onPressCompanySlug,
+}: SearchOverlayProps) {
   const { colors, scheme } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -219,6 +230,7 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
                     logoUrl={(item as Job).companyLogoUrl ?? undefined}
                     onPress={() => openJob(item as Job)}
                     onToggleLike={() => toggleLike(item.id)}
+                  onCompanyPress={() => onPressCompanySlug((item as Job).companySlug)}
                   />
                 ) : (
                   <CompanyResultRow
