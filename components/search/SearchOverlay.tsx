@@ -65,7 +65,7 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
-  const { toggleFollow, toggleSave } = useCareerDeck();
+  const { toggleFollow, toggleLike } = useCareerDeck();
 
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<SearchScope>('jobs');
@@ -218,7 +218,7 @@ export function SearchOverlay({ visible, onClose, onPressJob, onPressCompany }: 
                     logoColor={(item as Job).companyLogoColor ?? undefined}
                     logoUrl={(item as Job).companyLogoUrl ?? undefined}
                     onPress={() => openJob(item as Job)}
-                    onToggleSave={() => toggleSave(item.id)}
+                    onToggleLike={() => toggleLike(item.id)}
                   />
                 ) : (
                   <CompanyResultRow

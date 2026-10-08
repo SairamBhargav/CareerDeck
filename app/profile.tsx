@@ -39,7 +39,6 @@ export default function ProfileScreen() {
     user,
     applications,
     followedCompanySlugs,
-    savedJobIds,
     likedJobIds,
     preferredRoles,
     preferredLocations,
@@ -110,13 +109,6 @@ export default function ProfileScreen() {
       label: 'Following companies',
       hint: countLabel(followedCompanySlugs.length, 'company', 'companies'),
       onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'following' } }),
-    },
-    {
-      key: 'saved',
-      icon: 'bookmark-outline',
-      label: 'Saved jobs',
-      hint: countLabel(savedJobIds.length, 'posting', 'postings'),
-      onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'saved' } }),
     },
     {
       key: 'liked',

@@ -17,7 +17,7 @@ import { useResumes } from '@/hooks/useResumes';
 export default function JobDetailScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, toggleSave, toggleLike } = useCareerDeck();
+  const { user, toggleLike } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   const { job, isLoading } = useJobById(id);
   const [applyVisible, setApplyVisible] = useState(false);
@@ -68,14 +68,11 @@ export default function JobDetailScreen() {
 
         <View style={styles.actions}>
           <PrimaryButton label="Apply" onPress={() => setApplyVisible(true)} />
-          <PrimaryButton
-            label={job.isSaved ? 'Saved' : 'Save'}
-            variant="secondary"
-            onPress={() => toggleSave(job.id)}
-          />
+          {/* Save used to sit between these two, doing the same job as Like with a
+              different word on it. */}
           <PrimaryButton
             label={job.isLiked ? 'Liked' : 'Like'}
-            variant="ghost"
+            variant="secondary"
             onPress={() => toggleLike(job.id)}
           />
         </View>

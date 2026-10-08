@@ -56,7 +56,7 @@ function useDebounced<T>(value: T, delayMs: number): T {
 }
 
 export function useSearch(query: string): SearchResults {
-  const { savedJobIds, likedJobIds, followedCompanySlugs } = useCareerDeck();
+  const { likedJobIds, followedCompanySlugs } = useCareerDeck();
 
   const normalized = query.trim();
   const debounced = useDebounced(normalized, DEBOUNCE_MS);
@@ -84,11 +84,10 @@ export function useSearch(query: string): SearchResults {
 
   const viewer = useMemo(
     () => ({
-      saved: new Set(savedJobIds),
       liked: new Set(likedJobIds),
       followed: new Set(followedCompanySlugs),
     }),
-    [savedJobIds, likedJobIds, followedCompanySlugs],
+    [likedJobIds, followedCompanySlugs],
   );
 
   return useMemo(() => {
@@ -99,7 +98,6 @@ export function useSearch(query: string): SearchResults {
     return {
       jobs: (jobsQuery.data?.items ?? []).map(({ job, viewer: state }) => ({
         ...job,
-        isSaved: state.saved || viewer.saved.has(job.id),
         isLiked: state.liked || viewer.liked.has(job.id),
       })),
       companies: (companiesQuery.data ?? []).map((company) => ({

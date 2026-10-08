@@ -12,7 +12,7 @@ interface JobFeedCardProps {
   logoColor?: string;
   logoUrl?: string;
   onPress: () => void;
-  onToggleSave: () => void;
+  onToggleLike: () => void;
   /** Home only, and only for the accessibility actions — the gesture itself lives in
    *  SwipeableJobRow. Activity shows the same card with no swipe and passes neither. */
   onHide?: () => void;
@@ -29,7 +29,7 @@ export function JobFeedCard({
   logoColor,
   logoUrl,
   onPress,
-  onToggleSave,
+  onToggleLike,
   onHide,
   onLike,
 }: JobFeedCardProps) {
@@ -73,10 +73,10 @@ export function JobFeedCard({
         </View>
 
         <IconButton
-          name={job.isSaved ? 'bookmark' : 'bookmark-outline'}
-          color={job.isSaved ? colors.text : colors.textTertiary}
-          onPress={onToggleSave}
-          accessibilityLabel={job.isSaved ? `Unsave ${job.title}` : `Save ${job.title}`}
+          name={job.isLiked ? 'heart' : 'heart-outline'}
+          color={job.isLiked ? colors.like : colors.textTertiary}
+          onPress={onToggleLike}
+          accessibilityLabel={job.isLiked ? `Unlike ${job.title}` : `Like ${job.title}`}
         />
       </View>
 
@@ -87,10 +87,10 @@ export function JobFeedCard({
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>{formatPostedAt(job.postedAt)}</Text>
-        {job.isSaved ? (
+        {job.isLiked ? (
           <>
             <Text style={styles.footerDot}>{'·'}</Text>
-            <Text style={styles.footerText}>Saved</Text>
+            <Text style={styles.footerText}>Liked</Text>
           </>
         ) : null}
       </View>

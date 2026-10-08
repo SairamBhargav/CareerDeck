@@ -23,9 +23,9 @@ import { companyAudience } from '@/utils/format';
 const STAGGER_MS = 45;
 const MAX_STAGGER_INDEX = 7;
 
-type CollectionType = 'following' | 'saved' | 'liked';
+type CollectionType = 'following' | 'liked';
 
-const COPY: Record<CollectionType, { title: string; empty: { icon: 'business-outline' | 'bookmark-outline' | 'heart-outline'; title: string; message: string } }> = {
+const COPY: Record<CollectionType, { title: string; empty: { icon: 'business-outline' | 'heart-outline'; title: string; message: string } }> = {
   following: {
     title: 'Following',
     empty: {
@@ -34,26 +34,18 @@ const COPY: Record<CollectionType, { title: string; empty: { icon: 'business-out
       message: 'Follow a company on Home and its newest roles show up in your Deck.',
     },
   },
-  saved: {
-    title: 'Saved jobs',
-    empty: {
-      icon: 'bookmark-outline',
-      title: 'Nothing saved yet',
-      message: 'Tap the bookmark on any posting to keep it here.',
-    },
-  },
   liked: {
     title: 'Liked jobs',
     empty: {
       icon: 'heart-outline',
       title: 'Nothing liked yet',
-      message: 'Double-tap a card in Deck and it will be waiting here.',
+      message: 'Tap the heart on any posting, or swipe one right on Home.',
     },
   },
 };
 
 function isCollectionType(value: string | undefined): value is CollectionType {
-  return value === 'following' || value === 'saved' || value === 'liked';
+  return value === 'following' || value === 'liked';
 }
 
 /**
@@ -68,10 +60,10 @@ export default function CollectionScreen() {
   const styles = useStyles();
   const { type } = useLocalSearchParams<{ type: string }>();
 
-  const { savedJobIds, likedJobIds, followedCompanySlugs, toggleSave, toggleFollow } = useCareerDeck();
+  const { likedJobIds, followedCompanySlugs, toggleLike, toggleFollow } = useCareerDeck();
   const directory = useCompanyDirectory();
 
-  const collection: CollectionType = isCollectionType(type) ? type : 'saved';
+  const collection: CollectionType = isCollectionType(type) ? type : 'liked';
   const copy = COPY[collection];
 
   /*
@@ -81,7 +73,7 @@ export default function CollectionScreen() {
    * week is not in the page currently loaded, so filtering would show an empty
    * Saved screen to someone with fifty saved jobs.
    */
-  const wantedIds = collection === 'saved' ? savedJobIds : likedJobIds;
+  const wantedIds = likedJobIds;
   const { jobs: shownJobs, isLoading: jobsLoading } = useJobsByIds(
     collection === 'following' ? [] : wantedIds,
   );
@@ -168,7 +160,7 @@ export default function CollectionScreen() {
                   logoColor={job.companyLogoColor ?? undefined}
                   logoUrl={job.companyLogoUrl ?? undefined}
                   onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })}
-                  onToggleSave={() => toggleSave(job.id)}
+                  onToggleLike={() => toggleLike(job.id)}
                 />
               </Animated.View>
             ))}

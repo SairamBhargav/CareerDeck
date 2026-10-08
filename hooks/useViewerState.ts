@@ -10,7 +10,7 @@ import { enqueue, subscribeToOutbox } from '@/lib/outbox';
  * Through phase 1 these were three `Set`s in `CareerDeckContext` that a cold start threw
  * away. They are the same three sets, with the same shape, read from
  * `job_interactions` and `company_follows` instead of from memory. Every consumer of
- * `likedJobIds` / `savedJobIds` / `followedCompanySlugs` is unchanged.
+ * `likedJobIds` / `followedCompanySlugs` is unchanged.
  *
  * ── Why one query rather than per-row flags ───────────────────────────────────
  *
@@ -37,12 +37,10 @@ export interface ViewerState extends ViewerSets {
   isLoading: boolean;
   error: Error | null;
   isLiked: (jobId: string) => boolean;
-  isSaved: (jobId: string) => boolean;
   isFollowing: (companySlug: string) => boolean;
   /** Phase 3. §1.3(b)'s `viewerHasLiked`, kept apart from the comment's stored count. */
   isCommentLiked: (commentId: string) => boolean;
   toggleLike: (jobId: string) => void;
-  toggleSave: (jobId: string) => void;
   /**
    * §3.5's `hide`, which the enum and this hook's optimistic write have both carried since
    * phase 2 with nothing calling them. Home's left swipe is the UI that comment anticipated.
@@ -117,7 +115,6 @@ export function useViewerState(userId: string | null): ViewerState {
       apply((current) => ({
         ...current,
         likedJobIds: kind === 'like' ? withId(current.likedJobIds, jobId, on) : current.likedJobIds,
-        savedJobIds: kind === 'save' ? withId(current.savedJobIds, jobId, on) : current.savedJobIds,
         hiddenJobIds: kind === 'hide' ? withId(current.hiddenJobIds, jobId, on) : current.hiddenJobIds,
       }));
 
@@ -129,11 +126,6 @@ export function useViewerState(userId: string | null): ViewerState {
   const toggleLike = useCallback(
     (jobId: string) => toggleInteraction(jobId, 'like', sets.likedJobIds),
     [toggleInteraction, sets.likedJobIds],
-  );
-
-  const toggleSave = useCallback(
-    (jobId: string) => toggleInteraction(jobId, 'save', sets.savedJobIds),
-    [toggleInteraction, sets.savedJobIds],
   );
 
   const toggleHide = useCallback(
@@ -185,7 +177,6 @@ export function useViewerState(userId: string | null): ViewerState {
   );
 
   const liked = useMemo(() => new Set(sets.likedJobIds), [sets.likedJobIds]);
-  const saved = useMemo(() => new Set(sets.savedJobIds), [sets.savedJobIds]);
   const followed = useMemo(() => new Set(sets.followedCompanySlugs), [sets.followedCompanySlugs]);
   const likedComments = useMemo(() => new Set(sets.likedCommentIds), [sets.likedCommentIds]);
 
@@ -194,11 +185,9 @@ export function useViewerState(userId: string | null): ViewerState {
     isLoading: query.isPending && userId !== null,
     error: query.error,
     isLiked: useCallback((jobId: string) => liked.has(jobId), [liked]),
-    isSaved: useCallback((jobId: string) => saved.has(jobId), [saved]),
     isFollowing: useCallback((companySlug: string) => followed.has(companySlug), [followed]),
     isCommentLiked: useCallback((commentId: string) => likedComments.has(commentId), [likedComments]),
     toggleLike,
-    toggleSave,
     toggleHide,
     toggleFollow,
     toggleCommentLike,

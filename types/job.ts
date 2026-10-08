@@ -49,6 +49,5 @@ export interface Job {
    * it comes from the client's in-memory sets; in phase 2 it arrives from the server in
    * the `viewer` half of the envelope and nothing here changes.
    */
-  isSaved: boolean;
   isLiked: boolean;
 }

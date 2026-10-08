@@ -94,14 +94,12 @@ interface CareerDeckState {
    */
   followedCompanySlugs: string[];
   likedJobIds: string[];
-  savedJobIds: string[];
   hiddenJobIds: string[];
   /** News items the user has already watched in the stories row. */
   seenNewsIds: string[];
   isFollowing: (companySlug: string) => boolean;
   toggleFollow: (companySlug: string) => void;
   toggleLike: (jobId: string) => void;
-  toggleSave: (jobId: string) => void;
   toggleHide: (jobId: string) => void;
   /** One-way: a story that has been watched stays watched for the session. */
   markNewsSeen: (newsId: string) => void;
@@ -302,13 +300,11 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
       unreadNotificationCount: inbox.unreadCount,
       followedCompanySlugs: viewer.followedCompanySlugs,
       likedJobIds: viewer.likedJobIds,
-      savedJobIds: viewer.savedJobIds,
       hiddenJobIds: viewer.hiddenJobIds,
       seenNewsIds: [...seenNewsIds],
       isFollowing: viewer.isFollowing,
       toggleFollow: viewer.toggleFollow,
       toggleLike: viewer.toggleLike,
-      toggleSave: viewer.toggleSave,
       toggleHide: viewer.toggleHide,
       markNewsSeen,
       setApplicationStatus: tracker.setApplicationStatus,
@@ -336,12 +332,10 @@ export function CareerDeckProvider({ children }: { children: ReactNode }) {
     retryProfile,
     viewer.followedCompanySlugs,
     viewer.likedJobIds,
-    viewer.savedJobIds,
     viewer.hiddenJobIds,
     viewer.isFollowing,
     viewer.toggleFollow,
     viewer.toggleLike,
-    viewer.toggleSave,
     viewer.toggleHide,
     seenNewsIds,
     tracker.applications,

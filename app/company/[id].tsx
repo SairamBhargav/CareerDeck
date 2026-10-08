@@ -35,7 +35,7 @@ export default function CompanyDetailScreen() {
   const router = useRouter();
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { toggleFollow, toggleSave } = useCareerDeck();
+  const { toggleFollow, toggleLike } = useCareerDeck();
   // `id` is the slug — §1.3(c) keeps company slugs as the URL, and they survived
   // the move to uuid primary keys precisely so these links keep resolving.
   const { company, isLoading } = useCompany(id);
@@ -114,7 +114,7 @@ export default function CompanyDetailScreen() {
                   logoColor={company.logoColor}
                   logoUrl={company.logo}
                   onPress={() => handlePressJob(job)}
-                  onToggleSave={() => toggleSave(job.id)}
+                  onToggleLike={() => toggleLike(job.id)}
                 />
               </Animated.View>
             ))}

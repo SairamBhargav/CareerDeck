@@ -58,7 +58,6 @@ import type {
 /** What the server knows about this viewer's relationship to a posting. §1.3(a). */
 export interface JobViewerState {
   liked: boolean;
-  saved: boolean;
   applied: boolean;
   /**
    * The default resume against this posting, from `job_match_scores`. Filled only on pages
@@ -199,14 +198,13 @@ function toJob(row: JobCardRow): Job {
     postedAt: row.posted_at,
     lastSeenAt: row.last_seen_at,
     applicationUrl: row.apply_url,
-    // Overwritten by the feed hooks' merge. Defaulting to false rather than leaving them
+    // Overwritten by the feed hooks' merge. Defaulting to false rather than leaving it
     // undefined keeps `Job` a complete value at every point it exists.
-    isSaved: false,
     isLiked: false,
   };
 }
 
-const DEFAULT_VIEWER: JobViewerState = { liked: false, saved: false, applied: false, match: null };
+const DEFAULT_VIEWER: JobViewerState = { liked: false, applied: false, match: null };
 
 function toEnvelope(row: JobCardRow): JobEnvelope {
   return { job: toJob(row), viewer: { ...DEFAULT_VIEWER } };
@@ -488,7 +486,6 @@ export type FeedSurface = 'reels' | 'home' | 'search' | 'company' | 'collection'
  */
 export interface ViewerSets {
   likedJobIds: string[];
-  savedJobIds: string[];
   hiddenJobIds: string[];
   /** Database uuids — what `company_follows` keys on. */
   followedCompanyIds: string[];
@@ -504,7 +501,6 @@ export interface ViewerSets {
 
 export const EMPTY_VIEWER_SETS: ViewerSets = {
   likedJobIds: [],
-  savedJobIds: [],
   hiddenJobIds: [],
   followedCompanyIds: [],
   followedCompanySlugs: [],
@@ -513,7 +509,6 @@ export const EMPTY_VIEWER_SETS: ViewerSets = {
 
 interface ViewerSetsRow {
   liked_job_ids: string[] | null;
-  saved_job_ids: string[] | null;
   hidden_job_ids: string[] | null;
   followed_company_ids: string[] | null;
   followed_company_slugs: string[] | null;
@@ -537,7 +532,6 @@ export async function fetchViewerState(): Promise<ViewerSets> {
 
   return {
     likedJobIds: row.liked_job_ids ?? [],
-    savedJobIds: row.saved_job_ids ?? [],
     hiddenJobIds: row.hidden_job_ids ?? [],
     followedCompanyIds: row.followed_company_ids ?? [],
     followedCompanySlugs: row.followed_company_slugs ?? [],

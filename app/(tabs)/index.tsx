@@ -50,7 +50,6 @@ export default function HomeScreen() {
     seenNewsIds,
     hiddenJobIds,
     toggleFollow,
-    toggleSave,
     toggleLike,
     toggleHide,
     markNewsSeen,
@@ -154,8 +153,8 @@ export default function HomeScreen() {
    *
    * Left writes `hide` — §3.5's hard filter, which the enum has carried since phase 2 with
    * no UI. Right writes `like`, which is a ranker signal and fills the Liked jobs
-   * collection; the bookmark on the card stays a separate manual `save`, so a flick and a
-   * tap never mean the same thing.
+   * collection, and is the same thing the heart on the card writes: there is one way to say
+   * yes to a posting now, whichever gesture reaches it.
    *
    * The invitation to apply rides on the undo bar rather than opening the apply sheet. A
    * sheet over the feed would make it impossible to triage more than one card at a time,
@@ -294,7 +293,7 @@ export default function HomeScreen() {
               logoColor={item.companyLogoColor ?? undefined}
               logoUrl={item.companyLogoUrl ?? undefined}
               onPress={() => handlePressJob(item)}
-              onToggleSave={() => toggleSave(item.id)}
+              onToggleLike={() => toggleLike(item.id)}
               onHide={() => handleSwipe(item, 'hide')}
               onLike={() => handleSwipe(item, 'like')}
             />

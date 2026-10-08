@@ -60,7 +60,7 @@ export default function ActivityScreen() {
     user,
     notifications,
     unreadNotificationCount,
-    toggleSave,
+    toggleLike,
     setApplicationStatus,
     markNotificationRead,
     markAllNotificationsRead,
@@ -280,7 +280,7 @@ export default function ActivityScreen() {
                     logoColor={job.companyLogoColor ?? undefined}
                     logoUrl={job.companyLogoUrl ?? undefined}
                     onPress={() => handlePressJob(job)}
-                    onToggleSave={() => toggleSave(job.id)}
+                    onToggleLike={() => toggleLike(job.id)}
                   />
                 </Animated.View>
               ))

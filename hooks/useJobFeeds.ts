@@ -29,7 +29,7 @@ import type { Company, Job, MatchScore } from '@/types';
  * `lib/api.ts`.
  *
  * The one thing that has *not* changed is what a component receives: a `Job` with
- * `isSaved` and `isLiked` already on it. The server sends the shared entity and the
+ * `isLiked` already on it. The server sends the shared entity and the
  * viewer's relationship to it arrives separately (§1.3a); the merge below folds them
  * together, exactly as `CareerDeckContext` used to in its `useMemo`.
  *
@@ -81,24 +81,20 @@ function pageParams() {
  * carry the answer. `viewer.saved || saved.has(id)` is written to read correctly either
  * way, so the day a page does arrive pre-decorated this line is already right.
  */
-function mergeViewer(pages: EnvelopePage[] | undefined, saved: Set<string>, liked: Set<string>): Job[] {
+function mergeViewer(pages: EnvelopePage[] | undefined, liked: Set<string>): Job[] {
   if (!pages) return [];
   return pages.flatMap((page) =>
     page.items.map(({ job, viewer }) => ({
       ...job,
-      isSaved: viewer.saved || saved.has(job.id),
       isLiked: viewer.liked || liked.has(job.id),
     })),
   );
 }
 
-/** The viewer's like and save sets as `Set`s, stable while the underlying arrays are. */
+/** The viewer's like set as a `Set`, stable while the underlying array is. */
 function useViewerSets() {
-  const { savedJobIds, likedJobIds } = useCareerDeck();
-  return useMemo(
-    () => ({ saved: new Set(savedJobIds), liked: new Set(likedJobIds) }),
-    [savedJobIds, likedJobIds],
-  );
+  const { likedJobIds } = useCareerDeck();
+  return useMemo(() => ({ liked: new Set(likedJobIds) }), [likedJobIds]);
 }
 
 /**
@@ -108,7 +104,7 @@ function useViewerSets() {
  * every render of the screen, which re-rendered every mounted card.
  */
 function useFeedItems(pages: EnvelopePage[] | undefined): FeedItems {
-  const { saved, liked } = useViewerSets();
+  const { liked } = useViewerSets();
   return useMemo(() => {
     const matches = new Map<string, MatchScore>();
     for (const page of pages ?? []) {
@@ -116,8 +112,8 @@ function useFeedItems(pages: EnvelopePage[] | undefined): FeedItems {
         if (viewer.match) matches.set(job.id, viewer.match);
       }
     }
-    return { jobs: mergeViewer(pages, saved, liked), matches };
-  }, [pages, saved, liked]);
+    return { jobs: mergeViewer(pages, liked), matches };
+  }, [pages, liked]);
 }
 
 function toFeed(
@@ -227,7 +223,6 @@ export function useJobById(jobId: string | undefined): { job: Job | undefined; i
     if (!envelope) return undefined;
     return {
       ...envelope.job,
-      isSaved: envelope.viewer.saved || sets.saved.has(envelope.job.id),
       isLiked: envelope.viewer.liked || sets.liked.has(envelope.job.id),
     };
   }, [query.data, sets]);
@@ -254,8 +249,7 @@ export function useJobsByIds(ids: string[]): { jobs: Job[]; isLoading: boolean }
     () =>
       (query.data ?? []).map(({ job, viewer }) => ({
         ...job,
-        isSaved: viewer.saved || sets.saved.has(job.id),
-        isLiked: viewer.liked || sets.liked.has(job.id),
+          isLiked: viewer.liked || sets.liked.has(job.id),
       })),
     [query.data, sets],
   );
