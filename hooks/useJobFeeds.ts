@@ -1,9 +1,11 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useSuggestionDismissals } from '@/hooks/useSuggestionDismissals';
+import { useSuggestionRotation } from '@/hooks/useSuggestionRotation';
+import { isRetired } from '@/lib/suggestionRotation';
 import {
   fetchCompanyJobs,
   fetchDeckProfile,
@@ -298,6 +300,7 @@ export function useSuggestedCompanies(): {
   const followed = useMemo(() => new Set(followedCompanySlugs), [followedCompanySlugs]);
   const { dismissed, dismiss } = useSuggestionDismissals();
   const hidden = useMemo(() => new Set(dismissed), [dismissed]);
+  const { shownAt, record: recordShown } = useSuggestionRotation();
 
   /*
    * Companies followed from the row since the last time Home was focused.
@@ -336,15 +339,64 @@ export function useSuggestedCompanies(): {
    * top-by-openings query over every active company, the same list for everybody — so
    * excluding follows is the client's job for now.
    */
-  const companies = useMemo(
+  const eligible = useMemo(
     () =>
       (query.data ?? [])
         .filter((company) => !hidden.has(company.slug))
-        .filter((company) => !followed.has(company.slug) || justFollowed.includes(company.slug))
-        .slice(0, SUGGESTION_SHOWN)
-        .map((company) => ({ ...company, isFollowing: followed.has(company.slug) })),
+        .filter((company) => !followed.has(company.slug) || justFollowed.includes(company.slug)),
     [query.data, followed, hidden, justFollowed],
   );
+
+  /*
+   * The turnover. A company holds its slot for ROTATION_MS and then goes to the back.
+   *
+   * Three tiers, in order of who gets a slot:
+   *
+   *   0. still inside its term — sorted newest first, which is what puts the most recent
+   *      arrival on the left and the one nearest its retirement on the right
+   *   1. never shown — in the order the server gave them, so the best suggestion is the
+   *      one that fills a freed slot
+   *   2. retired — longest-retired first, so the pool cycles rather than running out
+   *
+   * Tier 2 existing at all is the point: a hard expiry would drain thirty companies in a
+   * fortnight and then leave the row empty for good.
+   */
+  const companies = useMemo(() => {
+    const now = Date.now();
+    const tierOf = (slug: string) => {
+      const at = shownAt[slug];
+      if (at === undefined) return 1;
+      return isRetired(at, now) ? 2 : 0;
+    };
+
+    return eligible
+      .map((company, index) => ({ company, index }))
+      .sort((a, b) => {
+        const tierA = tierOf(a.company.slug);
+        const tierB = tierOf(b.company.slug);
+        if (tierA !== tierB) return tierA - tierB;
+        // Held: newest first. Retired: longest ago first. Never shown: the server's order.
+        if (tierA === 0) return (shownAt[b.company.slug] ?? 0) - (shownAt[a.company.slug] ?? 0);
+        if (tierA === 2) return (shownAt[a.company.slug] ?? 0) - (shownAt[b.company.slug] ?? 0);
+        return a.index - b.index;
+      })
+      .slice(0, SUGGESTION_SHOWN)
+      .map(({ company }) => ({ ...company, isFollowing: followed.has(company.slug) }));
+  }, [eligible, shownAt, followed]);
+
+  /*
+   * Stamp whatever ended up on screen.
+   *
+   * Keyed on membership rather than order, so the reshuffle this very write causes — a
+   * newly stamped company sorts to the left — does not fire it again. Companies already
+   * holding a live slot keep their original time, so this cannot push a retirement back.
+   */
+  const shownSlugs = companies.map((company) => company.slug);
+  const membership = useMemo(() => [...shownSlugs].sort().join(','), [shownSlugs]);
+  useEffect(() => {
+    if (membership.length === 0) return;
+    recordShown(membership.split(','));
+  }, [membership, recordShown]);
 
   return {
     companies,
