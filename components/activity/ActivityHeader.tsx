@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { STATUS_COLOR, STATUS_ICON } from '@/components/activity/StatusChip';
-import { fontSize, radius, register, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { PipelineCounts } from '@/hooks/useApplications';
 import { hexToRgba } from '@/utils/color';
@@ -74,20 +74,13 @@ const useStyles = makeStyles((colors) => ({
     paddingTop: spacing.sm,
     gap: spacing.md,
   },
-  /*
-   * The quieter register, where this used to match Home's greeting at weight 700 and −0.7
-   * tracking.
-   *
-   * Activity is a panel of readings rather than a feed, and the readings are what should
-   * carry the weight on it. A lighter, larger title steps back and lets the numbers below
-   * be the loudest thing — which is the entire difference between the two voices.
-   *
-   * Home is deliberately left alone: a heading there competes with logos and card art for
-   * a glance, and the bold voice is the right one for that.
-   */
+  // Home's greeting, so the two tabs open at the same size and weight.
   title: {
-    ...register.sectionTitle,
+    fontSize: fontSize.display,
+    fontWeight: '700',
     color: colors.text,
+    letterSpacing: -0.7,
+    lineHeight: 36,
   },
   pills: {
     flexDirection: 'row',
