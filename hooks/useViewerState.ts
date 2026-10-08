@@ -43,6 +43,11 @@ export interface ViewerState extends ViewerSets {
   isCommentLiked: (commentId: string) => boolean;
   toggleLike: (jobId: string) => void;
   toggleSave: (jobId: string) => void;
+  /**
+   * §3.5's `hide`, which the enum and this hook's optimistic write have both carried since
+   * phase 2 with nothing calling them. Home's left swipe is the UI that comment anticipated.
+   */
+  toggleHide: (jobId: string) => void;
   toggleFollow: (companySlug: string) => void;
   toggleCommentLike: (commentId: string) => void;
 }
@@ -131,6 +136,11 @@ export function useViewerState(userId: string | null): ViewerState {
     [toggleInteraction, sets.savedJobIds],
   );
 
+  const toggleHide = useCallback(
+    (jobId: string) => toggleInteraction(jobId, 'hide', sets.hiddenJobIds),
+    [toggleInteraction, sets.hiddenJobIds],
+  );
+
   const toggleFollow = useCallback(
     (companySlug: string) => {
       const on = !sets.followedCompanySlugs.includes(companySlug);
@@ -189,6 +199,7 @@ export function useViewerState(userId: string | null): ViewerState {
     isCommentLiked: useCallback((commentId: string) => likedComments.has(commentId), [likedComments]),
     toggleLike,
     toggleSave,
+    toggleHide,
     toggleFollow,
     toggleCommentLike,
   };

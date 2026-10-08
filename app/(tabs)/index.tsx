@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { SectionHeader } from '@/components/common/SectionHeader';
+import { UndoBar, type UndoBarContent } from '@/components/common/UndoBar';
 import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { FeedSortBar } from '@/components/home/FeedSortBar';
 import { HomeHeader } from '@/components/home/HomeHeader';
@@ -13,6 +14,7 @@ import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { SearchBar } from '@/components/home/SearchBar';
 import { StoriesRow } from '@/components/home/StoriesRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
+import { SwipeableJobRow } from '@/components/home/SwipeableJobRow';
 import { SearchOverlay } from '@/components/search/SearchOverlay';
 import { StoryViewer } from '@/components/stories/StoryViewer';
 import { screenPadding, spacing } from '@/constants/theme';
@@ -40,7 +42,17 @@ const END_REACHED_THRESHOLD = 0.5;
 export default function HomeScreen() {
   const router = useRouter();
   const styles = useStyles();
-  const { isInitialLoading, user, seenNewsIds, toggleFollow, toggleSave, markNewsSeen } = useCareerDeck();
+  const {
+    isInitialLoading,
+    user,
+    seenNewsIds,
+    hiddenJobIds,
+    toggleFollow,
+    toggleSave,
+    toggleLike,
+    toggleHide,
+    markNewsSeen,
+  } = useCareerDeck();
 
   // Relevant by default: a student opening the app wants roles for them, not the newest anything.
   const [sort, setSort] = useState<JobSort>('recommended');
@@ -58,6 +70,29 @@ export default function HomeScreen() {
 
   const [searchOpen, setSearchOpen] = useState(false);
 
+  /*
+   * Rows swiped away during this session.
+   *
+   * Neither interaction is enough on its own to make a row leave. `hide` is a hard filter
+   * in the ranker, so the posting is gone from the *next* session the server builds — but
+   * not from the pages already in the react-query cache. And a right swipe writes `like`,
+   * which removes nothing anywhere, by design. So the list is filtered here too.
+   */
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [undo, setUndo] = useState<UndoBarContent | null>(null);
+
+  /*
+   * What the undo bar would reverse. A ref rather than state because nothing renders from
+   * it, and only the most recent swipe is offered — a second swipe replaces the first, which
+   * is why the bar never shows a count.
+   */
+  const reversible = useRef<{ job: Job; kind: 'hide' | 'like' } | null>(null);
+
+  const visibleJobs = useMemo(
+    () => feed.jobs.filter((job) => !dismissed.includes(job.id) && !hiddenJobIds.includes(job.id)),
+    [feed.jobs, dismissed, hiddenJobIds],
+  );
+
   // A snapshot of the rings taken at open time. The live `storyGroups` array re-sorts as
   // stories are marked watched, which would shuffle the deck out from under an open
   // viewer mid-playback.
@@ -74,6 +109,66 @@ export default function HomeScreen() {
     (company: Company) => router.push({ pathname: '/company/[id]', params: { id: company.slug } }),
     [router],
   );
+
+  /*
+   * Both swipes, which differ in what they write and in what they offer afterwards.
+   *
+   * Left writes `hide` — §3.5's hard filter, which the enum has carried since phase 2 with
+   * no UI. Right writes `like`, which is a ranker signal and fills the Liked jobs
+   * collection; the bookmark on the card stays a separate manual `save`, so a flick and a
+   * tap never mean the same thing.
+   *
+   * The invitation to apply rides on the undo bar rather than opening the apply sheet. A
+   * sheet over the feed would make it impossible to triage more than one card at a time,
+   * which is the whole point of swiping.
+   */
+  const handleSwipe = useCallback(
+    (job: Job, kind: 'hide' | 'like') => {
+      if (kind === 'hide') toggleHide(job.id);
+      else toggleLike(job.id);
+
+      setDismissed((current) => [job.id, ...current]);
+      reversible.current = { job, kind };
+
+      setUndo(
+        kind === 'hide'
+          ? { message: `Hidden · ${job.companyName}` }
+          : {
+              message: `Liked · ${job.companyName}`,
+              action: {
+                label: 'Apply',
+                onPress: () => {
+                  setUndo(null);
+                  handlePressJob(job);
+                },
+              },
+            },
+      );
+    },
+    [toggleHide, toggleLike, handlePressJob],
+  );
+
+  /*
+   * Both interactions are set membership rather than an event log, so calling the same
+   * toggle again is the reversal — there is no separate "unhide" to write.
+   */
+  const handleUndo = useCallback(() => {
+    const last = reversible.current;
+    if (!last) return;
+
+    if (last.kind === 'hide') toggleHide(last.job.id);
+    else toggleLike(last.job.id);
+
+    setDismissed((current) => current.filter((id) => id !== last.job.id));
+    reversible.current = null;
+    setUndo(null);
+  }, [toggleHide, toggleLike]);
+
+  // Expiry drops the offer, not the action: the row stays gone and the write stands.
+  const handleUndoExpired = useCallback(() => {
+    reversible.current = null;
+    setUndo(null);
+  }, []);
 
   const handlePressStory = (group: StoryGroup, index: number) =>
     setStorySession({
@@ -136,18 +231,22 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <Animated.FlatList
-        data={feed.jobs}
+        data={visibleJobs}
         keyExtractor={(job) => job.id}
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          <SwipeableJobRow
+            onHide={() => handleSwipe(item, 'hide')}
+            onLike={() => handleSwipe(item, 'like')}>
             <JobFeedCard
               job={item}
               logoColor={item.companyLogoColor ?? undefined}
               logoUrl={item.companyLogoUrl ?? undefined}
               onPress={() => handlePressJob(item)}
               onToggleSave={() => toggleSave(item.id)}
+              onHide={() => handleSwipe(item, 'hide')}
+              onLike={() => handleSwipe(item, 'like')}
             />
-          </View>
+          </SwipeableJobRow>
         )}
         ListHeaderComponent={header}
         ListEmptyComponent={
@@ -179,6 +278,13 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: spacing.xxl + tabBarHeight }}
+      />
+
+      <UndoBar
+        content={undo}
+        onUndo={handleUndo}
+        onDismiss={handleUndoExpired}
+        bottomOffset={tabBarHeight + spacing.md}
       />
 
       <SearchOverlay

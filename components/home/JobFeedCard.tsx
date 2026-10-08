@@ -13,6 +13,10 @@ interface JobFeedCardProps {
   logoUrl?: string;
   onPress: () => void;
   onToggleSave: () => void;
+  /** Home only, and only for the accessibility actions — the gesture itself lives in
+   *  SwipeableJobRow. Activity shows the same card with no swipe and passes neither. */
+  onHide?: () => void;
+  onLike?: () => void;
 }
 
 /**
@@ -20,16 +24,41 @@ interface JobFeedCardProps {
  * posting shows up, and the only one that's a plain scannable list rather than a
  * full-bleed card.
  */
-export function JobFeedCard({ job, logoColor, logoUrl, onPress, onToggleSave }: JobFeedCardProps) {
+export function JobFeedCard({
+  job,
+  logoColor,
+  logoUrl,
+  onPress,
+  onToggleSave,
+  onHide,
+  onLike,
+}: JobFeedCardProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const salary = formatSalary(job);
+
+  /*
+   * The swipes, offered as named actions.
+   *
+   * A gesture does not exist for a screen reader, and hiding a posting is the one action
+   * here with no other way to reach it — so without this, the feed would have a destructive
+   * action available only to people who can flick a card sideways.
+   */
+  const swipeActions = [
+    ...(onHide ? [{ name: 'hide', label: 'Hide this job' }] : []),
+    ...(onLike ? [{ name: 'like', label: 'Like and add to the apply list' }] : []),
+  ];
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${job.title} at ${job.companyName}`}
+      accessibilityActions={swipeActions.length > 0 ? swipeActions : undefined}
+      onAccessibilityAction={({ nativeEvent }) => {
+        if (nativeEvent.actionName === 'hide') onHide?.();
+        if (nativeEvent.actionName === 'like') onLike?.();
+      }}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}>
       <View style={styles.header}>
         <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="sm" />

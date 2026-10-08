@@ -24,7 +24,16 @@ export default function TabsLayout() {
       <TopTabs
         tabBar={(props: FloatingTabBarProps) => <FloatingTabBar {...props} />}
         tabBarPosition="bottom">
-        <TopTabs.Screen name="index" options={{ title: 'Home' }} />
+        {/*
+          * Home's feed rows are swipeable, and they cannot win the horizontal axis by
+          * arbitration: react-native-tab-view wraps react-native-pager-view, a native pager,
+          * which beats a JS gesture handler and exposes no ref to block. So the pager gives
+          * the axis up on this screen instead.
+          *
+          * Only while Home is focused — swiping back from Deck still works, and the tab bar
+          * was always the primary way between tabs.
+          */}
+        <TopTabs.Screen name="index" options={{ title: 'Home', swipeEnabled: false }} />
         <TopTabs.Screen name="reels" options={{ title: 'Deck' }} />
         <TopTabs.Screen name="activity" options={{ title: 'Activity' }} />
       </TopTabs>
