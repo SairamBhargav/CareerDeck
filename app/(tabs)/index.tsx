@@ -64,6 +64,7 @@ export default function HomeScreen() {
     companies: suggestedCompanies,
     isLoading: suggestionsLoading,
     dismiss: dismissSuggestion,
+    noteFollowed: noteSuggestionFollowed,
     refetch: refetchSuggestions,
   } = useSuggestedCompanies();
   const directory = useCompanyDirectory();
@@ -208,6 +209,18 @@ export default function HomeScreen() {
     setUndo(null);
   }, []);
 
+  /*
+   * Following from the suggestions row, which is the one place a follow also decides whether
+   * the card stays. Everywhere else `toggleFollow` is enough on its own.
+   */
+  const handleFollowSuggestion = useCallback(
+    (companySlug: string) => {
+      toggleFollow(companySlug);
+      noteSuggestionFollowed(companySlug);
+    },
+    [toggleFollow, noteSuggestionFollowed],
+  );
+
   const handlePressStory = (group: StoryGroup, index: number) =>
     setStorySession({
       groups: storyGroups,
@@ -242,7 +255,7 @@ export default function HomeScreen() {
         companies={suggestedCompanies}
         loading={suggestionsLoading}
         onPressCompany={handlePressCompany}
-        onToggleFollow={toggleFollow}
+        onToggleFollow={handleFollowSuggestion}
         onDismiss={dismissSuggestion}
         onSeeAll={() => router.push('/profile')}
       />

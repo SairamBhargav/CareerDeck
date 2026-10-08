@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useSuggestionDismissals } from '@/hooks/useSuggestionDismissals';
@@ -290,6 +291,7 @@ export function useSuggestedCompanies(): {
   companies: Company[];
   isLoading: boolean;
   dismiss: (companySlug: string) => void;
+  noteFollowed: (companySlug: string) => void;
   refetch: () => Promise<unknown>;
 } {
   const { followedCompanySlugs } = useCareerDeck();
@@ -297,23 +299,58 @@ export function useSuggestedCompanies(): {
   const { dismissed, dismiss } = useSuggestionDismissals();
   const hidden = useMemo(() => new Set(dismissed), [dismissed]);
 
+  /*
+   * Companies followed from the row since the last time Home was focused.
+   *
+   * A suggestion you have accepted is not a suggestion any more, so a followed company has
+   * no business in this row. But removing it on the tap would take the card away before the
+   * reader saw the tap land, and leave them unsure whether it worked. So the card stays and
+   * flips to Following, and the follow settles the next time the screen is focused: look
+   * away, come back, it is gone and something else is in its place.
+   *
+   * Held as "recently followed" rather than "already followed as of some moment" on purpose.
+   * The latter needs a snapshot taken once follows have loaded, which is a render or two
+   * after mount — and anything followed before that would flash into the row on launch.
+   * This way the default excludes every follow, and only the deliberate exceptions are kept.
+   */
+  const [justFollowed, setJustFollowed] = useState<string[]>([]);
+  useFocusEffect(useCallback(() => setJustFollowed([]), []));
+
+  const noteFollowed = useCallback((companySlug: string) => {
+    setJustFollowed((current) =>
+      current.includes(companySlug) ? current : [companySlug, ...current],
+    );
+  }, []);
+
   const query = useQuery({
     queryKey: ['companies', 'suggested'],
     queryFn: () => fetchSuggestedCompanies(SUGGESTION_POOL),
   });
 
   /*
-   * Dismissals are filtered before the slice, which is what makes the row refill: removing
-   * one company promotes the next out of the reserve rather than leaving nine cards.
+   * Both exclusions are applied before the slice, which is what makes the row refill:
+   * removing one company promotes the next out of the reserve rather than leaving nine
+   * cards.
+   *
+   * `suggested_companies()` itself has no idea who is asking — it is a plain
+   * top-by-openings query over every active company, the same list for everybody — so
+   * excluding follows is the client's job for now.
    */
   const companies = useMemo(
     () =>
       (query.data ?? [])
         .filter((company) => !hidden.has(company.slug))
+        .filter((company) => !followed.has(company.slug) || justFollowed.includes(company.slug))
         .slice(0, SUGGESTION_SHOWN)
         .map((company) => ({ ...company, isFollowing: followed.has(company.slug) })),
-    [query.data, followed, hidden],
+    [query.data, followed, hidden, justFollowed],
   );
 
-  return { companies, isLoading: query.isPending, dismiss, refetch: query.refetch };
+  return {
+    companies,
+    isLoading: query.isPending,
+    dismiss,
+    noteFollowed,
+    refetch: query.refetch,
+  };
 }
