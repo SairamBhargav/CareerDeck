@@ -261,11 +261,23 @@ export function StoryViewer({
                   ? undefined
                   : () => {
                       /*
-                       * Close first, then navigate. The viewer is a native Modal, so a
-                       * push while it is open changes the route underneath it and the
-                       * reader sees nothing happen until they dismiss the story.
+                       * Navigate first, dismiss second — the reverse of what this did.
+                       *
+                       * Closing first unmounts the Modal, which reveals Home, and only
+                       * then does the push slide the company in from the side. The reader
+                       * watches the story drop back to the feed before the page they asked
+                       * for arrives from somewhere else entirely.
+                       *
+                       * Pushing first puts the company screen in place behind the story,
+                       * which is still covering the screen, so nothing of Home is ever
+                       * shown. Dismissing then reveals the company directly. The earlier
+                       * comment here was right that a push alone looks like nothing
+                       * happening — the answer is to dismiss straight after it, not to
+                       * dismiss before it.
+                       *
+                       * On the next frame rather than the same one, so the route has
+                       * committed before the thing hiding it goes away.
                        */
-                      onClose();
                       // `group.id` is the company slug for company groups — §1.3(c) kept
                       // slugs as the URL through the move to uuid primary keys, and
                       // /company/[id] resolves one.
@@ -273,6 +285,7 @@ export function StoryViewer({
                         pathname: '/company/[id]',
                         params: { id: storyGroup.id },
                       });
+                      requestAnimationFrame(onClose);
                     }
               }
               onToggleFollow={
