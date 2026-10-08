@@ -1,5 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -9,7 +11,7 @@ import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
-import { makeStyles } from '@/context/ThemeContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCompany } from '@/hooks/useCompanies';
 import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useCompanyJobs } from '@/hooks/useJobFeeds';
@@ -29,7 +31,9 @@ const HEADER_WASH_ALPHA = 0.12;
  */
 export default function CompanyDetailScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { toggleFollow, toggleLike } = useCareerDeck();
   // `id` is the slug — §1.3(c) keeps company slugs as the URL, and they survived
@@ -51,6 +55,20 @@ export default function CompanyDetailScreen() {
   if (!company) {
     return (
       <View style={styles.missing}>
+        {/*
+          * Carries its own chevron, where the loaded page gets one from the header.
+          * Dismissing a sheet by flicking it down still works here, but a dead end with no
+          * visible way out is a bad place to make somebody guess that.
+          */}
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={16}
+          style={[styles.back, { top: insets.top + spacing.sm }]}>
+          <Ionicons name="chevron-back" size={26} color={colors.text} />
+        </Pressable>
+
         <EmptyState
           icon="business-outline"
           title="Company not found"
@@ -64,7 +82,31 @@ export default function CompanyDetailScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={[styles.header, { backgroundColor: hexToRgba(company.logoColor, HEADER_WASH_ALPHA) }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: hexToRgba(company.logoColor, HEADER_WASH_ALPHA),
+            // Clears the status bar on Android, where a modal is full-screen. On iOS the
+            // sheet already starts below it and this resolves to roughly nothing.
+            paddingTop: insets.top + spacing.xl,
+          },
+        ]}>
+        {/*
+          * Just the chevron. The OS back button carried a circular backing that sat on the
+          * brand wash looking like a control borrowed from another app; this is the same
+          * affordance with nothing drawn behind it, and a hitSlop doing the work the circle
+          * used to.
+          */}
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={16}
+          style={[styles.back, { top: insets.top + spacing.sm }]}>
+          <Ionicons name="chevron-back" size={26} color={colors.text} />
+        </Pressable>
+
         <CompanyLogo logo={company.logo} name={company.name} color={company.logoColor} size="xl" />
 
         <Text style={styles.name}>{company.name}</Text>
@@ -159,8 +201,15 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     gap: spacing.xs,
     paddingHorizontal: screenPadding,
-    paddingTop: spacing.xl,
+    // paddingTop is applied inline, from the safe-area inset.
     paddingBottom: spacing.xl,
+  },
+  back: {
+    position: 'absolute',
+    left: spacing.sm,
+    // Above the wash and the logo, and outside the centred column the rest of the header
+    // lays out in.
+    zIndex: 1,
   },
   name: {
     fontSize: fontSize.heading,

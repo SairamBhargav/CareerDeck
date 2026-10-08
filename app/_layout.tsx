@@ -131,7 +131,18 @@ function RootNavigator() {
               single label would be right anyway. */}
           <Stack.Screen
             name="company/[id]"
-            options={{ title: '', headerBackButtonDisplayMode: 'minimal' }}
+            /*
+             * No native header. It was `title: ''` with a minimal back button, which draws
+             * an empty bar across the top of the screen — the blank strip above the brand
+             * wash — and hands the back control to the OS, which gives it its own circular
+             * backing. The page draws its own chevron over the wash instead, so the
+             * company's colour reaches the top of the screen.
+             *
+             * `modal` because this is a thing you look at and leave, not somewhere you go.
+             * It arrives from the bottom and can be flicked away downwards, which is what
+             * a reader expects of a sheet and what they cannot do with a pushed card.
+             */
+            options={{ headerShown: false, presentation: 'modal' }}
           />
         </Stack.Protected>
 
