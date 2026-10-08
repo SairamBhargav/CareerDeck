@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useRouter } from 'expo-router';
+import { useOpenCompany } from '@/hooks/useOpenCompany';
 
 import { Linking } from 'react-native';
 import { StoryPage } from '@/components/stories/StoryPage';
@@ -73,7 +73,7 @@ export function StoryViewer({
 }: StoryViewerProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const openCompany = useOpenCompany();
   const { width } = useWindowDimensions();
 
   const listRef = useRef<FlatList<StoryGroup>>(null);
@@ -281,10 +281,7 @@ export function StoryViewer({
                       // `group.id` is the company slug for company groups — §1.3(c) kept
                       // slugs as the URL through the move to uuid primary keys, and
                       // /company/[id] resolves one.
-                      router.push({
-                        pathname: '/company/[id]',
-                        params: { id: storyGroup.id },
-                      });
+                      openCompany(storyGroup.id);
                       requestAnimationFrame(onClose);
                     }
               }

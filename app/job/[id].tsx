@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import { JobMetadata } from '@/components/jobs/JobMetadata';
 import { JobSectionsView } from '@/components/jobs/JobSectionsView';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { makeStyles } from '@/context/ThemeContext';
 import { useJobById } from '@/hooks/useJobFeeds';
 import { useResumes } from '@/hooks/useResumes';
@@ -17,7 +18,7 @@ import { useResumes } from '@/hooks/useResumes';
 export default function JobDetailScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const openCompany = useOpenCompany();
   const { user, toggleLike } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   const { job, isLoading } = useJobById(id);
@@ -55,7 +56,7 @@ export default function JobDetailScreen() {
         {/* Was a plain View, which left the one screen entirely about a job with no way
             to reach the company that posted it. */}
         <Pressable
-          onPress={() => router.push({ pathname: '/company/[id]', params: { id: job.companySlug } })}
+          onPress={() => openCompany(job.companySlug)}
           accessibilityRole="link"
           accessibilityLabel={`Open ${job.companyName}`}
           hitSlop={6}

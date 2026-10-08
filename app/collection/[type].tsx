@@ -12,6 +12,7 @@ import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useRenderedImpressions } from '@/hooks/useImpressions';
@@ -57,6 +58,7 @@ function isCollectionType(value: string | undefined): value is CollectionType {
  */
 export default function CollectionScreen() {
   const router = useRouter();
+  const openCompany = useOpenCompany();
   const styles = useStyles();
   const { type } = useLocalSearchParams<{ type: string }>();
 
@@ -119,7 +121,7 @@ export default function CollectionScreen() {
                 key={company.id}
                 entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
                 <Pressable
-                  onPress={() => router.push({ pathname: '/company/[id]', params: { id: company.slug } })}
+                  onPress={() => openCompany(company.slug)}
                   accessibilityRole="button"
                   accessibilityLabel={`Open ${company.name}`}
                   style={({ pressed }) => [styles.companyRow, pressed ? styles.pressed : null]}>
@@ -161,7 +163,7 @@ export default function CollectionScreen() {
                   logoUrl={job.companyLogoUrl ?? undefined}
                   onPress={() => router.push({ pathname: '/job/[id]', params: { id: job.id } })}
                   onToggleLike={() => toggleLike(job.id)}
-                  onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: job.companySlug } })}
+                  onCompanyPress={() => openCompany(job.companySlug)}
                 />
               </Animated.View>
             ))}

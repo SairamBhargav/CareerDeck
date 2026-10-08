@@ -10,11 +10,10 @@ import { UndoBar, type UndoBarContent } from '@/components/common/UndoBar';
 import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { FeedSortBar } from '@/components/home/FeedSortBar';
 import { HomeHeader } from '@/components/home/HomeHeader';
-import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { SearchBar } from '@/components/home/SearchBar';
 import { StoriesRow } from '@/components/home/StoriesRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
-import { SwipeableJobRow } from '@/components/home/SwipeableJobRow';
+import { HomeFeedRow } from '@/components/home/HomeFeedRow';
 import { SearchOverlay } from '@/components/search/SearchOverlay';
 import { StoryViewer } from '@/components/stories/StoryViewer';
 import { screenPadding, spacing } from '@/constants/theme';
@@ -26,6 +25,7 @@ import { useListImpressions } from '@/hooks/useImpressions';
 import { RelevantHint } from '@/components/home/RelevantHint';
 import { useDeckProfile, useJobFeed, useSuggestedCompanies, type JobSort } from '@/hooks/useJobFeeds';
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
+import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import { flushImpressions } from '@/lib/impressions';
 import type { Company, Job, StoryGroup } from '@/types';
@@ -69,6 +69,7 @@ export default function HomeScreen() {
   const directory = useCompanyDirectory();
   const storyGroups = useStoryGroups();
   const tabBarHeight = useTabBarHeight();
+  const openCompany = useOpenCompany();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
   // §3.6. Home has no dwell to measure — the reader scrolls past cards rather than
   // sitting on one — but which postings were seen, and at what rank, is most of what a
@@ -126,9 +127,19 @@ export default function HomeScreen() {
     }
   }, [feed, refetchSuggestions]);
 
+  /*
+   * Sets rather than two `Array.includes` per job. `hiddenJobIds` is whatever
+   * `viewer_state()` returns, up to two thousand ids, and this runs for every posting
+   * loaded — a linear scan each time turns a filter into a quadratic one for no reason.
+   */
+  const excluded = useMemo(
+    () => new Set([...dismissed, ...hiddenJobIds]),
+    [dismissed, hiddenJobIds],
+  );
+
   const visibleJobs = useMemo(
-    () => feed.jobs.filter((job) => !dismissed.includes(job.id) && !hiddenJobIds.includes(job.id)),
-    [feed.jobs, dismissed, hiddenJobIds],
+    () => feed.jobs.filter((job) => !excluded.has(job.id)),
+    [feed.jobs, excluded],
   );
 
   // A snapshot of the rings taken at open time. The live `storyGroups` array re-sorts as
@@ -190,6 +201,35 @@ export default function HomeScreen() {
    * Both interactions are set membership rather than an event log, so calling the same
    * toggle again is the reversal — there is no separate "unhide" to write.
    */
+  /*
+   * Split in two, and stable.
+   *
+   * The row component compares its handler props by reference to decide whether to
+   * re-render, so these have to keep their identity across a render of this screen — and
+   * a `() => handleSwipe(item, 'hide')` built inside renderItem never would.
+   */
+  const handleSwipeHide = useCallback((job: Job) => handleSwipe(job, 'hide'), [handleSwipe]);
+  const handleSwipeLike = useCallback((job: Job) => handleSwipe(job, 'like'), [handleSwipe]);
+
+  /*
+   * Hoisted out of the JSX for the same reason. An inline renderItem is a new function on
+   * every render, which FlatList takes as "the rows may have changed" and re-renders all
+   * of them — undoing the memo on the row before it can help.
+   */
+  const renderItem = useCallback(
+    ({ item }: { item: Job }) => (
+      <HomeFeedRow
+        job={item}
+        onPress={handlePressJob}
+        onToggleLike={toggleLike}
+        onCompanyPress={openCompany}
+        onHide={handleSwipeHide}
+        onLike={handleSwipeLike}
+      />
+    ),
+    [handlePressJob, toggleLike, openCompany, handleSwipeHide, handleSwipeLike],
+  );
+
   const handleUndo = useCallback(() => {
     const last = reversible.current;
     if (!last) return;
@@ -284,22 +324,7 @@ export default function HomeScreen() {
       <Animated.FlatList
         data={visibleJobs}
         keyExtractor={(job) => job.id}
-        renderItem={({ item }) => (
-          <SwipeableJobRow
-            onHide={() => handleSwipe(item, 'hide')}
-            onLike={() => handleSwipe(item, 'like')}>
-            <JobFeedCard
-              job={item}
-              logoColor={item.companyLogoColor ?? undefined}
-              logoUrl={item.companyLogoUrl ?? undefined}
-              onPress={() => handlePressJob(item)}
-              onToggleLike={() => toggleLike(item.id)}
-              onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: item.companySlug } })}
-              onHide={() => handleSwipe(item, 'hide')}
-              onLike={() => handleSwipe(item, 'like')}
-            />
-          </SwipeableJobRow>
-        )}
+        renderItem={renderItem}
         ListHeaderComponent={header}
         ListEmptyComponent={
           showSkeletons ? (
@@ -355,9 +380,7 @@ export default function HomeScreen() {
         onClose={() => setSearchOpen(false)}
         onPressJob={handlePressJob}
         onPressCompany={handlePressCompany}
-        onPressCompanySlug={(slug: string) =>
-          router.push({ pathname: '/company/[id]', params: { id: slug } })
-        }
+        onPressCompanySlug={openCompany}
       />
 
       {storySession ? (

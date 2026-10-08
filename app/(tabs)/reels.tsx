@@ -1,5 +1,4 @@
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -34,6 +33,7 @@ import { useCommentCounts } from '@/hooks/useComments';
 import { useResumes } from '@/hooks/useResumes';
 import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
+import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { Job } from '@/types';
 
@@ -79,6 +79,7 @@ export default function ReelsScreen() {
   const forYouFeed = useJobFeed('recommended');
   const followingFeed = useFollowingFeed();
   const tabBarHeight = useTabBarHeight();
+  const openCompany = useOpenCompany();
   /*
    * §3.6: "reels.tsx already knows which page is active; it just needs to time it."
    *
@@ -350,9 +351,7 @@ export default function ReelsScreen() {
                   onComment={() => setCommentsJob(item)}
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
-                  onCompanyPress={() =>
-                    router.push({ pathname: '/company/[id]', params: { id: item.companySlug } })
-                  }
+                  onCompanyPress={() => openCompany(item.companySlug)}
                   autoApplyCredits={autoApplyCredits}
                 />
               )}
@@ -417,7 +416,7 @@ export default function ReelsScreen() {
             ? () => {
                 const slug = detailsJob.companySlug;
                 setDetailsJob(null);
-                router.push({ pathname: '/company/[id]', params: { id: slug } });
+                openCompany(slug);
               }
             : undefined
         }

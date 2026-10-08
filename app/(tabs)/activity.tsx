@@ -35,6 +35,7 @@ import { useResumes } from '@/hooks/useResumes';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useJobsByIds } from '@/hooks/useJobFeeds';
+import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { ApplicationStatus, Job } from '@/types';
 
@@ -84,6 +85,7 @@ export default function ActivityScreen() {
   const counts = usePipelineCounts();
   const goal = useWeeklyGoal();
   const tabBarHeight = useTabBarHeight();
+  const openCompany = useOpenCompany();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
   const [tab, setTab] = useState<ActivityTab>('applications');
@@ -257,7 +259,7 @@ export default function ActivityScreen() {
                     onPress={() => handlePressJob(entry.job)}
                     onAdvance={(status) => setApplicationStatus(entry.application.id, status)}
                     onOpenStatusPicker={() => setPickerFor(entry.application.id)}
-                    onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: entry.job.companySlug } })}
+                    onCompanyPress={() => openCompany(entry.job.companySlug)}
                   />
                 </Animated.View>
               ))
@@ -282,7 +284,7 @@ export default function ActivityScreen() {
                     logoUrl={job.companyLogoUrl ?? undefined}
                     onPress={() => handlePressJob(job)}
                     onToggleLike={() => toggleLike(job.id)}
-                    onCompanyPress={() => router.push({ pathname: '/company/[id]', params: { id: job.companySlug } })}
+                    onCompanyPress={() => openCompany(job.companySlug)}
                   />
                 </Animated.View>
               ))
