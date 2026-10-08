@@ -41,7 +41,18 @@ export function CompanyLogo({ logo, name, color, size = 'md', shape = 'rounded' 
 
   const dimensions = SIZES[size];
   const isCircle = shape === 'circle';
-  const imageBox = dimensions.box - 10;
+  /*
+   * The image fills the plate rather than sitting 5px inside it.
+   *
+   * Every logo we serve is an opaque square — Brandfetch's tiles carry their own
+   * background, and so do most favicons — so an inset did not frame the mark, it drew a ring
+   * of our plate around a tile that already had its own edge. Worse, it was a *uniform* ring
+   * around tiles whose own internal padding varies by brand, which is what made the result
+   * look inconsistent rather than merely padded.
+   *
+   * Filling the box means the only white around a mark is the white that came with it.
+   */
+  const imageBox = dimensions.box;
   const tint = color ?? colors.text;
   const showImage = isRemoteLogo(logo) && !imageFailed;
   const monogram = isRemoteLogo(logo) ? monogramOf(name) : logo;
@@ -57,8 +68,12 @@ export function CompanyLogo({ logo, name, color, size = 'md', shape = 'rounded' 
           width: dimensions.box,
           height: dimensions.box,
           borderRadius: isCircle ? dimensions.box / 2 : dimensions.radius,
-          // Real logos are nearly always dark-on-transparent, so they keep a light plate
-          // in both schemes; a monogram sits directly on the company's brand colour.
+          /*
+           * The plate is now only what shows through a logo that does not fill its own
+           * square — the minority of favicons that are genuinely transparent, where a dark
+           * mark would otherwise vanish on a dark page. An opaque tile covers it entirely.
+           * A monogram still sits directly on the company's brand colour.
+           */
           backgroundColor: showImage ? colors.logoPlate : tint,
         },
       ]}>
@@ -72,7 +87,9 @@ export function CompanyLogo({ logo, name, color, size = 'md', shape = 'rounded' 
             {
               width: imageBox,
               height: imageBox,
-              borderRadius: isCircle ? imageBox / 2 : dimensions.radius - 4,
+              // Matches the plate exactly now that it covers it — a smaller radius inside
+              // the same corner is the other way an added edge shows up.
+              borderRadius: isCircle ? imageBox / 2 : dimensions.radius,
             },
           ]}
         />
