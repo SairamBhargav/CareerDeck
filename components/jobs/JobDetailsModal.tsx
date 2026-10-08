@@ -123,7 +123,7 @@ export function JobDetailsModal({
               accessibilityRole={onCompanyPress ? 'link' : 'text'}
               accessibilityLabel={onCompanyPress ? `Open ${job.companyName}` : job.companyName}
               hitSlop={6}
-              style={({ pressed }) => [styles.companyRow, pressed ? styles.logoPressed : null]}>
+              style={styles.companyRow}>
               <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="lg" />
               <View style={styles.companyText}>
                 <Text style={styles.company} numberOfLines={1}>
@@ -198,9 +198,6 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: screenPadding,
     paddingTop: spacing.xs,
     gap: spacing.sm,
-  },
-  logoPressed: {
-    opacity: 0.6,
   },
   companyRow: {
     flexDirection: 'row',

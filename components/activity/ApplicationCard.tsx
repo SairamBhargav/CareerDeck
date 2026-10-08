@@ -73,8 +73,7 @@ export function ApplicationCard({
             onPress={onCompanyPress}
             accessibilityRole="link"
             accessibilityLabel={`Open ${job.companyName}`}
-            hitSlop={6}
-            style={({ pressed }) => (pressed ? styles.logoPressed : undefined)}>
+            hitSlop={6}>
             <CompanyLogo
               logo={job.companyLogoUrl ?? job.companyLogo}
               name={job.companyName}
@@ -139,9 +138,6 @@ export function ApplicationCard({
 }
 
 const useStyles = makeStyles((colors) => ({
-  logoPressed: {
-    opacity: 0.6,
-  },
   card: {
     gap: spacing.md,
     padding: spacing.lg,

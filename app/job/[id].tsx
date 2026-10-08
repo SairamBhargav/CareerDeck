@@ -59,7 +59,7 @@ export default function JobDetailScreen() {
           accessibilityRole="link"
           accessibilityLabel={`Open ${job.companyName}`}
           hitSlop={6}
-          style={({ pressed }) => [styles.companyRow, pressed ? styles.companyPressed : null]}>
+          style={styles.companyRow}>
           <CompanyLogo
             logo={job.companyLogoUrl ?? job.companyLogo}
             name={job.companyName}
@@ -110,9 +110,6 @@ const useStyles = makeStyles((colors) => ({
     padding: screenPadding,
     paddingBottom: spacing.xxl,
     gap: spacing.sm,
-  },
-  companyPressed: {
-    opacity: 0.6,
   },
   companyRow: {
     flexDirection: 'row',

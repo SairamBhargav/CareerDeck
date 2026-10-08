@@ -1,6 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -18,9 +17,6 @@ import { hexToRgba } from '@/utils/color';
 import { companyAudience } from '@/utils/format';
 import type { Job } from '@/types';
 
-/** Per-card stagger down the openings list, capped so the tail doesn't crawl in. */
-const STAGGER_MS = 40;
-const MAX_STAGGER_INDEX = 6;
 /** How strongly the company's brand colour washes the header. Deliberately light — it sits behind text. */
 const HEADER_WASH_ALPHA = 0.12;
 
@@ -104,19 +100,25 @@ export default function CompanyDetailScreen() {
             message={`${company.name} has nothing posted right now. Follow them to hear about it first.`}
           />
         ) : (
+          /*
+           * No staggered entrance here, where every other list in the app has one.
+           *
+           * Those lists live on tabs, which are already mounted — the cascade is the only
+           * entrance they get. This screen is pushed, so the navigator is already sliding
+           * the whole page in, and the cards cascading on top of that is two entrances
+           * competing: the page arrives, a skeleton swaps out, and then the rows fall into
+           * place one after another. The push is the entrance.
+           */
           <View style={styles.list}>
-            {openings.jobs.map((job, index) => (
-              <Animated.View
+            {openings.jobs.map((job) => (
+              <JobFeedCard
                 key={job.id}
-                entering={FadeInDown.duration(240).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                <JobFeedCard
-                  job={job}
-                  logoColor={company.logoColor}
-                  logoUrl={company.logo}
-                  onPress={() => handlePressJob(job)}
-                  onToggleLike={() => toggleLike(job.id)}
-                />
-              </Animated.View>
+                job={job}
+                logoColor={company.logoColor}
+                logoUrl={company.logo}
+                onPress={() => handlePressJob(job)}
+                onToggleLike={() => toggleLike(job.id)}
+              />
             ))}
 
             {openings.hasNextPage ? (

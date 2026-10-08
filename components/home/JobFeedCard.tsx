@@ -75,8 +75,7 @@ export function JobFeedCard({
             onPress={onCompanyPress}
             accessibilityRole="link"
             accessibilityLabel={`Open ${job.companyName}`}
-            hitSlop={6}
-            style={({ pressed }) => (pressed ? styles.logoPressed : undefined)}>
+            hitSlop={6}>
             <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="sm" />
           </Pressable>
         ) : (
@@ -129,9 +128,6 @@ const useStyles = makeStyles((colors) => ({
   },
   pressed: {
     backgroundColor: colors.backgroundMuted,
-  },
-  logoPressed: {
-    opacity: 0.6,
   },
   header: {
     flexDirection: 'row',
