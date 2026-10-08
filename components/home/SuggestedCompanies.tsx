@@ -15,6 +15,8 @@ interface SuggestedCompaniesProps {
   onPressCompany: (company: Company) => void;
   /** Takes the company **slug** — `toggleFollow` keys on the slug, not the uuid. */
   onToggleFollow: (companySlug: string) => void;
+  /** Also by slug, for the same reason. */
+  onDismiss: (companySlug: string) => void;
   onSeeAll: () => void;
 }
 
@@ -23,9 +25,20 @@ export function SuggestedCompanies({
   loading,
   onPressCompany,
   onToggleFollow,
+  onDismiss,
   onSeeAll,
 }: SuggestedCompaniesProps) {
   const styles = useStyles();
+
+  /*
+   * The whole section goes, heading included.
+   *
+   * Ten are shown out of a pool of thirty, so dismissing twenty-one empties the row — and
+   * `suggested_companies()` caps its limit at fifty, so there is no deeper reserve to reach
+   * for. Nobody is likely to get there, but "Suggested for you" above an empty strip reads
+   * as a failed load rather than a row someone emptied on purpose.
+   */
+  if (!loading && companies.length === 0) return null;
 
   return (
     <View>
@@ -51,6 +64,7 @@ export function SuggestedCompanies({
               company={item}
               onPress={() => onPressCompany(item)}
               onToggleFollow={() => onToggleFollow(item.slug)}
+              onDismiss={() => onDismiss(item.slug)}
             />
           )}
         />

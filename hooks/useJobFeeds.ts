@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useSuggestionDismissals } from '@/hooks/useSuggestionDismissals';
 import {
   fetchCompanyJobs,
   fetchDeckProfile,
@@ -51,7 +52,8 @@ export interface JobFeed {
   isFetchingNextPage: boolean;
   hasNextPage: boolean;
   fetchNextPage: () => void;
-  refetch: () => void;
+  /** Awaitable, so a pull-to-refresh can keep its spinner up until the page arrives. */
+  refetch: () => Promise<unknown>;
   error: Error | null;
 }
 
@@ -122,7 +124,7 @@ function toFeed(
     isFetchingNextPage: boolean;
     hasNextPage: boolean;
     fetchNextPage: () => unknown;
-    refetch: () => unknown;
+    refetch: () => Promise<unknown>;
     error: Error | null;
   },
   { jobs, matches }: FeedItems,
@@ -136,7 +138,7 @@ function toFeed(
     // Wrapped so callers can pass them straight to `onEndReached` without React Native
     // handing the event object in as an argument.
     fetchNextPage: () => void query.fetchNextPage(),
-    refetch: () => void query.refetch(),
+    refetch: () => query.refetch(),
     error: query.error,
   };
 }
@@ -271,19 +273,47 @@ export function useDeckProfile(): { profile: DeckProfile | undefined; isLoading:
  * The "Suggested for you" rail. Replaces the hardcoded `suggestedCompanyIds` array with
  * companies that are actually hiring — see `suggested_companies()` in the migration.
  */
-export function useSuggestedCompanies(): { companies: Company[]; isLoading: boolean } {
+/**
+ * Fetched, against {@link SUGGESTION_SHOWN} rendered.
+ *
+ * The surplus is the reserve: dismissing a card has to put a different company in its
+ * place, and a round trip to find one would leave a hole in the row for as long as it took.
+ * `suggested_companies()` caps `p_limit` at 50, so this is well inside what it will serve.
+ */
+const SUGGESTION_POOL = 30;
+
+/** How many of the pool are on screen. The row scrolls, so this is a judgement about how
+ *  far anyone wants to scroll sideways, not about what fits. */
+const SUGGESTION_SHOWN = 10;
+
+export function useSuggestedCompanies(): {
+  companies: Company[];
+  isLoading: boolean;
+  dismiss: (companySlug: string) => void;
+  refetch: () => Promise<unknown>;
+} {
   const { followedCompanySlugs } = useCareerDeck();
   const followed = useMemo(() => new Set(followedCompanySlugs), [followedCompanySlugs]);
+  const { dismissed, dismiss } = useSuggestionDismissals();
+  const hidden = useMemo(() => new Set(dismissed), [dismissed]);
 
   const query = useQuery({
     queryKey: ['companies', 'suggested'],
-    queryFn: () => fetchSuggestedCompanies(),
+    queryFn: () => fetchSuggestedCompanies(SUGGESTION_POOL),
   });
 
+  /*
+   * Dismissals are filtered before the slice, which is what makes the row refill: removing
+   * one company promotes the next out of the reserve rather than leaving nine cards.
+   */
   const companies = useMemo(
-    () => (query.data ?? []).map((company) => ({ ...company, isFollowing: followed.has(company.slug) })),
-    [query.data, followed],
+    () =>
+      (query.data ?? [])
+        .filter((company) => !hidden.has(company.slug))
+        .slice(0, SUGGESTION_SHOWN)
+        .map((company) => ({ ...company, isFollowing: followed.has(company.slug) })),
+    [query.data, followed, hidden],
   );
 
-  return { companies, isLoading: query.isPending };
+  return { companies, isLoading: query.isPending, dismiss, refetch: query.refetch };
 }

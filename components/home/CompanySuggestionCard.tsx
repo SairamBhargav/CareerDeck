@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { FollowButton } from '@/components/common/FollowButton';
 import { fontSize, radius, spacing } from '@/constants/theme';
-import { makeStyles } from '@/context/ThemeContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Company } from '@/types';
 import { companyAudience } from '@/utils/format';
 
@@ -13,9 +14,18 @@ interface CompanySuggestionCardProps {
   company: Company;
   onPress: () => void;
   onToggleFollow: () => void;
+  /** Stops this company being suggested, and promotes another in its place. Omitted
+   *  wherever the card is not a suggestion. */
+  onDismiss?: () => void;
 }
 
-export function CompanySuggestionCard({ company, onPress, onToggleFollow }: CompanySuggestionCardProps) {
+export function CompanySuggestionCard({
+  company,
+  onPress,
+  onToggleFollow,
+  onDismiss,
+}: CompanySuggestionCardProps) {
+  const { colors } = useTheme();
   const styles = useStyles();
   const { isFollowing } = company;
 
@@ -44,6 +54,20 @@ export function CompanySuggestionCard({ company, onPress, onToggleFollow }: Comp
         onToggle={onToggleFollow}
         size="sm"
       />
+
+      {/* Last in the tree so it draws over the logo, and generously slopped: the glyph is
+          small enough to be unobtrusive on a 132pt card, which also makes it small enough
+          to miss without the extra target around it. */}
+      {onDismiss ? (
+        <Pressable
+          onPress={onDismiss}
+          accessibilityRole="button"
+          accessibilityLabel={`Stop suggesting ${company.name}`}
+          hitSlop={12}
+          style={({ pressed }) => [styles.dismiss, pressed ? styles.dismissPressed : null]}>
+          <Ionicons name="close" size={13} color={colors.textTertiary} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -75,5 +99,18 @@ const useStyles = makeStyles((colors) => ({
   followers: {
     fontSize: fontSize.caption,
     color: colors.textTertiary,
+  },
+  dismiss: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
+  dismissPressed: {
+    backgroundColor: colors.backgroundMuted,
   },
 }));

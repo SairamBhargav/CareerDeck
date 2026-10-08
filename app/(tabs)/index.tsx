@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,7 +19,7 @@ import { SearchOverlay } from '@/components/search/SearchOverlay';
 import { StoryViewer } from '@/components/stories/StoryViewer';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
-import { makeStyles } from '@/context/ThemeContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useListImpressions } from '@/hooks/useImpressions';
@@ -27,6 +27,7 @@ import { RelevantHint } from '@/components/home/RelevantHint';
 import { useDeckProfile, useJobFeed, useSuggestedCompanies, type JobSort } from '@/hooks/useJobFeeds';
 import { firstUnseenIndex, useStoryGroups } from '@/hooks/useStoryGroups';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
+import { flushImpressions } from '@/lib/impressions';
 import type { Company, Job, StoryGroup } from '@/types';
 import { greetingNameOf } from '@/utils/profile';
 
@@ -41,6 +42,7 @@ const END_REACHED_THRESHOLD = 0.5;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const styles = useStyles();
   const {
     isInitialLoading,
@@ -58,7 +60,12 @@ export default function HomeScreen() {
   const [sort, setSort] = useState<JobSort>('recommended');
   const feed = useJobFeed(sort, 'home');
   const { profile: deckProfile } = useDeckProfile();
-  const { companies: suggestedCompanies, isLoading: suggestionsLoading } = useSuggestedCompanies();
+  const {
+    companies: suggestedCompanies,
+    isLoading: suggestionsLoading,
+    dismiss: dismissSuggestion,
+    refetch: refetchSuggestions,
+  } = useSuggestedCompanies();
   const directory = useCompanyDirectory();
   const storyGroups = useStoryGroups();
   const tabBarHeight = useTabBarHeight();
@@ -87,6 +94,37 @@ export default function HomeScreen() {
    * is why the bar never shows a count.
    */
   const reversible = useRef<{ job: Job; kind: 'hide' | 'like' } | null>(null);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  /*
+   * Pull to rebuild the feed.
+   *
+   * The flush before the refetch is the whole reason this does anything. Home's default
+   * sort is `recommended`, which builds a fresh ranked session when it is asked for a null
+   * cursor, and the ranker drops a posting it knows has already been shown by about
+   * twenty-one points — so the cards just scrolled past are meant to sink and let new ones
+   * up. That only happens if the database knows they were seen, and impressions batch every
+   * ten seconds or twenty-five items. A pull lands inside that window almost every time, so
+   * without the flush the new session scores against stale counts and comes back as the
+   * same feed, which reads as a refresh that did nothing.
+   *
+   * Measured on the Deck, which has the same ranker behind it: two sessions built back to
+   * back with nothing flushed between them agreed on all twenty of their first cards.
+   *
+   * `dismissed` is deliberately left alone. It holds what was swiped away, and emptying it
+   * here would bring those rows back — a refresh that resurrects the cards you just got rid
+   * of is worse than one that does nothing.
+   */
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await flushImpressions();
+      await Promise.all([feed.refetch(), refetchSuggestions()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [feed, refetchSuggestions]);
 
   const visibleJobs = useMemo(
     () => feed.jobs.filter((job) => !dismissed.includes(job.id) && !hiddenJobIds.includes(job.id)),
@@ -205,6 +243,7 @@ export default function HomeScreen() {
         loading={suggestionsLoading}
         onPressCompany={handlePressCompany}
         onToggleFollow={toggleFollow}
+        onDismiss={dismissSuggestion}
         onSeeAll={() => router.push('/profile')}
       />
 
@@ -274,6 +313,17 @@ export default function HomeScreen() {
         onEndReached={feed.hasNextPage ? feed.fetchNextPage : undefined}
         onEndReachedThreshold={END_REACHED_THRESHOLD}
         viewabilityConfigCallbackPairs={impressions.viewabilityConfigCallbackPairs}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            // iOS draws one spinner, Android a ring on a disc; both need telling, and
+            // neither inherits anything from the theme on its own.
+            tintColor={colors.textTertiary}
+            colors={[colors.text]}
+            progressBackgroundColor={colors.surface}
+          />
+        }
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
