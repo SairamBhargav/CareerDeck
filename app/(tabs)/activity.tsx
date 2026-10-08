@@ -11,7 +11,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,8 +26,10 @@ import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
 import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
 import { EmptyState } from '@/components/common/EmptyState';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
+import { SectionHeader } from '@/components/common/SectionHeader';
+import { StatRow } from '@/components/common/StatRow';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
-import { screenPadding, spacing } from '@/constants/theme';
+import { screenPadding, sectionGap, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
@@ -205,6 +207,35 @@ export default function ActivityScreen() {
     comments: notifications.length,
   };
 
+  /*
+   * Three readings that are not already on the screen.
+   *
+   * The header pills above count the pipeline by stage, so repeating those here would be
+   * two of the same thing in different clothes. These answer what the pills cannot: whether
+   * this week is better than last, what a normal week looks like, and whether any of it is
+   * landing.
+   *
+   * All three come from data the screen already has — `goal.history` is the eight weeks
+   * the spline draws — so none of this costs a query.
+   */
+  const season = useMemo(() => {
+    const weeks = goal.history;
+    const thisWeek = weeks.at(-1)?.count ?? 0;
+    const lastWeek = weeks.length >= 2 ? (weeks.at(-2)?.count ?? 0) : null;
+
+    // The current week is left out of the average: it is partly elapsed, so including it
+    // drags the figure down for no reason other than the day of the week it is read on.
+    const past = weeks.slice(0, -1);
+    const average = past.length > 0
+      ? past.reduce((total, week) => total + week.count, 0) / past.length
+      : 0;
+
+    const replied = counts.interview + counts.offer;
+    const responseRate = counts.applied > 0 ? Math.round((replied / counts.applied) * 100) : 0;
+
+    return { thisWeek, lastWeek, average, responseRate, hasApplications: counts.applied > 0 };
+  }, [goal.history, counts]);
+
   const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
 
   const handleSelectStatus = (status: ApplicationStatus) => {
@@ -222,6 +253,34 @@ export default function ActivityScreen() {
         <ActivityHeader counts={counts} />
 
         <WeeklyGoalCard goal={goal} onEditGoal={() => setEditingGoal(true)} />
+
+        {/* Hidden until there is a season to report on, rather than showing a panel of
+            zeroes to somebody who has not applied to anything yet. */}
+        {season.hasApplications ? (
+          <View style={styles.panel}>
+            <SectionHeader title="My season" size="large" />
+            <View style={styles.stats}>
+              <StatRow
+                icon="paper-plane-outline"
+                label="Applications this week"
+                value={season.thisWeek}
+                prior={season.lastWeek}
+              />
+              <StatRow
+                icon="stats-chart-outline"
+                label="Weekly average"
+                value={season.average}
+                format={(n) => n.toFixed(1)}
+              />
+              <StatRow
+                icon="chatbubble-ellipses-outline"
+                label="Response rate"
+                value={season.responseRate}
+                format={(n) => `${n}%`}
+              />
+            </View>
+          </View>
+        ) : null}
 
         {/* Pro's standing place in the app. Gone once they subscribe. */}
         {credits.isPro ? null : (
@@ -374,9 +433,19 @@ const useStyles = makeStyles((colors) => ({
   },
   content: {
     paddingHorizontal: screenPadding,
-    gap: spacing.xl,
+    // The quieter register's wider gap. Air between groups is doing as much work here as
+    // the type is: at 24 the sections read as one long column of cards.
+    gap: sectionGap,
   },
   list: {
     gap: spacing.md,
+  },
+  // Heading and readings travel together, tighter than the gap between sections, so the
+  // title belongs to the panel rather than floating between two of them.
+  panel: {
+    gap: spacing.md,
+  },
+  stats: {
+    gap: spacing.sm,
   },
 }));

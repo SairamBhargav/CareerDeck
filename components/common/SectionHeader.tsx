@@ -1,20 +1,33 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { fontSize, spacing } from '@/constants/theme';
+import { fontSize, register, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 
 interface SectionHeaderProps {
   title: string;
   actionLabel?: string;
   onActionPress?: () => void;
+  /**
+   * `large` sets the title in the quieter register from constants/theme.ts — bigger and
+   * lighter instead of small and bold. For screens that read as a panel of readings rather
+   * than a feed. Defaults to the bold voice the rest of the app uses.
+   */
+  size?: 'default' | 'large';
 }
 
-export function SectionHeader({ title, actionLabel, onActionPress }: SectionHeaderProps) {
+export function SectionHeader({
+  title,
+  actionLabel,
+  onActionPress,
+  size = 'default',
+}: SectionHeaderProps) {
   const styles = useStyles();
 
   return (
     <View style={styles.row}>
-      <Text style={styles.title} accessibilityRole="header">
+      <Text
+        style={size === 'large' ? styles.titleLarge : styles.title}
+        accessibilityRole="header">
         {title}
       </Text>
       {actionLabel && onActionPress ? (
@@ -43,6 +56,10 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: '700',
     color: colors.text,
     letterSpacing: -0.3,
+  },
+  titleLarge: {
+    ...register.sectionTitle,
+    color: colors.text,
   },
   action: {
     fontSize: fontSize.small,

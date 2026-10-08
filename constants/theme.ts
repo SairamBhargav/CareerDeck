@@ -1,4 +1,4 @@
-import type { ViewStyle } from 'react-native';
+import type { TextStyle, ViewStyle } from 'react-native';
 
 /**
  * Central design tokens for CareerDeck.
@@ -278,3 +278,62 @@ export const tabBarHeight = 58;
 
 /** Gap between the floating tab bar pill and the bottom safe-area edge — the "hover". */
 export const tabBarFloatGap = 14;
+
+/**
+ * A quieter typographic register, for screens that read as an instrument panel rather than
+ * a feed.
+ *
+ * The rest of the app is set in a bold editorial voice — titles at 18–30px, weight 700–800,
+ * letter-spacing pulled in to −0.7. It is confident and it suits a feed, where a heading is
+ * competing with company logos and photography for a glance.
+ *
+ * A dashboard wants the opposite, and the difference is mostly one inversion: titles get
+ * larger and *lighter*, and labels get smaller and *tighter*, set in capitals with the
+ * tracking opened out. The heading stops shouting and the data starts. Nothing here is a
+ * new size or a new colour — the hierarchy is carried by weight and tracking, which is why
+ * it reads as calm rather than merely bigger.
+ *
+ * Additive on purpose. Nothing that does not ask for `register` changes, so this can be
+ * tried on one screen and judged before it spreads.
+ */
+export const register: Record<'sectionTitle' | 'label' | 'metric' | 'metricPrior', TextStyle> = {
+  /** Section titles. Large, near-regular weight, tracking left alone. */
+  sectionTitle: {
+    fontSize: 28,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    lineHeight: 34,
+  },
+  /**
+   * What a number is. Capitals with the tracking opened to 1.1 — at this size capitals set
+   * solid read as a block rather than as words, and the tracking is what makes them legible
+   * instead of merely small.
+   */
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  /** The number itself. Tabular, so a column of them does not jitter as values change. */
+  metric: {
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
+  },
+  /** What it was last time, under the metric. */
+  metricPrior: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+};
+
+/**
+ * Space between sections in that register, against `spacing.xl`'s 24 elsewhere.
+ *
+ * The air between sections is doing as much work as the type: it is what stops a column of
+ * cards reading as a list and lets each group be its own thing.
+ */
+export const sectionGap = 40;
