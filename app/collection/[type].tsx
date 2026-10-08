@@ -241,7 +241,9 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     color: colors.textTertiary,
   },
+  // A background change rather than opacity: opacity would take the company's mark down
+  // with the rest of the row, and a logo that dims reads as an image failing to load.
   pressed: {
-    opacity: 0.7,
+    backgroundColor: colors.backgroundMuted,
   },
 }));

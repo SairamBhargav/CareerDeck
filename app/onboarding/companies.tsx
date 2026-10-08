@@ -134,7 +134,7 @@ export default function CompaniesStep() {
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: following }}
                 accessibilityLabel={`${following ? 'Unfollow' : 'Follow'} ${company.name}`}
-                style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
+                style={styles.row}>
                 <CompanyLogo
                   logo={company.logo}
                   name={company.name}
@@ -217,8 +217,5 @@ const useStyles = makeStyles((colors) => ({
   },
   pillLabelOn: {
     color: colors.accentText,
-  },
-  pressed: {
-    opacity: 0.75,
   },
 }));

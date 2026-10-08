@@ -189,7 +189,7 @@ export function JobReelCard({
                 accessibilityRole="link"
                 accessibilityLabel={`Open ${job.companyName}'s page`}
                 hitSlop={6}
-                style={({ pressed }) => [styles.companyRow, pressed ? styles.readMorePressed : null]}>
+                style={styles.companyRow}>
                 <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
                 <View style={styles.companyText}>
                   <Text style={styles.companyName} numberOfLines={1}>

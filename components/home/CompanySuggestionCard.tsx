@@ -73,8 +73,9 @@ export function CompanySuggestionCard({
 }
 
 const useStyles = makeStyles((colors) => ({
+  // See above: a fill, not a fade, so the mark keeps its own colour while pressed.
   cardPressed: {
-    opacity: 0.85,
+    backgroundColor: colors.backgroundMuted,
   },
   card: {
     width: SUGGESTION_CARD_WIDTH,

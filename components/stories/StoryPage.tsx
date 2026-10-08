@@ -181,7 +181,7 @@ export function StoryPage({
             hitSlop={8}
             accessibilityRole={onOpenCompany ? 'link' : 'text'}
             accessibilityLabel={onOpenCompany ? 'Open ' + group.name : group.name}
-            style={({ pressed }) => [styles.identity, pressed ? styles.pressed : null]}>
+            style={styles.identity}>
             <CompanyLogo logo={group.logo} name={group.name} color={group.logoColor} size="sm" />
             <View style={styles.identityText}>
               <Text style={styles.headerName} numberOfLines={1}>
