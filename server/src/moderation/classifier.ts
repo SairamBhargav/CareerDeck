@@ -210,7 +210,16 @@ function thinkingFor(model: string) {
   return { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } };
 }
 
-async function modelVerdict(text: string): Promise<Verdict | null> {
+/**
+ * Per-call overrides. The comment route keeps the client's short deadline; the background
+ * re-check (moderation/recheck.ts) is not holding anybody up, so it waits longer and retries.
+ */
+export interface ClassifyOptions {
+  timeoutMs?: number;
+  maxRetries?: number;
+}
+
+async function modelVerdict(text: string, options: ClassifyOptions = {}): Promise<Verdict | null> {
   const anthropic = client();
   if (!anthropic) return null;
 
@@ -233,6 +242,9 @@ async function modelVerdict(text: string): Promise<Verdict | null> {
         content: `Classify the comment between the markers.\n\n<comment>\n${text}\n</comment>`,
       },
     ],
+  }, {
+    ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
+    ...(options.maxRetries === undefined ? {} : { maxRetries: options.maxRetries }),
   });
 
   if (response.stop_reason === 'refusal') {
@@ -276,11 +288,12 @@ async function modelVerdict(text: string): Promise<Verdict | null> {
  * write the user is waiting on and the correct behaviour when moderation is broken is to
  * publish-and-review, not to refuse.
  */
-export async function classify(text: string): Promise<Verdict> {
+export async function classify(text: string, options: ClassifyOptions = {}): Promise<Verdict> {
   const trimmed = text.trim();
 
   if (trimmed.length === 0) {
-    // A GIF-only comment. There is nothing to classify — the catalogue is ours and curated.
+    // A GIF-only comment. Nothing to classify: the bundled set is ours, and KLIPY's results
+    // come through their strictest content filter (lib/klipy.ts).
     return { decision: 'pass', category: 'none', message: null, scores: {}, source: 'doxx' };
   }
 
@@ -300,7 +313,7 @@ export async function classify(text: string): Promise<Verdict> {
 
   let verdict: Verdict | null = null;
   try {
-    verdict = await modelVerdict(trimmed);
+    verdict = await modelVerdict(trimmed, options);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error(`[moderation] classifier failed, flagging instead: ${detail}`);

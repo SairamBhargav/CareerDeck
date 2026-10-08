@@ -3249,6 +3249,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      my_comments: {
+        Args: { p_cursor?: string; p_limit?: number }
+        Returns: {
+          body: string
+          company_logo: string
+          company_name: string
+          created_at: string
+          gif_id: string
+          id: string
+          job_id: string
+          job_title: string
+          like_count: number
+          next_cursor: string
+          parent_id: string
+          reply_count: number
+          status: string
+        }[]
+      }
       my_credits: {
         Args: never
         Returns: Database["public"]["CompositeTypes"]["credit_summary"]

@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteD
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  fetchMyComments,
   CLOSED_GATE,
   acceptContentPolicy,
   deleteOwnComment,
@@ -16,7 +17,7 @@ import {
 } from '@/lib/api';
 import { reportError } from '@/lib/observability';
 import { supabase } from '@/lib/supabase';
-import type { CommentGate, CommentThread, JobComment, ReportReason } from '@/types';
+import type { CommentGate, CommentThread, JobComment, MyComment, ReportReason } from '@/types';
 
 /**
  * One posting's comments — README §3.8, now real rows.
@@ -46,6 +47,10 @@ export function commentsKey(jobId: string) {
 
 export function repliesKey(commentId: string) {
   return ['comments', 'replies', commentId] as const;
+}
+
+export function myCommentsKey() {
+  return ['comments', 'mine'] as const;
 }
 
 export function commentGateKey() {
@@ -302,6 +307,36 @@ export function useCommentGate(): {
  * So a post is a foreground write with a visible failure, and the optimistic row it inserts is
  * marked `pending` until the server confirms it. PHASE3.md §5.
  */
+/**
+ * The reader's own comments, newest first — the Activity tab's Comments list. Refetched whenever
+ * the reader posts or deletes (`useCommentActions` invalidates it) and when the app returns.
+ */
+export function useMyComments(enabled: boolean) {
+  const query = useInfiniteQuery({
+    queryKey: myCommentsKey(),
+    queryFn: ({ pageParam }) => fetchMyComments(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+    enabled,
+    staleTime: 30_000,
+  });
+
+  const comments = useMemo<MyComment[]>(
+    () => query.data?.pages.flatMap((page) => page.items) ?? [],
+    [query.data],
+  );
+
+  return {
+    comments,
+    isLoading: query.isLoading,
+    hasMore: query.hasNextPage,
+    loadMore: () => {
+      if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+    },
+    refresh: () => query.refetch(),
+  };
+}
+
 export function useCommentActions(jobId: string | undefined) {
   const queryClient = useQueryClient();
   /*
@@ -310,11 +345,32 @@ export function useCommentActions(jobId: string | undefined) {
    * It is what makes a retried POST return the existing comment instead of writing a second one —
    * so it has to survive the retry and change only once the comment has landed.
    */
-  const idempotencyKey = useRef<string>(newKey());
+  const idempotencyKeys = useRef(new Map<string, string>());
+
+  /*
+   * Per comment, not per sheet: two different comments sent back to back must not share a key
+   * (the second would come back as the first), and the same comment resent after a failure must
+   * keep its key (a POST that landed but whose answer was lost must not land twice). So the key
+   * is tied to what is being sent, and dropped once that comment has landed.
+   */
+  const keyFor = (input: { body: string; parentId: string | null; gifId?: string }) =>
+    `${input.parentId ?? ''}|${input.gifId ?? ''}|${input.body}`;
+  const idempotencyKeyFor = (input: { body: string; parentId: string | null; gifId?: string }) => {
+    const content = keyFor(input);
+    let key = idempotencyKeys.current.get(content);
+    if (key === undefined) {
+      key = newKey();
+      idempotencyKeys.current.set(content, key);
+    }
+    return key;
+  };
 
   const invalidate = useCallback(() => {
     if (jobId !== undefined) void queryClient.invalidateQueries({ queryKey: commentsKey(jobId) });
     void queryClient.invalidateQueries({ queryKey: commentGateKey() });
+    // The number on the reel's comment button, and the Activity tab's list of your comments.
+    void queryClient.invalidateQueries({ queryKey: ['comments', 'counts'] });
+    void queryClient.invalidateQueries({ queryKey: myCommentsKey() });
   }, [queryClient, jobId]);
 
   const post = useMutation({
@@ -324,7 +380,7 @@ export function useCommentActions(jobId: string | undefined) {
         body: input.body,
         parentId: input.parentId,
         gifId: input.gifId ?? null,
-        idempotencyKey: idempotencyKey.current,
+        idempotencyKey: idempotencyKeyFor(input),
       }),
     /*
      * The comment appears the moment Send is tapped, looking already posted. The server's answer
@@ -333,7 +389,7 @@ export function useCommentActions(jobId: string | undefined) {
      */
     onMutate: async (input) => {
       if (jobId === undefined) return { tempId: null };
-      const tempId = `pending-${idempotencyKey.current}`;
+      const tempId = `pending-${idempotencyKeyFor(input)}`;
       const temp = pendingComment(queryClient, jobId, tempId, input);
 
       if (input.parentId === null) {
@@ -352,7 +408,7 @@ export function useCommentActions(jobId: string | undefined) {
       return { tempId };
     },
     onSuccess: ({ comment, takenDown }, input, context) => {
-      idempotencyKey.current = newKey();
+      idempotencyKeys.current.delete(keyFor(input));
 
       if (jobId !== undefined && context?.tempId) {
         // Taken down: the comment that appeared on send goes, and the notice explaining why
