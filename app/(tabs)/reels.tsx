@@ -79,7 +79,7 @@ export default function ReelsScreen() {
    * below is the only place dwell is recorded, and §3.6 calls dwell "the strongest implicit
    * signal you have and the reason a Reels-style UI is worth the trouble".
    */
-  const forYouFeed = useJobFeed('recommended');
+  const forYouFeed = useJobFeed('recommended', 'reels', { warm: true });
   const followingFeed = useFollowingFeed();
   const tabBarHeight = useTabBarHeight();
   const openCompany = useOpenCompany();
@@ -197,6 +197,23 @@ export default function ReelsScreen() {
     },
     [pageHeight],
   );
+
+  /*
+   * Start building the next deck once the reader is this far in.
+   *
+   * Far enough that they are actually reading rather than glancing, so the session is not
+   * built for somebody who opened the tab and left. Early enough that it is finished long
+   * before a pull — it takes up to a second, and nobody gets from here to the end of
+   * twenty cards in a second.
+   */
+  const WARM_AFTER_CARDS = 8;
+  const warmNextDeck = forYouFeed.warmNext;
+  useEffect(() => {
+    if (activeIndex < WARM_AFTER_CARDS) return;
+    // Cheap to call repeatedly: it returns immediately once a deck is warm, and a refresh
+    // consumes that one and starts the next.
+    warmNextDeck();
+  }, [activeIndex, warmNextDeck]);
 
   const activeJob = jobs[Math.min(Math.max(activeIndex, 0), Math.max(jobs.length - 1, 0))] ?? null;
   const activeMatch = activeJob ? matchMap.get(activeJob.id) ?? null : null;

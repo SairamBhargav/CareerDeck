@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { flushImpressions } from '@/lib/impressions';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useSuggestionDismissals } from '@/hooks/useSuggestionDismissals';
 import { useSuggestionRotation } from '@/hooks/useSuggestionRotation';
@@ -58,6 +59,13 @@ export interface JobFeed {
   fetchNextPage: () => void;
   /** Awaitable, so a pull-to-refresh can keep its spinner up until the page arrives. */
   refetch: () => Promise<unknown>;
+  /**
+   * Builds the next session in the background, so the next refresh is a cache swap.
+   *
+   * A no-op unless the feed was created with `warm`. Safe to call repeatedly — a build
+   * already in flight or already finished is not started again.
+   */
+  warmNext: () => void;
   error: Error | null;
 }
 
@@ -139,6 +147,8 @@ function toFeed(
     // handing the event object in as an argument.
     fetchNextPage: () => void query.fetchNextPage(),
     refetch: () => query.refetch(),
+    // Overridden by the feeds that support warming; a plain feed has nothing to warm.
+    warmNext: () => {},
     error: query.error,
   };
 }
@@ -147,7 +157,11 @@ function toFeed(
  * The main feed. `sort` is served by the database, not by the client — sorting a page of
  * twenty and calling it a sorted feed would be a lie once there are more than twenty.
  */
-export function useJobFeed(sort: JobSort = 'recent', surface: 'reels' | 'home' = 'reels'): JobFeed {
+export function useJobFeed(
+  sort: JobSort = 'recent',
+  surface: 'reels' | 'home' = 'reels',
+  options: { warm?: boolean } = {},
+): JobFeed {
   // The Deck shows a match ring on every card; Home shows none, so it skips the scoring call.
   const withMatch = surface === 'reels';
   const queryClient = useQueryClient();
@@ -180,16 +194,82 @@ export function useJobFeed(sort: JobSort = 'recent', surface: 'reels' | 'home' =
    * rather than resetting, because `resetQueries` empties the data first and the feed
    * blinks out from under the reader mid-gesture.
    */
+  /*
+   * Where a pre-built next session waits.
+   *
+   * Its own key rather than a ref, so it survives a remount of the screen and so
+   * react-query dedupes two warm-ups into one request.
+   */
+  const warmKey = useMemo(() => [...queryKey, 'warm'] as const, [queryKey]);
+
+  /*
+   * Build the next session now, so the next pull does not have to.
+   *
+   * The wait on a refresh is not the network — a page is about 250ms — it is
+   * `build_feed_session`, measured between 490ms and 1032ms, which scores the candidate
+   * pool and walks it for diversity. That cost cannot be removed, only moved: this pays it
+   * while the reader is still reading.
+   *
+   * Flushes first, which is the part that makes the warmed deck worth having. A session
+   * built before the current one's impressions have landed is scored against stale counts
+   * and comes back looking much like the deck it is meant to replace.
+   */
+  const warmNext = useCallback(() => {
+    if (!options.warm) return;
+    /*
+     * Already warm, so there is nothing to do.
+     *
+     * This is what lets the caller be naive and just say "warm" whenever it feels like it,
+     * rather than tracking whether it has. `fetchQuery` would dedupe the request anyway,
+     * but the flush in front of it would not — and a flush per scroll event is exactly the
+     * kind of quiet waste that is hard to notice later.
+     */
+    if (queryClient.getQueryData<EnvelopePage>(warmKey)) return;
+    void (async () => {
+      await flushImpressions();
+      await queryClient.fetchQuery({
+        queryKey: warmKey,
+        queryFn: () => fetchFeed({ sort, cursor: null, surface, withMatch }),
+        // The whole point is to keep it until it is used; refetching it would pay the cost
+        // again for nothing.
+        staleTime: Infinity,
+      });
+    })();
+  }, [options.warm, queryClient, warmKey, sort, surface, withMatch]);
+
   const refresh = useCallback(async () => {
+    const warmed = options.warm ? queryClient.getQueryData<EnvelopePage>(warmKey) : undefined;
+
+    if (warmed && warmed.items.length > 0) {
+      // Straight in, with no request at all — the session behind this was built minutes
+      // ago while the reader was still scrolling.
+      queryClient.setQueryData<InfiniteData<EnvelopePage, string | null>>(queryKey, {
+        pages: [warmed],
+        pageParams: [null],
+      });
+      queryClient.removeQueries({ queryKey: warmKey });
+      // And start the next one, so the refresh after this is instant too.
+      warmNext();
+      return;
+    }
+
+    /*
+     * Nothing warmed — the first refresh of a session, or one that came faster than a
+     * build. Trim to the first page before refetching: react-query's `refetch` on an
+     * infinite query refetches every page currently loaded, sequentially, so without this
+     * a pull after five pages is five requests.
+     */
     queryClient.setQueryData<InfiniteData<EnvelopePage, string | null>>(queryKey, (current) =>
       current && current.pages.length > 1
         ? { pages: current.pages.slice(0, 1), pageParams: current.pageParams.slice(0, 1) }
         : current,
     );
-    return query.refetch();
-  }, [queryClient, queryKey, query]);
+    const result = await query.refetch();
+    warmNext();
+    return result;
+  }, [options.warm, queryClient, warmKey, queryKey, query, warmNext]);
 
-  return { ...toFeed(query, useFeedItems(query.data?.pages)), refetch: refresh };
+  return { ...toFeed(query, useFeedItems(query.data?.pages)), refetch: refresh, warmNext };
 }
 
 /**
