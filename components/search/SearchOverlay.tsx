@@ -203,6 +203,19 @@ export function SearchOverlay({
             }}
             onClear={() => setRecents([])}
           />
+        ) : results.error ? (
+          /*
+           * A failed search is not an empty one, and saying "no jobs found" when the
+           * request never came back tells the reader something false about the corpus —
+           * they go away believing the posting is not here. This is the state that made
+           * search look unreliable rather than broken: the query errored, the list was
+           * empty because of it, and the empty list had a confident explanation attached.
+           */
+          <EmptyState
+            icon="cloud-offline-outline"
+            title="Search could not finish"
+            message={`Something went wrong looking for "${query.trim()}". It is not that there are no matches — try again in a moment.`}
+          />
         ) : activeResults.length === 0 ? (
           <EmptyState
             icon={showingJobs ? 'briefcase-outline' : 'business-outline'}
