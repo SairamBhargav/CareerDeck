@@ -298,7 +298,9 @@ export default function HomeScreen() {
 
       <View style={styles.feedSection}>
         <View style={styles.feedHeading}>
-          <SectionHeader title="Your Feed" actionLabel="See all" onActionPress={() => router.push('/reels')} />
+          {/* No "See all". It went to the Deck, which is a tab bar tap away and a
+              different way of reading the same postings rather than more of them. */}
+          <SectionHeader title="Your Feed" />
         </View>
 
         <FeedSortBar sort={sort} onChange={setSort} />
