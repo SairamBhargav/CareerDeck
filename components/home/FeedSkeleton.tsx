@@ -1,7 +1,7 @@
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Skeleton } from '@/components/common/Skeleton';
-import { spacing } from '@/constants/theme';
+import { radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 
 interface FeedSkeletonProps {
@@ -11,10 +11,13 @@ interface FeedSkeletonProps {
 /**
  * Placeholder cards for a feed that is still loading.
  *
- * Extracted from the old `HomeJobFeed`, which rendered the list and its skeletons
- * together. Phase 1 made the feed paginated, so the list itself became a `FlatList` owned
- * by the screen — but the skeletons are still wanted in two places (Home's empty state and
- * a company's openings), and this is all that was worth keeping.
+ * Built to JobFeedCard's own anatomy rather than as plain blocks: the logo plate, the
+ * company line above a two-line title, the location, the salary, and the heart on the
+ * right. Same padding, same corner radius, same hairline border as the card it stands in
+ * for — so the list does not change shape when the real postings arrive, it just fills in.
+ *
+ * A featureless rectangle is honest about being a placeholder and useless as one: it says
+ * "something is coming" where this says "a posting is coming, and it will sit here".
  */
 export function FeedSkeleton({ rows = 3 }: FeedSkeletonProps) {
   const styles = useStyles();
@@ -22,14 +25,56 @@ export function FeedSkeleton({ rows = 3 }: FeedSkeletonProps) {
   return (
     <View style={styles.list}>
       {Array.from({ length: rows }, (_, index) => (
-        <Skeleton key={index} height={132} borderRadius={18} />
+        <View key={index} style={styles.card}>
+          <View style={styles.header}>
+            <Skeleton width={36} height={36} borderRadius={radius.md} />
+
+            <View style={styles.headerText}>
+              <Skeleton width={96} height={11} />
+              <Skeleton height={17} />
+              {/* The title runs to two lines on most postings, and the second is short. */}
+              <Skeleton width="64%" height={17} />
+            </View>
+
+            <Skeleton width={22} height={22} borderRadius={radius.pill} />
+          </View>
+
+          <Skeleton width="54%" height={11} />
+          <Skeleton width="38%" height={13} />
+
+          <View style={styles.footer}>
+            <Skeleton width={72} height={10} />
+          </View>
+        </View>
       ))}
     </View>
   );
 }
 
-const useStyles = makeStyles(() => ({
+const useStyles = makeStyles((colors) => ({
   list: {
     gap: spacing.md,
+  },
+  // Mirrors JobFeedCard exactly, so nothing shifts when the real one replaces it.
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  headerText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  footer: {
+    marginTop: spacing.xs,
   },
 }));

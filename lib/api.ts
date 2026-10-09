@@ -844,6 +844,30 @@ export async function fetchCommentReplies(commentId: string): Promise<JobComment
  * matters — and it would do it for a number nobody is reading while they scroll. So the volatile
  * counter travels separately, on the same principle as viewer state. PHASE3.md §3.
  */
+/** Likes per posting. See `fetchCommentCounts` — same shape, same batching, same cap. */
+export async function fetchLikeCounts(jobIds: string[]): Promise<Map<string, number>> {
+  if (jobIds.length === 0) return new Map();
+
+  /*
+   * Cast because the generated types come from the live schema, and `like_counts` only
+   * exists once its migration is pushed. Run `npm run types:generate` after that and this
+   * can go back to a plain typed call.
+   */
+  const rpc = supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: { job_id: string; like_count: number }[] | null; error: Error | null }>;
+
+  const { data, error } = await rpc('like_counts', { p_job_ids: jobIds.slice(0, 200) });
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    counts.set(row.job_id, row.like_count);
+  }
+  return counts;
+}
+
 export async function fetchCommentCounts(jobIds: string[]): Promise<Map<string, number>> {
   if (jobIds.length === 0) return new Map();
 

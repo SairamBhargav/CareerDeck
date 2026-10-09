@@ -1,9 +1,9 @@
-import { FlatList, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { Skeleton } from '@/components/common/Skeleton';
 import { CompanySuggestionCard, SUGGESTION_CARD_WIDTH } from '@/components/home/CompanySuggestionCard';
-import { screenPadding, spacing } from '@/constants/theme';
+import { radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import type { Company } from '@/types';
 
@@ -48,8 +48,17 @@ export function SuggestedCompanies({
 
       {loading ? (
         <View style={styles.skeletonRow}>
+          {/* The suggestion card's own anatomy — mark, name, follower line, follow control
+              — rather than a blank plate of the right height. The feed below loads the
+              same way, and a detailed skeleton sitting under a featureless one looks like
+              one of them is broken. */}
           {Array.from({ length: SKELETON_COUNT }, (_, index) => (
-            <Skeleton key={index} width={SUGGESTION_CARD_WIDTH} height={148} borderRadius={18} />
+            <View key={index} style={styles.skeletonCard}>
+              <Skeleton width={48} height={48} borderRadius={radius.lg} />
+              <Skeleton width={76} height={12} />
+              <Skeleton width={52} height={10} />
+              <Skeleton width={64} height={14} />
+            </View>
           ))}
         </View>
       ) : (
@@ -73,7 +82,7 @@ export function SuggestedCompanies({
   );
 }
 
-const useStyles = makeStyles(() => ({
+const useStyles = makeStyles((colors) => ({
   header: {
     paddingHorizontal: screenPadding,
   },
@@ -85,5 +94,17 @@ const useStyles = makeStyles(() => ({
     flexDirection: 'row',
     paddingHorizontal: screenPadding,
     gap: spacing.md,
+  },
+  // Mirrors CompanySuggestionCard, so the row does not resize when the real ones arrive.
+  skeletonCard: {
+    width: SUGGESTION_CARD_WIDTH,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
 }));

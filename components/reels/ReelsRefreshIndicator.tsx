@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Extrapolation,
@@ -8,7 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { radius } from '@/constants/theme';
-import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { SpinnerRing } from '@/components/common/Spinner';
+import { makeStyles } from '@/context/ThemeContext';
 
 /** Diameter of the indicator puck, and the strip the list holds open while refreshing. */
 export const INDICATOR_SIZE = 46;
@@ -28,13 +28,16 @@ interface ReelsRefreshIndicatorProps {
 }
 
 /**
- * The Reels pull-to-refresh affordance: a violet bolt that scales up out of nothing as you
- * drag, tips over as it approaches the release point, then spins with an expanding halo
- * while the feed reloads. It borrows Auto Apply's violet so refreshing reads as the same
- * "the app is doing the work for you" gesture rather than a generic spinner.
+ * The Deck's pull-to-refresh affordance: a ring that scales up out of nothing as you drag,
+ * tips over as it nears the release point, then turns while the deck is rebuilt, with a
+ * single ripple leaving at the moment it fires.
+ *
+ * Monochrome. This was a violet bolt in a shadowed puck, borrowing Auto Apply's colour so
+ * that refreshing would read as the same "the app is doing the work for you" gesture. It
+ * does not: pulling to refresh is the reader doing the work, and the violet is the one
+ * colour in the app that means something is paid for.
  */
 export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsRefreshIndicatorProps) {
-  const { colors } = useTheme();
   const styles = useStyles();
 
   // The puck is revealed by whichever is further along: the live drag, or a held refresh.
@@ -63,19 +66,28 @@ export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsR
   });
 
   const haloStyle = useAnimatedStyle(() => ({
-    opacity: (1 - pulse.value) * 0.55 * active.value,
+    // Fainter than the violet it replaces: ink at full strength would read as a border.
+    opacity: (1 - pulse.value) * 0.28 * active.value,
     transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.9]) }],
   }));
 
   return (
     <View pointerEvents="none" style={[styles.wrap, { top }]}>
       <Animated.View style={[styles.stack, stackStyle]}>
+        {/*
+          * The ring alone, where this was a shadowed puck with a glowing halo around a
+          * lightning bolt. Three layers of chrome to say "loading" over a full-bleed card
+          * that already has plenty going on — and the bolt meant "fast" where the gesture
+          * means "again", wearing an icon Auto Apply had already taken.
+          *
+          * SpinnerRing rather than Spinner: the rotation is already driven here, across
+          * the whole gesture including the wind-up as the finger pulls, so a
+          * self-rotating component would turn twice.
+          */}
         <Animated.View style={[styles.halo, haloStyle]} />
-        <View style={styles.puck}>
-          <Animated.View style={boltStyle}>
-            <Ionicons name="flash" size={22} color={colors.autoApply} />
-          </Animated.View>
-        </View>
+        <Animated.View style={boltStyle}>
+          <SpinnerRing size={INDICATOR_SIZE - 8} stroke={2.5} />
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -94,27 +106,18 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  /*
+   * A ripple that leaves as the refresh starts, rather than a permanent ring around a
+   * puck. It is the only thing left of the old chrome, kept because the gesture needs one
+   * beat of acknowledgement at the moment it fires.
+   */
   halo: {
     position: 'absolute',
     width: INDICATOR_SIZE,
     height: INDICATOR_SIZE,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: colors.autoApply,
-  },
-  puck: {
-    width: INDICATOR_SIZE,
-    height: INDICATOR_SIZE,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.controlSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    ...colors.shadowSoft,
-    // Same violet halo the Auto Apply button carries, so the two read as one family.
-    shadowColor: colors.autoApplyGlow,
-    shadowOpacity: 0.6,
-    shadowRadius: 14,
+    // The page's own ink, faint. Nothing here is a brand moment.
+    borderColor: colors.text,
   },
 }));

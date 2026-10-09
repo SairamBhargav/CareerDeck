@@ -6,6 +6,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
+import { FollowButton } from '@/components/common/FollowButton';
 import { SkillChip } from '@/components/common/SkillChip';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
 import { LikeBurst } from '@/components/reels/LikeBurst';
@@ -61,12 +62,15 @@ interface JobReelCardProps {
   /** Company's real logo image, when available — falls back to job.companyLogo's monogram. */
   logoUrl?: string;
   commentCount: number;
+  likeCount: number;
   onLike: () => void;
   onComment: () => void;
   onMore: () => void;
   onAutoApply: () => void;
   /** Tapping the logo or company name. */
   onCompanyPress: () => void;
+  isFollowing: boolean;
+  onToggleFollow: () => void;
   autoApplyCredits: number;
 }
 
@@ -78,11 +82,14 @@ export function JobReelCard({
   logoColor,
   logoUrl,
   commentCount,
+  likeCount,
   onLike,
   onComment,
   onMore,
   onAutoApply,
   onCompanyPress,
+  isFollowing,
+  onToggleFollow,
   autoApplyCredits,
 }: JobReelCardProps) {
   const { colors } = useTheme();
@@ -227,9 +234,33 @@ export function JobReelCard({
                 style={styles.companyRow}>
                 <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
                 <View style={styles.companyText}>
-                  <Text style={styles.companyName} numberOfLines={1}>
-                    {job.companyName}
-                  </Text>
+                  <View style={styles.nameLine}>
+                    <Text style={styles.companyName} numberOfLines={1}>
+                      {job.companyName}
+                    </Text>
+
+                    {/*
+                      * On the name's line, immediately after it.
+                      *
+                      * It used to sit at the far right of the card, because the identity
+                      * block took the remaining width — which meant a short company name
+                      * left the mark stranded halfway across the card with nothing between
+                      * them. Here it travels with the name: adjacent when the name is
+                      * short, and still adjacent when a long one truncates, because the
+                      * text shrinks and the mark does not.
+                      *
+                      * Nested inside the company Pressable, which the inner one wins — the
+                      * same arrangement the like button on a feed card already relies on.
+                      */}
+                    <FollowButton
+                      isFollowing={isFollowing}
+                      companyName={job.companyName}
+                      onToggle={onToggleFollow}
+                      size="sm"
+                      variant="icon"
+                    />
+                  </View>
+
                   <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
                 </View>
               </Pressable>
@@ -297,6 +328,7 @@ export function JobReelCard({
         <ReelActionRail
           isLiked={job.isLiked}
           commentCount={commentCount}
+          likeCount={likeCount}
           onLike={handleLike}
           onComment={onComment}
           onMore={onMore}
@@ -354,9 +386,19 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.md,
   },
   companyText: {
-    flex: 1,
+    // Shrinks rather than grows: the row hugs its content, so nothing is pushed to the
+    // card's edge by a column that insisted on filling it.
+    flexShrink: 1,
+  },
+  nameLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   companyName: {
+    // The one element allowed to shrink, so a long name truncates and the mark beside it
+    // stays put rather than being pushed out of the row.
+    flexShrink: 1,
     fontSize: fontSize.title,
     fontWeight: '600',
     color: colors.text,

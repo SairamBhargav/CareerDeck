@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, View, type LayoutChangeEvent } from 'react-native';
+import { FlatList, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -24,18 +24,20 @@ import { AutoApplySheet } from '@/components/jobs/AutoApplySheet';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
+import { ReelSkeleton } from '@/components/reels/ReelSkeleton';
 import { INDICATOR_TRAVEL, ReelsRefreshIndicator } from '@/components/reels/ReelsRefreshIndicator';
 import { MatchExplainSheet } from '@/components/reels/MatchExplainSheet';
 import { MATCH_RING_SIZE, ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
-import { useCommentCounts } from '@/hooks/useComments';
+import { useCommentCounts, useLikeCounts } from '@/hooks/useComments';
 import { useResumes } from '@/hooks/useResumes';
 import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
+import { flushImpressions } from '@/lib/impressions';
 import type { Job } from '@/types';
 
 const TOGGLE_HEIGHT = 44;
@@ -55,7 +57,14 @@ const PULL_THRESHOLD = 88;
  * reads as the gesture having failed rather than having worked. This is a floor on the
  * animation, not a stand-in for the request — that part is real now.
  */
-const REFRESH_DURATION = 900;
+/**
+ * The least time the refresh strip stays open.
+ *
+ * A floor rather than a duration: the strip closes when the new deck has arrived, and this
+ * only stops a warmed refresh — which resolves in a few milliseconds — opening and shutting
+ * too quickly to read as anything at all.
+ */
+const REFRESH_MIN_HOLD = 650;
 
 /**
  * Cards left below the viewport when the next page starts loading. Each card is one viewport
@@ -67,7 +76,7 @@ const END_REACHED_THRESHOLD = 8;
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { user, toggleLike, autoApplyCredits } = useCareerDeck();
+  const { user, toggleLike, autoApplyCredits, isFollowing, toggleFollow } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   /*
    * §5, finally wired up. "For You" is the ranked feed; it was `'recent'` — phase 1's
@@ -77,7 +86,7 @@ export default function ReelsScreen() {
    * below is the only place dwell is recorded, and §3.6 calls dwell "the strongest implicit
    * signal you have and the reason a Reels-style UI is worth the trouble".
    */
-  const forYouFeed = useJobFeed('recommended');
+  const forYouFeed = useJobFeed('recommended', 'reels', { warm: true });
   const followingFeed = useFollowingFeed();
   const tabBarHeight = useTabBarHeight();
   const openCompany = useOpenCompany();
@@ -129,7 +138,9 @@ export default function ReelsScreen() {
    * a comment count is the second of those — folding it into `job_card` would make every feed page
    * uncacheable for a number nobody reads while scrolling. PHASE3.md §3.
    */
-  const commentCounts = useCommentCounts(useMemo(() => jobs.map((job) => job.id), [jobs]));
+  const visibleJobIds = useMemo(() => jobs.map((job) => job.id), [jobs]);
+  const commentCounts = useCommentCounts(visibleJobIds);
+  const likeCounts = useLikeCounts(visibleJobIds);
 
   // No company lookup any more: the feed payload carries the logo and brand colour on
   // each posting, because the query already joins `companies` to build the card.
@@ -196,6 +207,23 @@ export default function ReelsScreen() {
     [pageHeight],
   );
 
+  /*
+   * Start building the next deck once the reader is this far in.
+   *
+   * Far enough that they are actually reading rather than glancing, so the session is not
+   * built for somebody who opened the tab and left. Early enough that it is finished long
+   * before a pull — it takes up to a second, and nobody gets from here to the end of
+   * twenty cards in a second.
+   */
+  const WARM_AFTER_CARDS = 8;
+  const warmNextDeck = forYouFeed.warmNext;
+  useEffect(() => {
+    if (activeIndex < WARM_AFTER_CARDS) return;
+    // Cheap to call repeatedly: it returns immediately once a deck is warm, and a refresh
+    // consumes that one and starts the next.
+    warmNextDeck();
+  }, [activeIndex, warmNextDeck]);
+
   const activeJob = jobs[Math.min(Math.max(activeIndex, 0), Math.max(jobs.length - 1, 0))] ?? null;
   const activeMatch = activeJob ? matchMap.get(activeJob.id) ?? null : null;
   // Tapping the ring: the breakdown for whichever posting is on screen at that moment.
@@ -225,23 +253,37 @@ export default function ReelsScreen() {
     Haptics.selectionAsync();
   }, []);
 
-  // A real refetch now, where this used to rotate the array to fake one. The indicator
-  // is still held open for REFRESH_DURATION regardless of how fast the request comes
-  // back, because the gesture needs to be felt to have worked.
   const refetchActive = activeFeed.refetch;
 
   const handleRefresh = useCallback(() => {
     if (isRefreshing.current) return;
     isRefreshing.current = true;
+    const startedAt = Date.now();
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     active.set(withSpring(1, { damping: 15, stiffness: 180 }));
     spin.set(withRepeat(withTiming(360, { duration: 850, easing: Easing.linear }), -1, false));
     pulse.set(withRepeat(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }), -1, false));
 
-    refetchActive();
-
-    refreshTimer.current = setTimeout(() => {
+    /*
+     * Send what has been watched before asking for a new deck.
+     *
+     * A refresh builds a whole new feed session, and the ranker drops a posting by about
+     * twenty-one points the first time somebody has already been shown it — so the cards
+     * just scrolled past are meant to sink and let new ones up. That only works if the
+     * database knows they were seen, and impressions batch every ten seconds or
+     * twenty-five items. A pull arrives inside that window almost every time, so the new
+     * session was being scored against stale counts and came back as the same deck.
+     * Measured: two sessions built back to back with nothing flushed between them agree
+     * on all twenty of their first cards.
+     *
+     * Awaited, and that is the whole point — this is an ordering problem, not a latency
+     * one. Firing both at once raced them: sometimes the flush committed first and the
+     * deck changed, sometimes the refetch reached the server first and the session was
+     * built against the same stale counts as before. Which is exactly "it works
+     * sometimes".
+     */
+    const close = () => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -254,7 +296,43 @@ export default function ReelsScreen() {
       }));
 
       isRefreshing.current = false;
-    }, REFRESH_DURATION);
+    };
+
+    void (async () => {
+      try {
+        await flushImpressions();
+        await refetchActive();
+      } catch {
+        /*
+         * A failed flush or refetch still has to close the strip.
+         *
+         * Without this the await rejects, nothing below it runs, and the Deck is left
+         * holding a spinner forever with isRefreshing stuck true — so every later pull is
+         * ignored too. One dropped request would have bricked the gesture for the rest of
+         * the session. The reader keeps whatever deck they had, which is the right
+         * outcome for a refresh that did not happen.
+         */
+      }
+
+      /*
+       * The strip closes only now, with the new deck already rendered behind it.
+       *
+       * This used to run off a fixed timer. A build takes about a second and the timer was
+       * nine hundred milliseconds, so the usual outcome was: the feed slides back up
+       * carrying the old cards, and a beat later they are replaced underneath the reader.
+       * The swap was visible as a swap, which is the thing nobody wants to see.
+       *
+       * Waiting for the data instead means the rise *is* the change — the list is already
+       * holding the new deck by the time it moves, and the new first card arrives in
+       * position rather than taking over from the old one.
+       *
+       * A floor, not a duration. A warmed refresh resolves in a few milliseconds, and
+       * without one the strip would open and shut too fast to read as anything; with it, a
+       * slow build simply takes as long as it takes.
+       */
+      const held = Date.now() - startedAt;
+      refreshTimer.current = setTimeout(close, Math.max(0, REFRESH_MIN_HOLD - held));
+    })();
   }, [active, pulse, spin, refetchActive]);
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -340,11 +418,14 @@ export default function ReelsScreen() {
                   logoColor={item.companyLogoColor ?? undefined}
                   logoUrl={item.companyLogoUrl ?? undefined}
                   commentCount={commentCounts.get(item.id) ?? 0}
+                  likeCount={likeCounts.get(item.id) ?? 0}
                   onLike={() => toggleLike(item.id)}
                   onComment={() => setCommentsJob(item)}
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
                   onCompanyPress={() => openCompany(item.companySlug)}
+                  isFollowing={isFollowing(item.companySlug)}
+                  onToggleFollow={() => toggleFollow(item.companySlug)}
                   autoApplyCredits={autoApplyCredits}
                 />
               )}
@@ -353,7 +434,7 @@ export default function ReelsScreen() {
         ) : (
           <View style={[styles.empty, { paddingTop: cardPaddingTop }]}>
             {activeFeed.isLoading ? (
-              <ActivityIndicator />
+              <ReelSkeleton />
             ) : (
               <EmptyState
                 icon={feed === 'following' ? 'people-outline' : 'briefcase-outline'}

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -345,7 +345,18 @@ export default function HomeScreen() {
           )
         }
         ListFooterComponent={
-          feed.isFetchingNextPage ? <ActivityIndicator style={styles.footer} /> : <View style={styles.footer} />
+          feed.isFetchingNextPage ? (
+            /*
+             * The shape of what is arriving, not a spinner floating in the gap below the
+             * last card. The list already opens on these, so a page loading looks like the
+             * feed continuing rather than like the screen stopping to think.
+             */
+            <View style={styles.footer}>
+              <FeedSkeleton rows={1} />
+            </View>
+          ) : (
+            <View style={styles.footer} />
+          )
         }
         onEndReached={feed.hasNextPage ? feed.fetchNextPage : undefined}
         onEndReachedThreshold={END_REACHED_THRESHOLD}
@@ -415,6 +426,7 @@ const useStyles = makeStyles((colors) => ({
     paddingBottom: spacing.md,
   },
   footer: {
-    paddingVertical: spacing.lg,
+    paddingHorizontal: screenPadding,
+    paddingBottom: spacing.lg,
   },
 }));

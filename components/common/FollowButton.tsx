@@ -29,8 +29,14 @@ type FollowButtonSize = 'sm' | 'md';
  * company is one of ten and the button is not what the row is for. A filled near-black
  * pill repeated down a carousel reads as ten things shouting; the same control as plain
  * text reads as an offer.
+ *
+ * `icon` is the mark on its own — a plus that becomes a tick. For beside a name that is
+ * already written, where the word "Follow" next to the company it would follow is the
+ * second time the same thing has been said. It is the smallest this gets and relies on the
+ * reader knowing what a plus beside a name does, which on a card shaped like a social
+ * post is a safe thing to rely on.
  */
-type FollowButtonVariant = 'solid' | 'minimal';
+type FollowButtonVariant = 'solid' | 'minimal' | 'icon';
 
 const SIZES: Record<FollowButtonSize, { minHeight: number; paddingHorizontal: number; font: number }> = {
   sm: { minHeight: 32, paddingHorizontal: spacing.md, font: fontSize.caption + 1 },
@@ -73,7 +79,9 @@ export function FollowButton({
   const { colors } = useTheme();
   const styles = useStyles();
   const metrics = SIZES[size];
-  const minimal = variant === 'minimal';
+  const iconOnly = variant === 'icon';
+  // Both strip the pill; only the label differs between them.
+  const minimal = variant === 'minimal' || iconOnly;
 
   // The mark leads the label in both states, as a plus and then a tick.
   const markColor = isFollowing ? colors.textSecondary : minimal ? colors.accent : colors.accentText;
@@ -87,6 +95,9 @@ export function FollowButton({
    * which is what caps this.
    */
   const labelSize = minimal ? metrics.font + 2 : metrics.font;
+  // The mark carries the control alone here, so it is drawn a little larger than it would
+  // be sitting in front of a word.
+  const markSize = iconOnly ? labelSize + 7 : labelSize + 3;
 
   // Bumped on each *follow* so the burst can re-run; a plain boolean couldn't retrigger
   // it, and a shared value written from here would be a JS-side mutation.
@@ -168,7 +179,8 @@ export function FollowButton({
         accessibilityLabel={isFollowing ? `Unfollow ${companyName}` : `Follow ${companyName}`}
         // A borderless control still needs a target, so the padding it loses comes back
         // as hitSlop rather than as empty space inside a card that is only 132pt wide.
-        hitSlop={minimal ? 10 : undefined}
+        // A bare glyph is a small thing to hit, so the icon variant gets the most slop.
+        hitSlop={iconOnly ? 14 : minimal ? 10 : undefined}
         style={[
           styles.pill,
           minimal ? styles.pillMinimal : null,
@@ -180,15 +192,17 @@ export function FollowButton({
         ]}>
         {isFollowing ? (
           <Animated.View entering={followedHere ? FadeIn.duration(160) : undefined} style={styles.check}>
-            <Ionicons name="checkmark" size={labelSize + 3} color={markColor} />
+            <Ionicons name="checkmark" size={markSize} color={markColor} />
           </Animated.View>
         ) : minimal ? (
-          <Ionicons name="add" size={labelSize + 4} color={markColor} />
+          <Ionicons name="add" size={iconOnly ? markSize : labelSize + 4} color={markColor} />
         ) : null}
 
-        <Animated.Text style={[styles.label, { fontSize: labelSize }, labelStyle]}>
-          {isFollowing ? 'Following' : 'Follow'}
-        </Animated.Text>
+        {iconOnly ? null : (
+          <Animated.Text style={[styles.label, { fontSize: labelSize }, labelStyle]}>
+            {isFollowing ? 'Following' : 'Follow'}
+          </Animated.Text>
+        )}
       </AnimatedPressable>
     </View>
   );
