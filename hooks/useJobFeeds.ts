@@ -282,7 +282,7 @@ export function useDeckProfile(): { profile: DeckProfile | undefined; isLoading:
  * list: at thirty, an account following twenty-eight of the big employers had thirteen
  * companies left — three in reserve behind ten on screen, which ran dry after three
  * dismissals and looked like the X doing nothing. At fifty the same account has
- * twenty-eight eligible.
+ * twenty-eight eligible, which is twenty on screen and eight behind them.
  *
  * The pending personalization migration moves that exclusion into SQL, after which the
  * pool comes back already filtered and this arithmetic stops applying.
@@ -291,7 +291,7 @@ const SUGGESTION_POOL = 50;
 
 /** How many of the pool are on screen. The row scrolls, so this is a judgement about how
  *  far anyone wants to scroll sideways, not about what fits. */
-const SUGGESTION_SHOWN = 15;
+const SUGGESTION_SHOWN = 20;
 
 export function useSuggestedCompanies(): {
   companies: Company[];
