@@ -57,7 +57,14 @@ const PULL_THRESHOLD = 88;
  * reads as the gesture having failed rather than having worked. This is a floor on the
  * animation, not a stand-in for the request — that part is real now.
  */
-const REFRESH_DURATION = 900;
+/**
+ * The least time the refresh strip stays open.
+ *
+ * A floor rather than a duration: the strip closes when the new deck has arrived, and this
+ * only stops a warmed refresh — which resolves in a few milliseconds — opening and shutting
+ * too quickly to read as anything at all.
+ */
+const REFRESH_MIN_HOLD = 650;
 
 /**
  * Cards left below the viewport when the next page starts loading. Each card is one viewport
@@ -244,14 +251,12 @@ export default function ReelsScreen() {
     Haptics.selectionAsync();
   }, []);
 
-  // A real refetch now, where this used to rotate the array to fake one. The indicator
-  // is still held open for REFRESH_DURATION regardless of how fast the request comes
-  // back, because the gesture needs to be felt to have worked.
   const refetchActive = activeFeed.refetch;
 
   const handleRefresh = useCallback(() => {
     if (isRefreshing.current) return;
     isRefreshing.current = true;
+    const startedAt = Date.now();
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     active.set(withSpring(1, { damping: 15, stiffness: 180 }));
@@ -274,15 +279,9 @@ export default function ReelsScreen() {
      * one. Firing both at once raced them: sometimes the flush committed first and the
      * deck changed, sometimes the refetch reached the server first and the session was
      * built against the same stale counts as before. Which is exactly "it works
-     * sometimes". The indicator is held open for REFRESH_DURATION regardless, so waiting
-     * costs nothing the reader can see.
+     * sometimes".
      */
-    void (async () => {
-      await flushImpressions();
-      await refetchActive();
-    })();
-
-    refreshTimer.current = setTimeout(() => {
+    const close = () => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -295,7 +294,43 @@ export default function ReelsScreen() {
       }));
 
       isRefreshing.current = false;
-    }, REFRESH_DURATION);
+    };
+
+    void (async () => {
+      try {
+        await flushImpressions();
+        await refetchActive();
+      } catch {
+        /*
+         * A failed flush or refetch still has to close the strip.
+         *
+         * Without this the await rejects, nothing below it runs, and the Deck is left
+         * holding a spinner forever with isRefreshing stuck true — so every later pull is
+         * ignored too. One dropped request would have bricked the gesture for the rest of
+         * the session. The reader keeps whatever deck they had, which is the right
+         * outcome for a refresh that did not happen.
+         */
+      }
+
+      /*
+       * The strip closes only now, with the new deck already rendered behind it.
+       *
+       * This used to run off a fixed timer. A build takes about a second and the timer was
+       * nine hundred milliseconds, so the usual outcome was: the feed slides back up
+       * carrying the old cards, and a beat later they are replaced underneath the reader.
+       * The swap was visible as a swap, which is the thing nobody wants to see.
+       *
+       * Waiting for the data instead means the rise *is* the change — the list is already
+       * holding the new deck by the time it moves, and the new first card arrives in
+       * position rather than taking over from the old one.
+       *
+       * A floor, not a duration. A warmed refresh resolves in a few milliseconds, and
+       * without one the strip would open and shut too fast to read as anything; with it, a
+       * slow build simply takes as long as it takes.
+       */
+      const held = Date.now() - startedAt;
+      refreshTimer.current = setTimeout(close, Math.max(0, REFRESH_MIN_HOLD - held));
+    })();
   }, [active, pulse, spin, refetchActive]);
 
   const scrollHandler = useAnimatedScrollHandler({
