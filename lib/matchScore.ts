@@ -162,22 +162,6 @@ export const TIER_LABELS: Record<MatchTier, string> = {
   long: 'Long shot',
 };
 
-/** One line under the score: what kind of application this is. */
-export function tierLine(tier: MatchTier): string {
-  switch (tier) {
-    case 'strong':
-      return 'Your resume lines up with most of what this role asks for. Apply early.';
-    case 'good':
-      return 'A solid fit with a gap or two. Worth applying to.';
-    case 'fair':
-      return 'Some real overlap, and some real gaps. Tailor before you apply.';
-    case 'stretch':
-      return 'Reachable if you can show what your resume does not yet say.';
-    case 'long':
-      return 'This role wants a different background from the one on your resume.';
-  }
-}
-
 export function capLine(reason: MatchCapReason, at: number, jobFamily?: string): string {
   const family = jobFamily ? FAMILY_LABELS[jobFamily] ?? 'this field' : 'this field';
   switch (reason) {

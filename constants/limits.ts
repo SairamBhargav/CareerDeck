@@ -22,3 +22,10 @@
  * now only the fallback `useCredits` shows before that answer arrives — the `free` row's value.
  */
 export const FREE_RESUME_LIMIT = 3;
+
+/**
+ * Free readers open the full match breakdown on this many postings a week (Monday to Sunday,
+ * their own time). Mirrors `match_look_limit()` in 20261025000000_match_free_looks.sql, which is
+ * the one that is enforced; this copy is for words on screen before the server has answered.
+ */
+export const FREE_MATCH_LOOKS = 3;

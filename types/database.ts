@@ -3146,6 +3146,9 @@ export type Database = {
       ingest_upsert_job: { Args: { p: Json }; Returns: string }
       ingest_upsert_jobs: { Args: { p_rows: Json }; Returns: Json }
       invalidate_match_scores: { Args: { p_user_id: string }; Returns: number }
+      // Hand-added with 20261025000000_match_free_looks.sql.
+      match_look_state: { Args: { p_job_id: string; p_week: string }; Returns: Json }
+      claim_match_look: { Args: { p_job_id: string; p_week: string }; Returns: Json }
       is_moderator: { Args: { p_user_id: string }; Returns: boolean }
       job_comments: {
         Args: { p_cursor?: string; p_job_id: string; p_limit?: number }

@@ -25,6 +25,7 @@
 
 import * as Crypto from 'expo-crypto';
 
+import { FREE_MATCH_LOOKS } from '@/constants/limits';
 import { reportError } from '@/lib/observability';
 import { supabase } from '@/lib/supabase';
 import { serviceFetch } from '@/lib/service';
@@ -1313,6 +1314,41 @@ function matchRoles(value: unknown): MatchRole[] {
  * hold. An empty map is the honest answer for a user with no parsed default resume, and the
  * ring is hidden rather than drawn at zero.
  */
+/**
+ * A free reader's standing on one posting's match breakdown (20261025000000_match_free_looks.sql):
+ * whether it is open, and how many of the week's free looks are spent. Pro is always open.
+ */
+export interface MatchLook {
+  open: boolean;
+  pro: boolean;
+  used: number;
+  limit: number;
+}
+
+function toMatchLook(data: unknown): MatchLook {
+  const row = (data ?? {}) as Record<string, unknown>;
+  return {
+    open: row.open === true,
+    pro: row.pro === true,
+    used: typeof row.used === 'number' ? row.used : 0,
+    limit: typeof row.limit === 'number' ? row.limit : FREE_MATCH_LOOKS,
+  };
+}
+
+/** `week` is the reader's own Monday, `YYYY-MM-DD` (utils/week.ts `weekKey`). */
+export async function fetchMatchLook(jobId: string, week: string): Promise<MatchLook> {
+  const { data, error } = await supabase.rpc('match_look_state', { p_job_id: jobId, p_week: week });
+  if (error) throw error;
+  return toMatchLook(data);
+}
+
+/** Spends a look on this posting, or confirms one already spent. `open: false` when none are left. */
+export async function claimMatchLook(jobId: string, week: string): Promise<MatchLook> {
+  const { data, error } = await supabase.rpc('claim_match_look', { p_job_id: jobId, p_week: week });
+  if (error) throw error;
+  return toMatchLook(data);
+}
+
 export async function fetchMatchScores(jobIds: string[]): Promise<Map<string, MatchScore>> {
   if (jobIds.length === 0) return new Map();
 
