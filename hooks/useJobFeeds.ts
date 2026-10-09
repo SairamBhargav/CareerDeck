@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -150,17 +150,46 @@ function toFeed(
 export function useJobFeed(sort: JobSort = 'recent', surface: 'reels' | 'home' = 'reels'): JobFeed {
   // The Deck shows a match ring on every card; Home shows none, so it skips the scoring call.
   const withMatch = surface === 'reels';
+  const queryClient = useQueryClient();
+
+  // The surface is only in the key for the ranked sort: the explicit sorts are one list
+  // wherever they're shown, while each ranked surface pages through its own session.
+  // `withMatch` is in it because a scored page and an unscored one are different data.
+  const queryKey = useMemo(
+    () => ['feed', 'all', sort, sort === 'recommended' ? surface : null, withMatch],
+    [sort, surface, withMatch],
+  );
 
   const query = useInfiniteQuery({
-    // The surface is only in the key for the ranked sort: the explicit sorts are one list
-    // wherever they're shown, while each ranked surface pages through its own session.
-    // `withMatch` is in it because a scored page and an unscored one are different data.
-    queryKey: ['feed', 'all', sort, sort === 'recommended' ? surface : null, withMatch],
+    queryKey,
     queryFn: ({ pageParam }) => fetchFeed({ sort, cursor: pageParam, surface, withMatch }),
     ...pageParams(),
   });
 
-  return toFeed(query, useFeedItems(query.data?.pages));
+  /*
+   * Refresh means "back to the top with a fresh feed", not "fetch everything again".
+   *
+   * react-query's `refetch` on an infinite query refetches *every page currently loaded*,
+   * sequentially — its own loop is `do { fetchPage } while (currentPage < oldPages.length)`.
+   * So pulling down after scrolling five pages fired five requests one after another, and
+   * the first of them, having a null cursor, rebuilt the whole ranked session at half a
+   * second to a second. The indicator stayed up for all of it, and the further the reader
+   * had scrolled the longer the wait — which is the shape of the problem reported.
+   *
+   * Trimming the cache to the first page before refetching makes it one request. Trimming
+   * rather than resetting, because `resetQueries` empties the data first and the feed
+   * blinks out from under the reader mid-gesture.
+   */
+  const refresh = useCallback(async () => {
+    queryClient.setQueryData<InfiniteData<EnvelopePage, string | null>>(queryKey, (current) =>
+      current && current.pages.length > 1
+        ? { pages: current.pages.slice(0, 1), pageParams: current.pageParams.slice(0, 1) }
+        : current,
+    );
+    return query.refetch();
+  }, [queryClient, queryKey, query]);
+
+  return { ...toFeed(query, useFeedItems(query.data?.pages)), refetch: refresh };
 }
 
 /**
