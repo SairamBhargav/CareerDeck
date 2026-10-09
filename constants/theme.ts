@@ -145,8 +145,15 @@ const lightPalette: Palette = {
   chromeSurface: 'rgba(255,255,255,0.75)',
   chromeText: '#111114',
   chromeTextMuted: 'rgba(17,17,20,0.46)',
-  // A visible rim. Frosted glass with no edge reads as a smudge rather than an object.
-  chromeBorder: 'rgba(255,255,255,0.72)',
+  /*
+   * A soft dark hairline, where this was white.
+   *
+   * White was borrowed from the dark scheme, where a pale rim is how glass separates
+   * itself from what is behind it. Over a light feed it has nothing to separate from — a
+   * white edge on a near-white page is no edge at all. Ink at twelve percent is enough to
+   * say where the bar stops without drawing a line anybody notices.
+   */
+  chromeBorder: 'rgba(17,17,20,0.12)',
 
   reelWashAlpha: 0.07,
   reelGlowAlpha: 0.22,
@@ -219,7 +226,8 @@ const darkPalette: Palette = {
   chromeSurface: 'rgba(255,255,255,0.14)',
   chromeText: '#FFFFFF',
   chromeTextMuted: 'rgba(255,255,255,0.52)',
-  chromeBorder: 'rgba(255,255,255,0.18)',
+  // Stays pale: in dark the page behind is darker than the bar, so light is what reads.
+  chromeBorder: 'rgba(255,255,255,0.22)',
 
   reelWashAlpha: 0.2,
   reelGlowAlpha: 0.4,

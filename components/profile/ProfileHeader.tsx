@@ -4,7 +4,6 @@ import { AnimatedBlobatar } from '@blobatar/react-native/animated';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
-import { AnimatedCount } from '@/components/common/AnimatedCount';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { User } from '@/types';
@@ -28,28 +27,32 @@ interface ProfileHeaderProps {
   commentBadge?: string | null;
   /** Opens the verification screen. Shown only while there is no badge to show. */
   onVerify?: () => void;
-  /** Weeks at goal in a row. A ring is drawn around the avatar only while this is live. */
+  /**
+   * Weeks at goal in a row.
+   *
+   * Stays after the figures moved to Activity, because the ring around the avatar and the
+   * flame on it are drawn from this — it is part of the portrait rather than part of the
+   * readout that left.
+   */
   streakWeeks: number;
-  applications: number;
-  autoApplyCredits: number;
   onEdit: () => void;
 }
 
 /**
- * Who the user is, and how their season is going.
+ * Who the user is.
  *
- * The three figures underneath used to live as rows in the list below — buried among
- * follow counts, which made "how am I actually doing" a thing you had to go and read.
- * They belong beside the name, and they're the same numbers Activity leads on rather
- * than a second tally that can drift away from it.
+ * The figures that used to sit under the name — streak, applications, credits, follows —
+ * moved to Activity, which is the screen about how a season is going. What is left is
+ * identity: the avatar, the name, the course, and the badge that says a school vouched
+ * for the account.
+ *
+ * The streak ring stays, because it is drawn on the portrait rather than listed beside it.
  */
 export function ProfileHeader({
   user,
   commentBadge = null,
   onVerify,
   streakWeeks,
-  applications,
-  autoApplyCredits,
   onEdit,
 }: ProfileHeaderProps) {
   const { colors } = useTheme();
@@ -143,38 +146,6 @@ export function ProfileHeader({
         ) : null}
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.duration(300).delay(STAGGER_MS * 2)} style={styles.stats}>
-        <Stat
-          value={streakWeeks}
-          label={streakWeeks === 1 ? 'week streak' : 'weeks streak'}
-          tint={onStreak ? colors.goalMet : undefined}
-          first
-        />
-        <Stat value={applications} label="applications" />
-        <Stat value={autoApplyCredits} label="auto applies" tint={colors.autoApply} />
-      </Animated.View>
-    </View>
-  );
-}
-
-interface StatProps {
-  value: number;
-  label: string;
-  /** Colours the figure when it means something — a live streak, credits in hand. */
-  tint?: string;
-  /** The leading stat has no divider to its left. */
-  first?: boolean;
-}
-
-function Stat({ value, label, tint, first = false }: StatProps) {
-  const styles = useStyles();
-
-  return (
-    <View style={[styles.stat, first ? styles.statFirst : null]}>
-      <AnimatedCount value={value} style={tint ? [styles.statValue, { color: tint }] : styles.statValue} />
-      <Text style={styles.statLabel} numberOfLines={1}>
-        {label}
-      </Text>
     </View>
   );
 }
@@ -316,12 +287,15 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     alignItems: 'center',
     gap: 1,
-    // Hairlines between the three rather than around each: one object, divided.
+    // Hairlines between them rather than around each: one object, divided.
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: colors.border,
   },
   statFirst: {
     borderLeftWidth: 0,
+  },
+  statPressed: {
+    opacity: 0.6,
   },
   statValue: {
     fontSize: fontSize.heading,

@@ -37,12 +37,10 @@ export default function ProfileScreen() {
   const styles = useStyles();
   const {
     user,
-    applications,
     followedCompanySlugs,
     likedJobIds,
     preferredRoles,
     preferredLocations,
-    autoApplyCredits,
     setPreferredRoles,
     setPreferredLocations,
     updateIdentity,
@@ -147,8 +145,6 @@ export default function ProfileScreen() {
           commentBadge={verification.canComment ? (verification.badge ?? 'Verified') : null}
           onVerify={() => router.push('/verify')}
           streakWeeks={goal.streakWeeks}
-          applications={applications.length}
-          autoApplyCredits={autoApplyCredits}
           onEdit={() => setEditingProfile(true)}
         />
 

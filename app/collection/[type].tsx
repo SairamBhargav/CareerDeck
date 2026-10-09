@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +18,7 @@ import { makeStyles } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useJobsByIds } from '@/hooks/useJobFeeds';
-import type { Company } from '@/types';
+
 import { companyAudience } from '@/utils/format';
 
 /** Per-row stagger, capped so a long list's tail isn't left waiting. */
@@ -81,13 +81,44 @@ export default function CollectionScreen() {
     collection === 'following' ? [] : wantedIds,
   );
 
-  const followed = useMemo(
-    () =>
-      followedCompanySlugs
-        .map((slug) => directory.bySlug.get(slug))
-        .filter((company): company is Company => company !== undefined),
-    [followedCompanySlugs, directory],
-  );
+  /*
+   * Companies unfollowed while this screen has been open.
+   *
+   * They stay on the list with the button back to Follow, rather than vanishing from under
+   * the finger that just tapped it. A row disappearing is a poor acknowledgement: it takes
+   * away the thing that would confirm what happened, and the undo with it. The list settles
+   * the next time the screen is focused — look away, come back, and what you unfollowed is
+   * gone.
+   *
+   * Same shape as the suggestions row, where a *follow* is held on screen for exactly the
+   * same reason.
+   */
+  const [justUnfollowed, setJustUnfollowed] = useState<string[]>([]);
+  useFocusEffect(useCallback(() => setJustUnfollowed([]), []));
+
+  const noteUnfollowed = useCallback((companySlug: string, wasFollowing: boolean) => {
+    if (!wasFollowing) return;
+    setJustUnfollowed((current) =>
+      current.includes(companySlug) ? current : [...current, companySlug],
+    );
+  }, []);
+
+  /*
+   * Ordered by the directory rather than by when each was followed.
+   *
+   * `followedCompanySlugs` is newest-first, so a company that leaves that set and is kept
+   * on screen anyway has no position left in it — it would land at one end of the list and
+   * the row would jump at the exact moment the reader is looking at it. The directory's
+   * order does not depend on who follows what, so a row holds still whatever its button
+   * says.
+   */
+  const followed = useMemo(() => {
+    const live = new Set(followedCompanySlugs);
+    const shown = new Set([...followedCompanySlugs, ...justUnfollowed]);
+    return directory.companies
+      .filter((company) => shown.has(company.slug))
+      .map((company) => ({ ...company, isFollowing: live.has(company.slug) }));
+  }, [followedCompanySlugs, justUnfollowed, directory.companies]);
 
   // §3.6. A collection is a small, fully-mounted list, so an impression here means
   // "rendered" rather than "scrolled to" — see useRenderedImpressions.
@@ -145,7 +176,10 @@ export default function CollectionScreen() {
                   <FollowButton
                     isFollowing={company.isFollowing}
                     companyName={company.name}
-                    onToggle={() => toggleFollow(company.slug)}
+                    onToggle={() => {
+                      noteUnfollowed(company.slug, company.isFollowing);
+                      toggleFollow(company.slug);
+                    }}
                     size="sm"
                   />
                 </Pressable>
