@@ -21,6 +21,17 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type FollowButtonSize = 'sm' | 'md';
 
+/**
+ * `solid` is the filled pill — for a company's own page, where following is the point of
+ * the screen and deserves the weight.
+ *
+ * `minimal` is an icon and a label with nothing drawn behind them, for the lists where a
+ * company is one of ten and the button is not what the row is for. A filled near-black
+ * pill repeated down a carousel reads as ten things shouting; the same control as plain
+ * text reads as an offer.
+ */
+type FollowButtonVariant = 'solid' | 'minimal';
+
 const SIZES: Record<FollowButtonSize, { minHeight: number; paddingHorizontal: number; font: number }> = {
   sm: { minHeight: 32, paddingHorizontal: spacing.md, font: fontSize.caption + 1 },
   md: { minHeight: 38, paddingHorizontal: spacing.lg, font: fontSize.small },
@@ -37,6 +48,7 @@ interface FollowButtonProps {
   companyName: string;
   onToggle: () => void;
   size?: FollowButtonSize;
+  variant?: FollowButtonVariant;
   style?: ViewStyle;
 }
 
@@ -55,11 +67,16 @@ export function FollowButton({
   companyName,
   onToggle,
   size = 'sm',
+  variant = 'solid',
   style,
 }: FollowButtonProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const metrics = SIZES[size];
+  const minimal = variant === 'minimal';
+
+  // The mark leads the label in both states, as a plus and then a tick.
+  const markColor = isFollowing ? colors.textSecondary : minimal ? colors.accent : colors.accentText;
 
   // Bumped on each *follow* so the burst can re-run; a plain boolean couldn't retrigger
   // it, and a shared value written from here would be a JS-side mutation.
@@ -87,14 +104,27 @@ export function FollowButton({
     return withSequence(withSpring(1.08, POP_SPRING), withSpring(1, POP_SPRING));
   }, [burstKey]);
 
+  /*
+   * Both branches return the same keys. Reanimated wants a stable shape out of an
+   * animated style, so the minimal variant paints transparent rather than omitting the
+   * fill.
+   */
   const pillStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(followed.value, [0, 1], [colors.accent, colors.backgroundMuted]),
-    borderColor: interpolateColor(followed.value, [0, 1], [colors.accent, colors.border]),
+    backgroundColor: minimal
+      ? 'transparent'
+      : interpolateColor(followed.value, [0, 1], [colors.accent, colors.backgroundMuted]),
+    borderColor: minimal
+      ? 'transparent'
+      : interpolateColor(followed.value, [0, 1], [colors.accent, colors.border]),
     transform: [{ scale: pop.value }],
   }));
 
   const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(followed.value, [0, 1], [colors.accentText, colors.textSecondary]),
+    // Minimal carries the state in the text itself, so it starts at the strongest colour
+    // in the palette and settles to a quiet one once the thing is done.
+    color: minimal
+      ? interpolateColor(followed.value, [0, 1], [colors.accent, colors.textSecondary])
+      : interpolateColor(followed.value, [0, 1], [colors.accentText, colors.textSecondary]),
   }));
 
   const ringStyle = useAnimatedStyle(() => ({
@@ -115,23 +145,35 @@ export function FollowButton({
   return (
     <View style={[styles.wrap, style]}>
       {/* Outside the pill and non-interactive, so it can overflow past the button's
-          bounds without eating taps meant for the card underneath. */}
-      <Animated.View pointerEvents="none" style={[styles.ring, { borderRadius: radius.pill }, ringStyle]} />
+          bounds without eating taps meant for the card underneath. Skipped in the minimal
+          variant: a ring bursting out of a shape that was never drawn reads as a glitch. */}
+      {minimal ? null : (
+        <Animated.View pointerEvents="none" style={[styles.ring, { borderRadius: radius.pill }, ringStyle]} />
+      )}
 
       <AnimatedPressable
         onPress={handlePress}
         accessibilityRole="button"
         accessibilityState={{ selected: isFollowing }}
         accessibilityLabel={isFollowing ? `Unfollow ${companyName}` : `Follow ${companyName}`}
+        // A borderless control still needs a target, so the padding it loses comes back
+        // as hitSlop rather than as empty space inside a card that is only 132pt wide.
+        hitSlop={minimal ? 10 : undefined}
         style={[
           styles.pill,
-          { minHeight: metrics.minHeight, paddingHorizontal: metrics.paddingHorizontal },
+          minimal ? styles.pillMinimal : null,
+          {
+            minHeight: metrics.minHeight,
+            paddingHorizontal: minimal ? 0 : metrics.paddingHorizontal,
+          },
           pillStyle,
         ]}>
         {isFollowing ? (
           <Animated.View entering={followedHere ? FadeIn.duration(160) : undefined} style={styles.check}>
-            <Ionicons name="checkmark" size={metrics.font + 2} color={colors.textSecondary} />
+            <Ionicons name="checkmark" size={metrics.font + 3} color={markColor} />
           </Animated.View>
+        ) : minimal ? (
+          <Ionicons name="add" size={metrics.font + 4} color={markColor} />
         ) : null}
 
         <Animated.Text style={[styles.label, { fontSize: metrics.font }, labelStyle]}>
@@ -163,6 +205,9 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.xs,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  pillMinimal: {
+    borderWidth: 0,
   },
   check: {
     justifyContent: 'center',

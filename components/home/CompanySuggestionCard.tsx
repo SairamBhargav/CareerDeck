@@ -53,6 +53,7 @@ export function CompanySuggestionCard({
         companyName={company.name}
         onToggle={onToggleFollow}
         size="sm"
+        variant="minimal"
       />
 
       {/* Last in the tree so it draws over the logo, and generously slopped: the glyph is
