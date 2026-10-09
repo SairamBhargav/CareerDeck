@@ -62,12 +62,16 @@ interface SwipeableJobRowProps {
  * scrolls through these rows untouched. It is the same arrangement CommentRow uses inside
  * the comment thread.
  *
- * That is not enough on its own here. Home rides on react-native-tab-view, which wraps
- * react-native-pager-view — a *native* pager, so it wins arbitration against a JS gesture
- * and offers no handler ref to block. Home therefore sets `swipeEnabled: false` in the tabs
- * layout, which is what actually leaves the horizontal axis free for these rows. Swiping
- * back from Deck still works, because the flag only applies while Home is the focused
- * screen.
+ * There is a native pager underneath — Home rides on react-native-tab-view, which wraps
+ * react-native-pager-view, and that is what carries a sideways swipe over to the Deck.
+ * This handler does not have to be given the axis to beat it: gesture-handler calls
+ * `requestDisallowInterceptTouchEvent` on the native parent as soon as one of its own
+ * handlers activates, so claiming the pan at 14px takes the drag back from the pager for
+ * the rest of that gesture.
+ *
+ * Which is the behaviour wanted on both counts. A drag that starts on a card hides the
+ * posting; one that starts in the gap between two of them never reaches this handler and
+ * goes to the Deck instead.
  */
 export function SwipeableJobRow({ children, onHide, onLike }: SwipeableJobRowProps) {
   const { colors } = useTheme();

@@ -25,15 +25,23 @@ export default function TabsLayout() {
         tabBar={(props: FloatingTabBarProps) => <FloatingTabBar {...props} />}
         tabBarPosition="bottom">
         {/*
-          * Home's feed rows are swipeable, and they cannot win the horizontal axis by
-          * arbitration: react-native-tab-view wraps react-native-pager-view, a native pager,
-          * which beats a JS gesture handler and exposes no ref to block. So the pager gives
-          * the axis up on this screen instead.
+          * Home keeps the pager, and the gesture is settled by who is underneath the
+          * finger rather than by turning anything off.
           *
-          * Only while Home is focused — swiping back from Deck still works, and the tab bar
-          * was always the primary way between tabs.
+          * This was `swipeEnabled: false` for a while, on the reasoning that a feed row's
+          * pan could never beat react-native-pager-view — a native pager that intercepts
+          * horizontal drags and offers no handler ref to block. That reasoning skipped a
+          * step: gesture-handler calls `requestDisallowInterceptTouchEvent` on the native
+          * parent the moment one of its own handlers activates, which is exactly the
+          * mechanism for a child winning an axis back from a scrolling ancestor.
+          *
+          * So the arrangement is the ordinary nested one. A pan that starts on a feed card
+          * is claimed by the card after 14px across and hides the posting; one that starts
+          * on the stories or suggestions rail scrolls that rail; and one that starts
+          * anywhere else — the gaps between cards, the header, the sort bar — reaches the
+          * pager and moves to the Deck.
           */}
-        <TopTabs.Screen name="index" options={{ title: 'Home', swipeEnabled: false }} />
+        <TopTabs.Screen name="index" options={{ title: 'Home' }} />
         <TopTabs.Screen name="reels" options={{ title: 'Deck' }} />
         <TopTabs.Screen name="activity" options={{ title: 'Activity' }} />
       </TopTabs>
