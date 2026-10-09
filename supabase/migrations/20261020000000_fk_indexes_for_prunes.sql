@@ -1,4 +1,14 @@
 /*
+ * Renumbered from 20261017000000 on merge (2026-10-09).
+ *
+ * That version was taken by 20261017000000_suggested_companies_personal.sql, which had
+ * already been pushed — so the remote recorded 20261017000000 as applied and this file,
+ * sharing the version, would have been treated as done and skipped forever. The indexes
+ * below would never have been created, silently.
+ *
+ * Nothing in the SQL changed; only the filename.
+ */
+/*
  * Index the foreign keys that the nightly prunes and the account purge delete through
  * (2026-10-07 pre-launch scan).
  *
