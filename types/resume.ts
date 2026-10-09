@@ -79,7 +79,7 @@ export interface Resume {
  */
 export interface MatchScore {
   score: number;
-  /** Scorer v3 (20261020000000_match_score_v3.sql). */
+  /** Scorer v3 (20261023000000_match_score_v3.sql). */
   components: {
     /** Share of the posting's core skills the resume has, 0–1, with 60% scored as full marks. */
     skills?: number;

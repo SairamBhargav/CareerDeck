@@ -1,7 +1,7 @@
 import type { MatchCapReason, MatchScore } from '@/types';
 
 /**
- * The client's half of scorer v3 (20261020000000_match_score_v3.sql): what the breakdown sheet
+ * The client's half of scorer v3 (20261023000000_match_score_v3.sql): what the breakdown sheet
  * needs to take a score apart and to say what would raise it.
  *
  * The database is the scorer. Everything here is derived from the components it stored, and the
