@@ -29,6 +29,7 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 import {
   breakdown,
   capLine,
+  eligibilityRows,
   FAMILY_LABELS,
   fieldLine,
   levelLine,
@@ -52,6 +53,8 @@ interface MatchExplainSheetProps {
   onClose: () => void;
   /** Free readers: close this and open the paywall. */
   onUpgrade: () => void;
+  /** Close this and open Profile, where the eligibility answers live. */
+  onOpenProfile: () => void;
 }
 
 const SHEET_MAX_RATIO = 0.9;
@@ -66,6 +69,8 @@ const HERO_RADIUS = (HERO_RING - HERO_STROKE) / 2;
 const HERO_CIRCUMFERENCE = 2 * Math.PI * HERO_RADIUS;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const ELIGIBILITY_CAPS = new Set<string>(['sponsorship', 'sponsorship_soft', 'citizenship', 'graduation']);
 
 /** One score, one colour: the same stops the ring on the reel uses. */
 const scoreColor = (score: number) => interpolateColor(score, MATCH_COLOR_STOPS.input, MATCH_COLOR_STOPS.output);
@@ -84,7 +89,7 @@ const scoreColor = (score: number) => interpolateColor(score, MATCH_COLOR_STOPS.
  * Mounted only while open (the caller keys it on the job): it slides itself in on mount, and out
  * again before calling `onClose`.
  */
-export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade }: MatchExplainSheetProps) {
+export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade, onOpenProfile }: MatchExplainSheetProps) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -117,6 +122,19 @@ export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade }: Ma
       }),
     );
   };
+
+  const openProfile = () => {
+    translateY.set(
+      withTiming(maxHeight, CLOSE, (finished) => {
+        'worklet';
+        if (finished) runOnJS(onOpenProfile)();
+      }),
+    );
+  };
+
+  // A posting the reader can't take says so to everyone, Pro or not: that is not an upsell.
+  const cap = match.components.cap;
+  const blocking = cap && ELIGIBILITY_CAPS.has(cap.reason) ? capLine(cap.reason, cap.at, match.components.jobFamily) : null;
 
   // The scroll view's own pan, recognised alongside the sheet's so neither cancels the other.
   const scrollGesture = Gesture.Native();
@@ -176,10 +194,17 @@ export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade }: Ma
               bounces={false}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
-              <Hero job={job} score={match.score} tier={tier} reduced={reduced} onClose={dismiss} />
+              <Hero job={job} score={match.score} tier={tier} reduced={reduced} warning={blocking} onClose={dismiss} />
 
               {isPro ? (
-                <ProDetails job={job} match={match} parts={parts} resume={resume} reduced={reduced} />
+                <ProDetails
+                  job={job}
+                  match={match}
+                  parts={parts}
+                  resume={resume}
+                  reduced={reduced}
+                  onOpenProfile={openProfile}
+                />
               ) : (
                 <LockedDetails match={match} parts={parts} onUpgrade={upgrade} />
               )}
@@ -198,12 +223,14 @@ function Hero({
   score,
   tier,
   reduced,
+  warning,
   onClose,
 }: {
   job: Job;
   score: number;
   tier: ReturnType<typeof matchTier>;
   reduced: boolean;
+  warning: string | null;
   onClose: () => void;
 }) {
   const styles = useStyles();
@@ -280,6 +307,12 @@ function Hero({
         {job.title} · {job.companyName}
       </Text>
       <Text style={styles.heroLine}>{tierLine(tier)}</Text>
+      {warning ? (
+        <View style={styles.heroWarning}>
+          <Ionicons name="alert-circle" size={18} color={colors.danger} />
+          <Text style={styles.heroWarningText}>{warning}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -352,17 +385,25 @@ function ProDetails({
   parts,
   resume,
   reduced,
+  onOpenProfile,
 }: {
   job: Job;
   match: MatchScore;
   parts: Breakdown;
   resume: Resume | undefined;
   reduced: boolean;
+  onOpenProfile: () => void;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const c = match.components;
   const ideas = useMemo(() => suggestions(match), [match]);
+  const eligibility = useMemo(() => eligibilityRows(match), [match]);
+  // Matched before missing within each group, as the scorer ordered them.
+  const niceSet = new Set(c.preferred);
+  const all = [...c.matched, ...c.missing];
+  const required = all.filter((skill) => !niceSet.has(skill));
+  const nice = all.filter((skill) => niceSet.has(skill));
   const family = c.jobFamily ? FAMILY_LABELS[c.jobFamily] : undefined;
   const enter = (i: number) => (reduced ? undefined : FadeInDown.duration(380).delay(200 + i * 70));
 
@@ -375,18 +416,50 @@ function ProDetails({
       <Animated.View entering={enter(1)}>
         <Section icon="construct-outline" title="Skills">
           <Text style={styles.body}>{skillsLine(match)}</Text>
-          {c.matched.length + c.missing.length > 0 ? (
-            <View style={styles.chips}>
-              {c.matched.map((skill) => (
-                <Chip key={`have-${skill}`} label={skill} have />
-              ))}
-              {c.missing.map((skill) => (
-                <Chip key={`miss-${skill}`} label={skill} have={false} />
-              ))}
+          {required.length > 0 ? (
+            <SkillGroup title={nice.length > 0 ? 'Required' : undefined} skills={required} match={match} />
+          ) : null}
+          {nice.length > 0 ? <SkillGroup title="Nice to have" skills={nice} match={match} /> : null}
+          {c.fromWork.length > 0 ? (
+            <View style={styles.legend}>
+              <Ionicons name="briefcase-outline" size={12} color={colors.textTertiary} />
+              <Text style={styles.legendText}>From a role or project on your resume, not its skills list</Text>
             </View>
           ) : null}
         </Section>
       </Animated.View>
+
+      {eligibility.length > 0 ? (
+        <Animated.View entering={enter(1.5)}>
+          <Section icon="shield-checkmark-outline" title="Eligibility">
+            {eligibility.map((row) => (
+              <View key={row.id} style={styles.verdict}>
+                <Ionicons
+                  name={
+                    row.status === 'ok' ? 'checkmark-circle'
+                      : row.status === 'blocked' ? 'close-circle'
+                        : row.status === 'ask' ? 'help-circle-outline' : 'information-circle-outline'
+                  }
+                  size={20}
+                  color={row.status === 'blocked' ? colors.danger : row.status === 'ok' ? colors.text : colors.textTertiary}
+                />
+                <View style={styles.roleText}>
+                  <Text style={styles.roleTitle}>{row.title}</Text>
+                  <Text style={styles.small}>{row.line}</Text>
+                </View>
+              </View>
+            ))}
+            {eligibility.some((row) => row.status === 'ask') ? (
+              <Pressable
+                onPress={onOpenProfile}
+                style={({ pressed }) => [styles.secondaryButton, pressed ? styles.pressed : null]}
+                accessibilityRole="button">
+                <Text style={styles.secondaryButtonText}>Answer in Profile</Text>
+              </Pressable>
+            ) : null}
+          </Section>
+        </Animated.View>
+      ) : null}
 
       {typeof c.experience === 'number' ? (
         <Animated.View entering={enter(2)}>
@@ -581,14 +654,32 @@ function Section({ icon, title, children }: { icon: keyof typeof Ionicons.glyphM
   );
 }
 
-function Chip({ label, have }: { label: string; have: boolean }) {
+function SkillGroup({ title, skills, match }: { title?: string; skills: string[]; match: MatchScore }) {
+  const styles = useStyles();
+  const have = new Set(match.components.matched);
+  const fromWork = new Set(match.components.fromWork);
+  return (
+    <View style={styles.skillGroup}>
+      {title ? <Text style={styles.groupTitle}>{title}</Text> : null}
+      <View style={styles.chips}>
+        {skills.map((skill) => (
+          <Chip key={skill} label={skill} have={have.has(skill)} fromWork={fromWork.has(skill)} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function Chip({ label, have, fromWork = false }: { label: string; have: boolean; fromWork?: boolean }) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (
     <View
       style={[styles.chip, have ? styles.chipHave : styles.chipMissing]}
-      accessibilityLabel={have ? `${label}, on your resume` : `${label}, not on your resume`}>
-      {have ? <Ionicons name="checkmark" size={13} color={colors.text} /> : null}
+      accessibilityLabel={
+        have ? `${label}, on your resume${fromWork ? ' from a role or project' : ''}` : `${label}, not on your resume`
+      }>
+      {have ? <Ionicons name={fromWork ? 'briefcase-outline' : 'checkmark'} size={13} color={colors.text} /> : null}
       <Text style={have ? styles.chipLabel : styles.chipLabelMuted}>{label}</Text>
     </View>
   );
@@ -830,6 +921,52 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
+  },
+  skillGroup: { gap: spacing.xs },
+  groupTitle: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.textTertiary,
+  },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendText: {
+    flex: 1,
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
+  },
+  secondaryButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  secondaryButtonText: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  heroWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundMuted,
+  },
+  heroWarningText: {
+    flex: 1,
+    fontSize: fontSize.small,
+    lineHeight: 18,
+    color: colors.text,
   },
   chip: {
     flexDirection: 'row',

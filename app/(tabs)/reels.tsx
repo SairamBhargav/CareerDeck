@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -401,6 +402,10 @@ export default function ReelsScreen() {
           onUpgrade={() => {
             setExplainJob(null);
             router.push({ pathname: '/paywall', params: { from: 'match' } });
+          }}
+          onOpenProfile={() => {
+            setExplainJob(null);
+            router.push('/profile');
           }}
         />
       ) : null}

@@ -43,6 +43,7 @@ import type {
   MyComment,
   LocationType,
   MatchCapReason,
+  MatchEligibility,
   MatchRole,
   MatchScore,
   NewsItem,
@@ -1255,7 +1256,33 @@ const numberOrUndefined = (value: unknown) => (typeof value === 'number' ? value
 const stringList = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
-const CAP_REASONS: readonly MatchCapReason[] = ['off_field', 'adjacent_field', 'level', 'no_skills'];
+const CAP_REASONS: readonly MatchCapReason[] = [
+  'off_field', 'adjacent_field', 'level', 'no_skills', 'sponsorship', 'sponsorship_soft', 'citizenship', 'graduation',
+];
+
+/** `components.eligibility`, field by field: anything the scorer did not write stays absent. */
+function matchEligibility(value: unknown): MatchEligibility | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const e = value as Record<string, unknown>;
+  const pick = <T extends string>(v: unknown, allowed: readonly T[]) =>
+    typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : undefined;
+  const bool = (v: unknown) => (typeof v === 'boolean' ? v : undefined);
+  const grad = e.grad as { year?: unknown; month?: unknown } | undefined;
+  const out: MatchEligibility = {
+    sponsorship: pick(e.sponsorship, ['none_ever', 'none', 'offered'] as const),
+    citizenship: pick(e.citizenship, ['citizen', 'us_person'] as const),
+    gradFrom: typeof e.gradFrom === 'string' ? e.gradFrom : undefined,
+    gradTo: typeof e.gradTo === 'string' ? e.gradTo : undefined,
+    gradFits: bool(e.gradFits),
+    needsSponsorship: bool(e.needsSponsorship),
+    usCitizen: bool(e.usCitizen),
+    grad:
+      grad && typeof grad.year === 'number'
+        ? { year: grad.year, ...(typeof grad.month === 'number' ? { month: grad.month } : {}) }
+        : undefined,
+  };
+  return Object.values(out).some((v) => v !== undefined) ? out : undefined;
+}
 const isCapReason = (value: unknown): value is MatchCapReason =>
   typeof value === 'string' && (CAP_REASONS as readonly string[]).includes(value);
 
@@ -1306,6 +1333,8 @@ export async function fetchMatchScores(jobIds: string[]): Promise<Map<string, Ma
         seniority: numberOrUndefined(raw.seniority),
         matched: stringList(raw.matched),
         missing: stringList(raw.missing),
+        preferred: stringList(raw.preferred),
+        fromWork: stringList(raw.fromWork),
         roles: matchRoles(raw.roles),
         jobFamily: typeof raw.jobFamily === 'string' ? raw.jobFamily : undefined,
         limited: raw.limited === true,
@@ -1313,6 +1342,8 @@ export async function fetchMatchScores(jobIds: string[]): Promise<Map<string, Ma
         raw: numberOrUndefined(raw.raw),
         cap:
           cap && typeof cap.at === 'number' && isCapReason(cap.reason) ? { at: cap.at, reason: cap.reason } : undefined,
+        eligibilityCap: numberOrUndefined(raw.eligibilityCap),
+        eligibility: matchEligibility(raw.eligibility),
       },
       coverage: numberOrUndefined(raw.coverage) ?? 1,
       computedAt: row.computed_at,

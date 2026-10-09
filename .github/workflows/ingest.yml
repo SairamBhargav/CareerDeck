@@ -110,6 +110,19 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node server/src/ingest/run.ts --sweep
 
+      # What each posting says about sponsorship, citizenship, graduation dates and nice-to-have
+      # skills, for the match score (20261023000000_match_signals.sql). After the sweep so it
+      # reads only postings still open, and only the ones that are new or changed tonight.
+      # A parser miss leaves a posting with no signals, which never moves a score, so a failure
+      # here must not redden a run whose crawl succeeded.
+      - name: Read posting signals
+        continue-on-error: true
+        if: steps.guard.outputs.configured == 'true' && !cancelled()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node server/src/ingest/signals.ts
+
       # Companies arrive from the crawl with a name and nothing else, so they render as a
       # two-letter monogram until somebody resolves a domain for them. That is roughly ten
       # new ones a night, and they are the worst ten to be missing: a company that just

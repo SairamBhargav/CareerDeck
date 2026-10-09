@@ -1,7 +1,7 @@
 import type { MatchCapReason, MatchScore } from '@/types';
 
 /**
- * The client's half of scorer v3 (20261023000000_match_score_v3.sql): what the breakdown sheet
+ * The client's half of scorer v3 (20261024000000_match_score_v3.sql): what the breakdown sheet
  * needs to take a score apart and to say what would raise it.
  *
  * The database is the scorer. Everything here is derived from the components it stored, and the
@@ -48,6 +48,8 @@ interface Inputs {
   experience?: number;
   field?: number;
   seniority?: number;
+  /** Sponsorship, citizenship or graduation: fixed by the posting and the reader, not the resume. */
+  eligibilityCap?: number;
 }
 
 /**
@@ -72,6 +74,7 @@ export function rescore(parts: Inputs): number | null {
   if (field !== undefined && field <= 0.35) caps.push(60);
   if (seniority !== undefined && seniority <= 0.3) caps.push(40);
   if (skills === undefined) caps.push(field === undefined ? 55 : field <= 0.35 ? 45 : 70);
+  if (parts.eligibilityCap !== undefined) caps.push(parts.eligibilityCap);
   return Math.max(0, Math.min(...caps));
 }
 
@@ -186,7 +189,86 @@ export function capLine(reason: MatchCapReason, at: number, jobFamily?: string):
       return `This role is two or more levels from yours, so this tops out at ${at}.`;
     case 'no_skills':
       return `With no skills to compare, this is an estimate and tops out at ${at}.`;
+    case 'sponsorship':
+      return `This posting won't sponsor a visa and you've said you need one, so this tops out at ${at}.`;
+    case 'sponsorship_soft':
+      return `This posting won't sponsor a visa. Internships on CPT often still work, so this tops out at ${at} rather than lower.`;
+    case 'citizenship':
+      return `This role is for citizens only, so this tops out at ${at}.`;
+    case 'graduation':
+      return `You graduate outside the dates this posting asks for, so this tops out at ${at}.`;
   }
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** `2026-12-01` → "Dec 2026". */
+function monthYear(iso: string): string {
+  const [year, month] = iso.split('-');
+  return `${MONTH_NAMES[Number(month) - 1] ?? ''} ${year}`.trim();
+}
+
+export interface EligibilityRow {
+  id: 'sponsorship' | 'citizenship' | 'graduation';
+  title: string;
+  line: string;
+  /** `ok`: it fits. `blocked`: it caps the score. `ask`: the posting has a rule and we lack your answer. */
+  status: 'ok' | 'blocked' | 'ask' | 'info';
+}
+
+/**
+ * One row per rule the posting stated, with the reader's side of it. Postings that say nothing
+ * produce no rows, so most sheets show no eligibility section at all.
+ */
+export function eligibilityRows(match: MatchScore): EligibilityRow[] {
+  const e = match.components.eligibility;
+  if (!e) return [];
+  const rows: EligibilityRow[] = [];
+
+  if (e.sponsorship === 'offered') {
+    rows.push({ id: 'sponsorship', title: 'Sponsors visas', line: 'The posting says it offers visa sponsorship.', status: e.needsSponsorship ? 'ok' : 'info' });
+  } else if (e.sponsorship) {
+    const ever = e.sponsorship === 'none_ever';
+    const said = ever ? 'won’t sponsor a visa, now or in the future' : 'won’t sponsor a visa';
+    rows.push(
+      e.needsSponsorship === undefined
+        ? { id: 'sponsorship', title: 'No visa sponsorship', line: `The posting ${said}. Tell us in Profile whether you need sponsorship and the score will account for it.`, status: 'ask' }
+        : e.needsSponsorship
+          ? { id: 'sponsorship', title: 'No visa sponsorship', line: ever ? `The posting ${said}, and you've said you need it.` : `The posting ${said}. On CPT, an internship may still be open to you: ask the recruiter.`, status: 'blocked' }
+          : { id: 'sponsorship', title: 'No visa sponsorship', line: `The posting ${said}. You've said you don't need it.`, status: 'ok' },
+    );
+  }
+
+  if (e.citizenship) {
+    const who = e.citizenship === 'citizen' ? 'US citizens only, usually for a security clearance' : 'US citizens and permanent residents (export rules)';
+    const status: EligibilityRow['status'] =
+      e.usCitizen === true ? 'ok'
+        : e.usCitizen === undefined ? 'ask'
+          : match.components.cap?.reason === 'citizenship' || (match.components.eligibilityCap ?? 100) <= 10 ? 'blocked' : 'info';
+    rows.push({
+      id: 'citizenship',
+      title: e.citizenship === 'citizen' ? 'Citizens only' : 'US persons only',
+      line: status === 'ask' ? `Open to ${who}. Answer "US citizen" in Profile to have this checked.` : `Open to ${who}.`,
+      status,
+    });
+  }
+
+  if (e.gradFrom || e.gradTo) {
+    const window =
+      e.gradFrom && e.gradTo
+        ? e.gradFrom === e.gradTo ? monthYear(e.gradFrom) : `${monthYear(e.gradFrom)} – ${monthYear(e.gradTo)}`
+        : e.gradTo ? `by ${monthYear(e.gradTo)}` : `from ${monthYear(e.gradFrom ?? '')}`;
+    const yours = e.grad ? (e.grad.month ? `${MONTH_NAMES[e.grad.month - 1]} ${e.grad.year}` : String(e.grad.year)) : null;
+    rows.push({
+      id: 'graduation',
+      title: `Graduating ${window}`,
+      line: yours
+        ? e.gradFits ? `You graduate ${yours}, inside the window.` : `You graduate ${yours}, outside the window.`
+        : 'Add your graduation date in Profile to have this checked.',
+      status: yours ? (e.gradFits ? 'ok' : 'blocked') : 'ask',
+    });
+  }
+  return rows;
 }
 
 export interface Suggestion {
@@ -204,7 +286,13 @@ export interface Suggestion {
  */
 export function suggestions(match: MatchScore): Suggestion[] {
   const c = match.components;
-  const now: Inputs = { skills: c.skills, experience: c.experience, field: c.field, seniority: c.seniority };
+  const now: Inputs = {
+    skills: c.skills,
+    experience: c.experience,
+    field: c.field,
+    seniority: c.seniority,
+    eligibilityCap: c.eligibilityCap,
+  };
   const base = rescore(now);
   if (base === null) return [];
   const priced = (next: Inputs) => Math.max(0, (rescore(next) ?? base) - base);
@@ -223,6 +311,7 @@ export function suggestions(match: MatchScore): Suggestion[] {
       });
     }
   } else if (typeof c.skills === 'number' && c.skills < 1 && c.missing.length > 0) {
+    // `missing` is required-first, so these are the ones worth the most.
     const shown = c.missing.slice(0, 3);
     const gain = priced({ ...now, skills: 1 });
     if (gain >= 2) {
@@ -265,7 +354,9 @@ export function skillsLine(match: MatchScore): string {
   if (c.limitedReason === 'resume') return 'We could not read any skills on your resume to compare.';
   if (c.limited) return 'This posting does not list specific skills, so the score leans on your field, experience and level.';
   const listed = c.matched.length + c.missing.length;
-  return `You have ${c.matched.length} of the ${listed} skills this role lists. Having 60% counts as full marks.`;
+  const nice = c.preferred.length;
+  const split = nice > 0 ? ` ${nice} of them ${nice === 1 ? 'is' : 'are'} only nice to have and count half.` : '';
+  return `You have ${c.matched.length} of the ${listed} skills this role lists.${split} Having 60% counts as full marks.`;
 }
 
 export function fieldLine(field: number, source?: 'degree' | 'experience'): string {

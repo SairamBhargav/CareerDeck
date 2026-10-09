@@ -10,6 +10,7 @@ export type { User, UserIdentityEdit } from './user';
 export type { NewsItem, NewsCategory } from './news';
 export type {
   MatchCapReason,
+  MatchEligibility,
   MatchRole,
   MatchScore,
   Resume,

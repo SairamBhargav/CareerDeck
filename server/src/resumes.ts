@@ -270,6 +270,7 @@ resumes.post('/:id/parse', async (c) => {
       p_skills: parsed.skills,
       p_education: parsed.education,
       p_experience: parsed.experience,
+      p_projects: parsed.projects,
       p_years: parsed.yearsExperience,
       p_seniority: parsed.seniority,
       p_page_count: parsed.pageCount,

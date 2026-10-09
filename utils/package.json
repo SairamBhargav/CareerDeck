@@ -1,0 +1,4 @@
+{
+  "//": "The server imports jobSections.ts directly (server/src/ingest/normalize/eligibility.ts). Marking this folder as ESM is what lets its NodeNext type check read the file; Metro ignores the field.",
+  "type": "module"
+}

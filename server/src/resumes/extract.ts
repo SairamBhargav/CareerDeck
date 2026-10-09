@@ -52,6 +52,14 @@ export interface ParsedExperience {
   startDate: string | null;
   endDate: string | null;
   isCurrent: boolean;
+  /** Technologies the resume says were used in this role, as skill slugs. */
+  skills: string[];
+}
+
+export interface ParsedProject {
+  name: string | null;
+  /** Technologies the resume says the project used, as skill slugs. */
+  skills: string[];
 }
 
 export interface ParsedResume {
@@ -62,6 +70,7 @@ export interface ParsedResume {
   skills: string[];
   education: ParsedEducation[];
   experience: ParsedExperience[];
+  projects: ParsedProject[];
   yearsExperience: number | null;
   seniority: Seniority | null;
   pageCount: number | null;
@@ -76,7 +85,8 @@ export interface ParsedResume {
  * subtly wrong on one resume layout, discovered a month later, and the fix is worthless
  * without a way to enumerate the affected rows.
  */
-export const PARSER_VERSION = 'resume-extract-1';
+// 2: each role's skills, and projects with theirs (20261023000000_match_signals.sql).
+export const PARSER_VERSION = 'resume-extract-2';
 
 const SYSTEM = `You extract structured data from a resume PDF. You are a parser, not an assistant.
 
@@ -111,6 +121,18 @@ entry, and canonicalize aggressively:
 Include technologies, languages, frameworks, tools and named methodologies. Exclude soft
 skills ("team player", "communication"), spoken languages, and anything that is a job title
 rather than a skill. Cap at 60 entries, most prominent first.
+
+The same slug rules apply to the \`skills\` on each experience entry and each project: the
+technologies that entry's own text says were used ("built a REST API in Go on Kubernetes" →
+\`go\`, \`kubernetes\`, \`rest-api\`). Only what the entry names, never what such a role usually
+involves. Up to 15 per entry. The top-level \`skills\` list stays what the skills section says
+and need not repeat these.
+
+## Projects
+
+\`projects\` is the resume's projects section (personal, academic, hackathon, research), each
+with its name and skills. A project that names no technology still belongs, with empty skills.
+Roles with an employer go in \`experience\`, not here.
 
 ## Seniority
 
@@ -170,8 +192,21 @@ const PROFILE_TOOL: Anthropic.Tool = {
             startDate: { type: ['string', 'null'], description: 'YYYY-MM when known.' },
             endDate: { type: ['string', 'null'], description: 'YYYY-MM, or null if current.' },
             isCurrent: { type: 'boolean' },
+            skills: { type: 'array', items: { type: 'string' }, description: 'Technologies this role names.' },
           },
-          required: ['company', 'title', 'startDate', 'endDate', 'isCurrent'],
+          required: ['company', 'title', 'startDate', 'endDate', 'isCurrent', 'skills'],
+        },
+      },
+      projects: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            name: { type: ['string', 'null'] },
+            skills: { type: 'array', items: { type: 'string' }, description: 'Technologies this project names.' },
+          },
+          required: ['name', 'skills'],
         },
       },
       yearsExperience: { type: ['number', 'null'] },
@@ -194,7 +229,7 @@ const PROFILE_TOOL: Anthropic.Tool = {
     },
     required: [
       'fullName', 'email', 'phone', 'location', 'skills', 'education',
-      'experience', 'yearsExperience', 'seniority', 'pageCount',
+      'experience', 'projects', 'yearsExperience', 'seniority', 'pageCount',
     ],
   },
 };
@@ -251,7 +286,9 @@ function text(value: unknown, max: number): string | null {
  */
 function normalize(input: Record<string, unknown>): ParsedResume {
   const rawSkills = Array.isArray(input.skills) ? input.skills : [];
-  const skills = [...new Set(rawSkills.map(slug).filter((s): s is string => s !== null))].slice(0, 60);
+  const slugs = (value: unknown, max: number) =>
+    [...new Set((Array.isArray(value) ? value : []).map(slug).filter((s): s is string => s !== null))].slice(0, max);
+  const skills = slugs(rawSkills, 60);
 
   const rawYears = typeof input.yearsExperience === 'number' ? input.yearsExperience : null;
   const years =
@@ -288,7 +325,15 @@ function normalize(input: Record<string, unknown>): ParsedResume {
         startDate: text(e.startDate, 10),
         endDate: text(e.endDate, 10),
         isCurrent: e.isCurrent === true,
+        skills: slugs(e.skills, 15),
       };
+    });
+
+  const projects = (Array.isArray(input.projects) ? input.projects : [])
+    .slice(0, 15)
+    .map((entry): ParsedProject => {
+      const p = (entry ?? {}) as Record<string, unknown>;
+      return { name: text(p.name, 200), skills: slugs(p.skills, 15) };
     });
 
   const pages = typeof input.pageCount === 'number' ? Math.trunc(input.pageCount) : null;
@@ -301,6 +346,7 @@ function normalize(input: Record<string, unknown>): ParsedResume {
     skills,
     education,
     experience,
+    projects,
     yearsExperience: years,
     seniority,
     pageCount: pages !== null && pages > 0 && pages <= 100 ? pages : null,

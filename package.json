@@ -35,7 +35,8 @@
     "ingest": "node --env-file-if-exists=server/.env server/src/ingest/run.ts",
     "ingest:sweep": "node --env-file-if-exists=server/.env server/src/ingest/run.ts --sweep",
     "ingest:verify-live": "node --env-file-if-exists=server/.env server/src/ingest/aggregators/liveness.ts",
-    "ingest:backfill-descriptions": "node --env-file-if-exists=server/.env server/src/ingest/backfill-descriptions.ts"
+    "ingest:backfill-descriptions": "node --env-file-if-exists=server/.env server/src/ingest/backfill-descriptions.ts",
+    "ingest:signals": "node --env-file-if-exists=server/.env server/src/ingest/signals.ts"
   },
   "dependencies": {
     "@blobatar/react-native": "^2.7.0",

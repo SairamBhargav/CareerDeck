@@ -79,7 +79,7 @@ export interface Resume {
  */
 export interface MatchScore {
   score: number;
-  /** Scorer v3 (20261023000000_match_score_v3.sql). */
+  /** Scorer v3 (20261024000000_match_score_v3.sql). */
   components: {
     /** Share of the posting's core skills the resume has, 0–1, with 60% scored as full marks. */
     skills?: number;
@@ -92,7 +92,12 @@ export interface MatchScore {
     seniority?: number;
     /** The posting's skills the resume has, and the core ones it does not, as the posting labels them. */
     matched: string[];
+    /** Required first, then nice-to-have. */
     missing: string[];
+    /** Of `matched` and `missing`, the ones the posting named only as nice to have. They count half. */
+    preferred: string[];
+    /** Matched skills that came from a role or a project rather than the resume's skills list. */
+    fromWork: string[];
     /** The past roles that counted, strongest first. `index` points into the resume's `experience`. */
     roles: MatchRole[];
     jobFamily?: string;
@@ -104,6 +109,10 @@ export interface MatchScore {
     raw?: number;
     /** The cap that held the score down, when one did. */
     cap?: { at: number; reason: MatchCapReason };
+    /** The tightest eligibility cap that applies, binding or not. No resume change lifts it. */
+    eligibilityCap?: number;
+    /** What the posting said about who can take it, and what the reader has told us. */
+    eligibility?: MatchEligibility;
   };
   /**
    * How much of the formula had an input, 0–1: the sum of the weights that were answerable.
@@ -113,7 +122,30 @@ export interface MatchScore {
   computedAt: string;
 }
 
-export type MatchCapReason = 'off_field' | 'adjacent_field' | 'level' | 'no_skills';
+export type MatchCapReason =
+  | 'off_field'
+  | 'adjacent_field'
+  | 'level'
+  | 'no_skills'
+  | 'sponsorship'
+  | 'sponsorship_soft'
+  | 'citizenship'
+  | 'graduation';
+
+export interface MatchEligibility {
+  /** `none_ever`: no sponsorship now or in the future. `none`: won't sponsor, said plainly. */
+  sponsorship?: 'none_ever' | 'none' | 'offered';
+  /** `citizen`: citizens only (usually a clearance). `us_person`: citizens or permanent residents (ITAR). */
+  citizenship?: 'citizen' | 'us_person';
+  /** `YYYY-MM-DD`, the first of the month. Either end may be open. */
+  gradFrom?: string;
+  gradTo?: string;
+  /** Whether the reader's graduation date falls in the window. Absent when either side is unknown. */
+  gradFits?: boolean;
+  needsSponsorship?: boolean;
+  usCitizen?: boolean;
+  grad?: { year: number; month?: number };
+}
 
 export interface MatchRole {
   index: number;
