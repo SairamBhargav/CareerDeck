@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { fontSize } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
+import { TourAnchor } from '@/context/TourAnchorContext';
 
 interface HomeHeaderProps {
   firstName: string;
@@ -18,13 +19,15 @@ export function HomeHeader({ firstName, handle, onProfilePress }: HomeHeaderProp
     <View style={styles.row}>
       <Text style={styles.greeting}>Hey {firstName}</Text>
 
-      <Pressable
-        onPress={onProfilePress}
-        accessibilityRole="button"
-        accessibilityLabel="Open your profile"
-        style={({ pressed }) => (pressed ? styles.pressed : null)}>
-        <UserAvatar handle={handle} size={44} />
-      </Pressable>
+      <TourAnchor id="avatar">
+        <Pressable
+          onPress={onProfilePress}
+          accessibilityRole="button"
+          accessibilityLabel="Open your profile"
+          style={({ pressed }) => (pressed ? styles.pressed : null)}>
+          <UserAvatar handle={handle} size={44} />
+        </Pressable>
+      </TourAnchor>
     </View>
   );
 }

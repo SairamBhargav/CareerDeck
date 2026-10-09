@@ -7,6 +7,7 @@ import { STATUS_LABEL, StatusChip } from '@/components/activity/StatusChip';
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { TourAnchor } from '@/context/TourAnchorContext';
 import type { TrackedApplication } from '@/hooks/useApplications';
 import type { ApplicationStatus } from '@/types';
 import { formatPostedAt } from '@/utils/format';
@@ -119,18 +120,20 @@ export function ApplicationCard({
         <View style={styles.spacer} />
 
         {next ? (
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onAdvance(next);
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Move ${job.title} to ${STATUS_LABEL[next]}`}
-            style={({ pressed }) => [styles.advance, pressed ? styles.pressed : null]}>
-            <Text style={styles.advanceLabel}>{STATUS_LABEL[next]}</Text>
-            <Ionicons name="arrow-forward" size={12} color={colors.textSecondary} />
-          </Pressable>
+          <TourAnchor id="advance">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onAdvance(next);
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${job.title} to ${STATUS_LABEL[next]}`}
+              style={({ pressed }) => [styles.advance, pressed ? styles.pressed : null]}>
+              <Text style={styles.advanceLabel}>{STATUS_LABEL[next]}</Text>
+              <Ionicons name="arrow-forward" size={12} color={colors.textSecondary} />
+            </Pressable>
+          </TourAnchor>
         ) : null}
       </View>
     </Pressable>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -61,27 +61,6 @@ export function PulseRing({ rect }: { rect: WindowRect }) {
       )}
     </View>
   );
-}
-
-/**
- * Where a view sits on screen, for pointing a ring at it. The tour screen is full-screen, so
- * window coordinates are its own.
- */
-export function useWindowRect() {
-  // A callback ref held in state rather than `useRef`, so nothing reads a ref during render.
-  const [node, setNode] = useState<View | null>(null);
-  const [rect, setRect] = useState<WindowRect | null>(null);
-
-  const onLayout = useCallback(() => {
-    // After layout settles: measuring inside the callback itself can report the pre-layout frame.
-    requestAnimationFrame(() => {
-      node?.measureInWindow((x, y, width, height) => {
-        if (width > 0 && height > 0) setRect({ x, y, width, height });
-      });
-    });
-  }, [node]);
-
-  return { attach: setNode, rect, onLayout };
 }
 
 const styles = StyleSheet.create({

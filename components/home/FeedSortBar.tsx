@@ -10,6 +10,7 @@ import Animated, {
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { JobSort } from '@/hooks/useJobFeeds';
+import { TourAnchor } from '@/context/TourAnchorContext';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -46,16 +47,17 @@ export function FeedSortBar({ sort, onChange }: FeedSortBarProps) {
       // steal the gesture from the page scrolling vertically behind it.
       directionalLockEnabled>
       {OPTIONS.map((option) => (
-        <SortChip
-          key={option.key}
-          label={option.label}
-          selected={option.key === sort}
-          onPress={() => {
-            if (option.key === sort) return;
-            Haptics.selectionAsync();
-            onChange(option.key);
-          }}
-        />
+        <TourAnchor key={option.key} id={`sort-${option.key}`}>
+          <SortChip
+            label={option.label}
+            selected={option.key === sort}
+            onPress={() => {
+              if (option.key === sort) return;
+              Haptics.selectionAsync();
+              onChange(option.key);
+            }}
+          />
+        </TourAnchor>
       ))}
     </ScrollView>
   );

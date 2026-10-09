@@ -13,6 +13,7 @@ import { LikeBurst } from '@/components/reels/LikeBurst';
 import { ReelActionRail } from '@/components/reels/ReelActionRail';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { TourAnchor } from '@/context/TourAnchorContext';
 import type { Job } from '@/types';
 import { hexToRgba } from '@/utils/color';
 import { formatPostedAt } from '@/utils/format';
@@ -252,13 +253,15 @@ export function JobReelCard({
                       * Nested inside the company Pressable, which the inner one wins — the
                       * same arrangement the like button on a feed card already relies on.
                       */}
-                    <FollowButton
-                      isFollowing={isFollowing}
-                      companyName={job.companyName}
-                      onToggle={onToggleFollow}
-                      size="sm"
-                      variant="icon"
-                    />
+                    <TourAnchor id="follow">
+                      <FollowButton
+                        isFollowing={isFollowing}
+                        companyName={job.companyName}
+                        onToggle={onToggleFollow}
+                        size="sm"
+                        variant="icon"
+                      />
+                    </TourAnchor>
                   </View>
 
                   <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>

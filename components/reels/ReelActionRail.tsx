@@ -5,6 +5,7 @@ import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { fontSize, minTapTarget, spacing } from '@/constants/theme';
 import { usePaywallColors } from '@/components/paywall/palette';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { TourAnchor } from '@/context/TourAnchorContext';
 
 interface ReelActionRailProps {
   /** Likes from everybody, not just this reader. Zero hides the number entirely. */
@@ -39,24 +40,28 @@ export function ReelActionRail({
 
   return (
     <View style={styles.rail}>
-      <RailAction
-        icon={isLiked ? 'heart' : 'heart-outline'}
-        label={likeCount > 0 ? compactCount(likeCount) : undefined}
-        active={isLiked}
-        activeColor={colors.like}
-        onPress={onLike}
-        accessibilityLabel={isLiked ? `Unlike ${jobTitle}` : `Like ${jobTitle}`}
-      />
-      <RailAction
-        icon="chatbubble-outline"
-        label={commentCount > 0 ? compactCount(commentCount) : undefined}
-        onPress={onComment}
-        accessibilityLabel={
-          commentCount === 0
-            ? `Comment on ${jobTitle}`
-            : `Comments on ${jobTitle}, ${commentCount} so far`
-        }
-      />
+      <TourAnchor id="rail-like">
+        <RailAction
+          icon={isLiked ? 'heart' : 'heart-outline'}
+          label={likeCount > 0 ? compactCount(likeCount) : undefined}
+          active={isLiked}
+          activeColor={colors.like}
+          onPress={onLike}
+          accessibilityLabel={isLiked ? `Unlike ${jobTitle}` : `Like ${jobTitle}`}
+        />
+      </TourAnchor>
+      <TourAnchor id="rail-comment">
+        <RailAction
+          icon="chatbubble-outline"
+          label={commentCount > 0 ? compactCount(commentCount) : undefined}
+          onPress={onComment}
+          accessibilityLabel={
+            commentCount === 0
+              ? `Comment on ${jobTitle}`
+              : `Comments on ${jobTitle}, ${commentCount} so far`
+          }
+        />
+      </TourAnchor>
       <RailAction
         icon="ellipsis-horizontal"
         onPress={onMore}
@@ -89,6 +94,7 @@ export function ReelActionRail({
         hitSlop={6}
         style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
         <View style={styles.applyMark}>
+          <TourAnchor id="rail-apply" style={StyleSheet.absoluteFill} />
           <Svg width={APPLY_RING} height={APPLY_RING} style={StyleSheet.absoluteFill}>
             <Defs>
               <LinearGradient id="autoApplyRing" x1="0" y1="0" x2="1" y2="1">

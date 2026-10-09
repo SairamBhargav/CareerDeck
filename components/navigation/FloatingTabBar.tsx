@@ -24,6 +24,7 @@ import {
 } from '@/constants/theme';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { TourAnchor } from '@/context/TourAnchorContext';
 import { DeckTabIcon, HomeTabIcon } from '@/components/navigation/TabIcons';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 
@@ -43,6 +44,8 @@ export interface FloatingTabBarProps {
 }
 
 const INDICATOR_INSET = 6;
+/** In the first-run tour each tab is wrapped to be measured, and the wrapper takes the tab's share. */
+const TAB_ANCHOR = { flex: 1, alignSelf: 'stretch' } as const;
 const INDICATOR_SPRING = { damping: 18, stiffness: 220 };
 const PRESS_SPRING = { damping: 12, stiffness: 200 };
 
@@ -176,14 +179,15 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
               const iconColor = focused ? colors.chromeText : colors.chromeTextMuted;
 
               return (
-                <TabBarButton
-                  key={route.key}
-                  focused={focused}
-                  routeName={route.name}
-                  label={label}
-                  iconColor={iconColor}
-                  onPress={onPress}
-                />
+                <TourAnchor key={route.key} id={`tab-${route.name}`} style={TAB_ANCHOR}>
+                  <TabBarButton
+                    focused={focused}
+                    routeName={route.name}
+                    label={label}
+                    iconColor={iconColor}
+                    onPress={onPress}
+                  />
+                </TourAnchor>
               );
             })}
           </View>
