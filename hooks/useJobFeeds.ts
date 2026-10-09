@@ -352,18 +352,30 @@ export function useSuggestedCompanies(): {
   );
 
   /*
-   * The turnover. A company holds its slot for ROTATION_MS and then goes to the back.
+   * The turnover, in two passes: who is in the row, and then what order they sit in.
    *
-   * Three tiers, in order of who gets a slot:
+   * Three tiers decide *who*:
    *
-   *   0. still inside its term — sorted newest first, which is what puts the most recent
-   *      arrival on the left and the one nearest its retirement on the right
-   *   1. never shown — in the order the server gave them, so the best suggestion is the
-   *      one that fills a freed slot
+   *   0. still inside its term — the row's current members, who keep their slots
+   *   1. never shown — fills whatever a dismissal, a follow or a retirement freed, best
+   *      suggestion first
    *   2. retired — longest-retired first, so the pool cycles rather than running out
    *
-   * Tier 2 existing at all is the point: a hard expiry would drain thirty companies in a
+   * Tier 2 existing at all is the point: a hard expiry would drain the pool in a
    * fortnight and then leave the row empty for good.
+   *
+   * ── Why the order is a separate question ──────────────────────────────────────
+   *
+   * Sorting by those tiers and rendering the result put an arrival on the *right*, behind
+   * everything already there, and it only slid left a frame later once the rotation
+   * stamped it. Reordering the tiers instead — new before held — does not work either: on
+   * any row with reserve behind it, every never-shown company would outrank every current
+   * one and the whole row would turn over at once.
+   *
+   * So selection stays as it was, and the chosen twenty are then ordered with arrivals
+   * leading. A company that just took a freed slot has no stamp yet, which is exactly what
+   * identifies it as new. The effect below stamps it with `now` immediately after, making
+   * it the newest held company — so it stays leftmost and never visibly moves.
    */
   const companies = useMemo(() => {
     const now = Date.now();
@@ -373,18 +385,32 @@ export function useSuggestedCompanies(): {
       return isRetired(at, now) ? 2 : 0;
     };
 
-    return eligible
-      .map((company, index) => ({ company, index }))
+    const ranked = eligible.map((company, index) => ({
+      company,
+      index,
+      tier: tierOf(company.slug),
+    }));
+
+    // Who is in the row.
+    const chosen = ranked
       .sort((a, b) => {
-        const tierA = tierOf(a.company.slug);
-        const tierB = tierOf(b.company.slug);
-        if (tierA !== tierB) return tierA - tierB;
+        if (a.tier !== b.tier) return a.tier - b.tier;
         // Held: newest first. Retired: longest ago first. Never shown: the server's order.
-        if (tierA === 0) return (shownAt[b.company.slug] ?? 0) - (shownAt[a.company.slug] ?? 0);
-        if (tierA === 2) return (shownAt[a.company.slug] ?? 0) - (shownAt[b.company.slug] ?? 0);
+        if (a.tier === 0) return (shownAt[b.company.slug] ?? 0) - (shownAt[a.company.slug] ?? 0);
+        if (a.tier === 2) return (shownAt[a.company.slug] ?? 0) - (shownAt[b.company.slug] ?? 0);
         return a.index - b.index;
       })
-      .slice(0, SUGGESTION_SHOWN)
+      .slice(0, SUGGESTION_SHOWN);
+
+    // What order they appear in.
+    return chosen
+      .sort((a, b) => {
+        const arrivedA = a.tier === 1 ? 0 : 1;
+        const arrivedB = b.tier === 1 ? 0 : 1;
+        if (arrivedA !== arrivedB) return arrivedA - arrivedB;
+        if (a.tier === 1) return a.index - b.index;
+        return (shownAt[b.company.slug] ?? 0) - (shownAt[a.company.slug] ?? 0);
+      })
       .map(({ company }) => ({ ...company, isFollowing: followed.has(company.slug) }));
   }, [eligible, shownAt, followed]);
 

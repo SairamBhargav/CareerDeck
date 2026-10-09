@@ -93,11 +93,31 @@ async function write(userId: string, slugs: string[]): Promise<SuggestionShownAt
   const fresh = slugs.filter((slug) => !(slug in current) || isRetired(current[slug], now));
   if (fresh.length === 0) return current;
 
+  /*
+   * Strictly newer than anything already held, not merely `now`.
+   *
+   * The row is ordered newest-first, and the first fill stamps its leading card with
+   * exactly `now`. An arrival stamped `now` too therefore ties with it and loses on sort
+   * order — so it led the row for one frame, then slid into second place the moment it was
+   * recorded. A millisecond past the current maximum is enough to settle that, and is
+   * indistinguishable from `now` for every other purpose here.
+   */
+  const stamps = Object.values(current);
+  const base = stamps.length > 0 ? Math.max(now, Math.max(...stamps) + 1) : now;
+
   const next: SuggestionShownAt = { ...current };
   fresh.forEach((slug, index) => {
-    // The stagger. One addition lands on `now`; a batch is spread back across the window so
-    // the slots fall due separately. See the header.
-    next[slug] = now - Math.round((index * ROTATION_MS) / Math.max(fresh.length, 1));
+    /*
+     * The stagger, one slot wide — divided by how many are on screen, not by how many are
+     * new.
+     *
+     * Dividing by the batch spread two arrivals across half the window each, which
+     * backdated the second one by days and dropped it into the middle of a row it had just
+     * joined. A slot's width keeps consecutive arrivals within hours of each other, so they
+     * both read as new, while a first fill of the whole row still spreads across the full
+     * term and falls due one at a time.
+     */
+    next[slug] = base - Math.round((index * ROTATION_MS) / Math.max(slugs.length, 1));
   });
 
   const trimmed = Object.entries(next)
