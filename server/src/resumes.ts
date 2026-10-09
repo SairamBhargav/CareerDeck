@@ -46,6 +46,12 @@ export const resumes = new Hono<Env>();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** A `parsing` claim older than this belongs to a process that died. The client gives up at 2 min. */
+const STALE_PARSE_MS = 5 * 60_000;
+
+/** About 4¢ each. A shelf holds three, so ten a day is every real retry with room to spare. */
+const MAX_PARSES_PER_DAY = 10;
+
 function resumeIdOrThrow(raw: string | undefined): string {
   if (!raw || !UUID.test(raw)) {
     throw new HTTPException(422, { message: 'That is not a resume id.' });
@@ -170,13 +176,50 @@ resumes.post('/:id/parse', async (c) => {
 
   const row = await ownedResume(resumeId, user.id);
 
-  if (row.parse_status === 'parsing') {
+  /*
+   * A parse is a paid model call, so it is claimed, not checked. One conditional update decides
+   * who runs it: a fresh upload or a failed one may be read, a parsed one may not (the app never
+   * asks, so a request for one is a script running up the bill), and a `parsing` row may be taken
+   * over only once it is old enough that the process holding it must have died — a deploy or a
+   * crash mid-parse would otherwise leave the resume stuck behind "already running" for good.
+   * Reading the status and then writing it would let two concurrent requests both win.
+   */
+  if (row.parse_status === 'parsed') {
+    throw new HTTPException(409, { message: 'This resume has already been read.', cause: 'already_parsed' });
+  }
+
+  // Upload, parse, delete, repeat is the loop the claim above cannot see. The access log already
+  // has a row for every parse attempt, failed ones included, so it is the counter.
+  const recent = await adminClient
+    .from('pii_access_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('subject_user_id', user.id)
+    .eq('purpose', 'parse')
+    .gte('created_at', new Date(Date.now() - 24 * 3_600_000).toISOString());
+  if (recent.error) throw recent.error;
+  if ((recent.count ?? 0) >= MAX_PARSES_PER_DAY) {
+    throw new HTTPException(429, {
+      message: 'You have read a lot of resumes today. Try again tomorrow.',
+      cause: 'rate_limited',
+    });
+  }
+
+  const staleBefore = new Date(Date.now() - STALE_PARSE_MS).toISOString();
+  const claim = await adminClient
+    .from('resumes')
+    .update({ parse_status: 'parsing', parse_error: null, updated_at: new Date().toISOString() })
+    .eq('id', resumeId)
+    .eq('user_id', user.id)
+    .is('deleted_at', null)
+    .or(`parse_status.in.(pending,failed),and(parse_status.eq.parsing,updated_at.lt.${staleBefore})`)
+    .select('id');
+  if (claim.error) throw claim.error;
+
+  if (!claim.data?.length) {
     // Not an error. A user who double-taps, or whose phone retried the request, should see
     // the parse they already started rather than a second one against the same document.
     return c.json({ status: 'parsing', alreadyRunning: true }, 202);
   }
-
-  await adminClient.rpc('set_parse_status', { p_resume_id: resumeId, p_status: 'parsing' });
 
   try {
     /*
