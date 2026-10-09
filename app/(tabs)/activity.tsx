@@ -26,10 +26,11 @@ import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
 import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
 import { EmptyState } from '@/components/common/EmptyState';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
+import { StatStrip } from '@/components/common/StatStrip';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
-import { makeStyles } from '@/context/ThemeContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
 import { useResumes } from '@/hooks/useResumes';
@@ -55,6 +56,7 @@ const MAX_STAGGER_INDEX = 7;
  */
 export default function ActivityScreen() {
   const router = useGuardedRouter();
+  const { colors } = useTheme();
   const styles = useStyles();
   const {
     isInitialLoading,
@@ -69,6 +71,8 @@ export default function ActivityScreen() {
     weeklyGoal,
     setWeeklyGoal,
     credits,
+    autoApplyCredits,
+    followedCompanySlugs,
   } = useCareerDeck();
 
   const {
@@ -223,6 +227,41 @@ export default function ActivityScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
         <ActivityHeader counts={counts} />
+
+        {/*
+          * The figures that used to sit under the name on the profile.
+          *
+          * They were never about who the reader is, which is what that screen is for —
+          * they are about how a season is going, which is this one. Following is the
+          * exception and comes along anyway: it is the only one that opens something, and
+          * splitting four numbers across two screens to honour a category boundary helps
+          * nobody.
+          */}
+        <StatStrip
+          items={[
+            {
+              key: 'streak',
+              value: goal.streakWeeks,
+              label: goal.streakWeeks === 1 ? 'week streak' : 'weeks streak',
+              tint: goal.streakWeeks > 0 ? colors.goalMet : undefined,
+            },
+            { key: 'applications', value: applications.length, label: 'applications' },
+            {
+              key: 'credits',
+              value: autoApplyCredits,
+              label: 'auto applies',
+              tint: colors.autoApply,
+            },
+            {
+              key: 'following',
+              value: followedCompanySlugs.length,
+              label: 'following',
+              onPress: () =>
+                router.push({ pathname: '/collection/[type]', params: { type: 'following' } }),
+              accessibilityLabel: `${followedCompanySlugs.length} companies followed. Opens the list.`,
+            },
+          ]}
+        />
 
         <WeeklyGoalCard goal={goal} onEditGoal={() => setEditingGoal(true)} />
 

@@ -4,7 +4,6 @@ import { AnimatedBlobatar } from '@blobatar/react-native/animated';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
-import { AnimatedCount } from '@/components/common/AnimatedCount';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { User } from '@/types';
@@ -28,39 +27,32 @@ interface ProfileHeaderProps {
   commentBadge?: string | null;
   /** Opens the verification screen. Shown only while there is no badge to show. */
   onVerify?: () => void;
-  /** Weeks at goal in a row. A ring is drawn around the avatar only while this is live. */
+  /**
+   * Weeks at goal in a row.
+   *
+   * Stays after the figures moved to Activity, because the ring around the avatar and the
+   * flame on it are drawn from this — it is part of the portrait rather than part of the
+   * readout that left.
+   */
   streakWeeks: number;
-  applications: number;
-  autoApplyCredits: number;
-  following: number;
-  /** Opens the followed-companies list. The only figure here that leads anywhere. */
-  onPressFollowing: () => void;
   onEdit: () => void;
 }
 
 /**
- * Who the user is, and how their season is going.
+ * Who the user is.
  *
- * The figures underneath used to live as rows in the list below — buried among follow
- * counts, which made "how am I actually doing" a thing you had to go and read. They belong
- * beside the name, and the first three are the same numbers Activity leads on rather than
- * a second tally that can drift away from it.
+ * The figures that used to sit under the name — streak, applications, credits, follows —
+ * moved to Activity, which is the screen about how a season is going. What is left is
+ * identity: the avatar, the name, the course, and the badge that says a school vouched
+ * for the account.
  *
- * The follow count rejoined them afterwards, which reverses part of that — but it earns
- * the place by being the one figure that is also a door. The other three have nowhere to
- * lead; this one opens the list of companies it counts, where they can be unfollowed or
- * opened. A count you can only read is half a feature, since the reason to know it is
- * usually to go and change it.
+ * The streak ring stays, because it is drawn on the portrait rather than listed beside it.
  */
 export function ProfileHeader({
   user,
   commentBadge = null,
   onVerify,
   streakWeeks,
-  applications,
-  autoApplyCredits,
-  following,
-  onPressFollowing,
   onEdit,
 }: ProfileHeaderProps) {
   const { colors } = useTheme();
@@ -154,70 +146,7 @@ export function ProfileHeader({
         ) : null}
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.duration(300).delay(STAGGER_MS * 2)} style={styles.stats}>
-        <Stat
-          value={streakWeeks}
-          label={streakWeeks === 1 ? 'week streak' : 'weeks streak'}
-          tint={onStreak ? colors.goalMet : undefined}
-          first
-        />
-        <Stat value={applications} label="applications" />
-        <Stat value={autoApplyCredits} label="auto applies" tint={colors.autoApply} />
-        {/*
-          * The one figure here that is also a door.
-          *
-          * The other three are a readout — how the season is going — and there is nowhere
-          * for them to lead that Activity does not already show. A follow count is a
-          * collection, and a collection the reader can only look at is half a feature: the
-          * reason to know the number is to go and change it.
-          */}
-        <Stat
-          value={following}
-          label="following"
-          onPress={onPressFollowing}
-          accessibilityLabel={`${following} companies followed. Opens the list.`}
-        />
-      </Animated.View>
     </View>
-  );
-}
-
-interface StatProps {
-  value: number;
-  label: string;
-  /** Colours the figure when it means something — a live streak, credits in hand. */
-  tint?: string;
-  /** The leading stat has no divider to its left. */
-  first?: boolean;
-  /** Makes the figure a control. Omitted for the ones that are only a readout. */
-  onPress?: () => void;
-  accessibilityLabel?: string;
-}
-
-function Stat({ value, label, tint, first = false, onPress, accessibilityLabel }: StatProps) {
-  const styles = useStyles();
-
-  const body = (
-    <>
-      <AnimatedCount value={value} style={tint ? [styles.statValue, { color: tint }] : styles.statValue} />
-      <Text style={styles.statLabel} numberOfLines={1}>
-        {label}
-      </Text>
-    </>
-  );
-
-  if (!onPress) {
-    return <View style={[styles.stat, first ? styles.statFirst : null]}>{body}</View>;
-  }
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={({ pressed }) => [styles.stat, first ? styles.statFirst : null, pressed ? styles.statPressed : null]}>
-      {body}
-    </Pressable>
   );
 }
 
