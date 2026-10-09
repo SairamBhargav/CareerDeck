@@ -16,6 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useFocusEffect } from 'expo-router';
+
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 
 import { Linking } from 'react-native';
@@ -98,8 +100,29 @@ export function StoryViewer({
   const item = group?.items[itemIndex];
   const company = item?.companyId ? companyBySlug.get(item.companyId) : undefined;
 
+  /*
+   * The clock stops while anything is on top of this screen.
+   *
+   * Opening a company from the header pushes a sheet over the story, and the story stays
+   * mounted underneath — that is the whole point of it being a screen rather than a Modal.
+   * But mounted is not the same as watched: left running, the reader studies a company
+   * page while their story advances behind it, and comes back to a different one, or to
+   * the deck having moved on without them.
+   *
+   * Tracked through focus rather than by the handler that opens the company, so it covers
+   * anything that lands on top — a job pushed from the company page, a paywall, a deep
+   * link — without each of those having to know a story might be underneath.
+   */
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+
   // The timer stops for anything that takes attention off the story itself.
-  const paused = held || swiping;
+  const paused = held || swiping || !focused;
 
   // The timer has to call "advance" from inside an animation callback, but advancing
   // depends on where we currently are — which would make the timer itself change every
