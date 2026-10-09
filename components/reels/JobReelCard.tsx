@@ -1,20 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import { runOnJS } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { SkillChip } from '@/components/common/SkillChip';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
+import { LikeBurst } from '@/components/reels/LikeBurst';
 import { ReelActionRail } from '@/components/reels/ReelActionRail';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -27,6 +21,25 @@ const MAX_SKILL_CHIPS = 6;
 /** A long title wraps to three lines at most; the rest is in the sheet. */
 const MAX_TITLE_LINES = 3;
 /** Width reserved on the right so caption text never runs under the action rail. */
+/**
+ * Hearts allowed in flight at once.
+ *
+ * Each lives about six hundred milliseconds, so twelve is more than anybody can put on
+ * screen by tapping — the cap is there so a stuck finger cannot grow the list without
+ * bound, not to ration the effect.
+ */
+const MAX_BURSTS = 12;
+
+/*
+ * Module scope, not a ref.
+ *
+ * The gesture is built during render and closes over the handler that allocates an id, so
+ * a ref here is a ref read during render — which the hooks lint catches, correctly. Ids
+ * only have to be unique among the hearts currently mounted, so one counter shared by
+ * every card is more than enough.
+ */
+let burstSeq = 0;
+
 const RAIL_RESERVED_WIDTH = 92;
 /** Lifts the action rail (and Read more, which stays level with it) off the very bottom edge. */
 const RAIL_LIFT = spacing.sm;
@@ -108,37 +121,59 @@ export function JobReelCard({
         )
       : undefined;
 
-  const heartScale = useSharedValue(0);
-  const heartOpacity = useSharedValue(0);
+  /*
+   * Hearts in flight, one per double tap.
+   *
+   * A list rather than a single replayed animation, because tapping again while one is
+   * still rising should add a heart, not restart the one already there. Each entry
+   * unmounts itself when its animation ends.
+   */
+  const [bursts, setBursts] = useState<{ id: number; x: number; y: number; tilt: number }[]>([]);
 
-  // Single tap on the rail heart and double-tap-anywhere both funnel through this, so
-  // haptics and the toggle itself only need to be wired up in one place.
+  const dropBurst = useCallback((id: number) => {
+    setBursts((current) => current.filter((burst) => burst.id !== id));
+  }, []);
+
+  const addBurst = useCallback((x: number, y: number) => {
+    burstSeq += 1;
+    const id = burstSeq;
+    setBursts((current) => [
+      // Bounded, so holding a thumb down and tapping as fast as possible cannot grow this
+      // without limit. Twelve is far more than are ever visible at once.
+      ...current.slice(-(MAX_BURSTS - 1)),
+      { id, x, y, tilt: Math.round((id % 7) * 5 - 15) },
+    ]);
+  }, []);
+
+  // The rail's heart. A toggle, because tapping a filled heart to unlike is what the icon
+  // promises.
   const handleLike = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onLike();
   };
 
-  const playHeartBurst = () => {
-    heartScale.value = 0.4;
-    heartOpacity.value = 1;
-    heartScale.value = withSequence(withSpring(1.15, { damping: 7, stiffness: 220 }), withSpring(1, { damping: 10 }));
-    heartOpacity.value = withSequence(withTiming(1, { duration: 60 }), withTiming(1, { duration: 300 }), withTiming(0, { duration: 250 }));
+  /*
+   * Double tap only ever likes.
+   *
+   * It used to call the same toggle as the rail, so a second double tap quietly took the
+   * like back while still playing a heart — the animation said one thing and the state did
+   * the opposite. Tapping twice is an expression of enthusiasm, and the honest reading of
+   * doing it repeatedly is "yes, still", not "no".
+   */
+  const handleDoubleTapLike = (x: number, y: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    addBurst(x, y);
+    if (!job.isLiked) onLike();
   };
 
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .maxDuration(250)
-    .onEnd((_event, success) => {
-      if (success) {
-        runOnJS(handleLike)();
-        runOnJS(playHeartBurst)();
-      }
+    .onEnd((event, success) => {
+      // x and y are relative to the tap area, which is what positions the heart on the
+      // fingers rather than in the middle of the card.
+      if (success) runOnJS(handleDoubleTapLike)(event.x, event.y);
     });
-
-  const heartBurstStyle = useAnimatedStyle(() => ({
-    opacity: heartOpacity.value,
-    transform: [{ scale: heartScale.value }],
-  }));
 
   // Each half arrives in its own layout pass; commit once both have, and only the first
   // time, so the frozen numbers describe unclamped copy.
@@ -246,9 +281,15 @@ export function JobReelCard({
             </View>
           </View>
 
-          <Animated.View pointerEvents="none" style={[styles.heartBurst, heartBurstStyle]}>
-            <Ionicons name="heart" size={104} color={colors.like} />
-          </Animated.View>
+          {bursts.map((burst) => (
+            <LikeBurst
+              key={burst.id}
+              x={burst.x}
+              y={burst.y}
+              tilt={burst.tilt}
+              onDone={() => dropBurst(burst.id)}
+            />
+          ))}
         </View>
       </GestureDetector>
 
@@ -378,15 +419,6 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     fontWeight: '700',
     color: colors.text,
-  },
-  heartBurst: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   rail: {
     position: 'absolute',
