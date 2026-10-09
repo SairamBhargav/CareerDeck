@@ -123,7 +123,7 @@ await run('closed jobs removed', () =>
 
 /*
  * Postings first published over three months ago, open or not, unless somebody touched them
- * (20261026000000_old_job_retention.sql). The crawl no longer stores them, so this only ever
+ * (20261030000000_old_job_retention.sql). The crawl no longer stores them, so this only ever
  * finds jobs that aged past the line since last night.
  */
 await run('old jobs removed', () =>
