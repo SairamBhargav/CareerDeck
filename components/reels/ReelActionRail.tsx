@@ -110,10 +110,24 @@ export function ReelActionRail({
             />
           </Svg>
 
+          {/*
+            * The page's own ink, like the three marks above it.
+            *
+            * Gold was the obvious choice and is unusable: it measures 1.53:1 against a
+            * light page, against a floor of 3 for an icon — invisible in daylight and
+            * brilliant in the dark, which is the worst of both. Violet cleared the floor
+            * at 4.42 but made two coloured things fight in a 48pt circle, the glyph and
+            * the ring it sits inside.
+            *
+            * So only the ring carries colour, and it is the single coloured object on the
+            * rail. The glyph matches its neighbours exactly, which is what makes the ring
+            * read as the distinction rather than as decoration around an already-special
+            * icon.
+            */}
           <Ionicons
             name="flash"
             size={21}
-            color={autoApplyCredits === 0 ? colors.textTertiary : pro.violet}
+            color={autoApplyCredits === 0 ? colors.textTertiary : colors.text}
           />
         </View>
 
