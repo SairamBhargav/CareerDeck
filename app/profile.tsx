@@ -149,6 +149,10 @@ export default function ProfileScreen() {
           streakWeeks={goal.streakWeeks}
           applications={applications.length}
           autoApplyCredits={autoApplyCredits}
+          following={followedCompanySlugs.length}
+          onPressFollowing={() =>
+            router.push({ pathname: '/collection/[type]', params: { type: 'following' } })
+          }
           onEdit={() => setEditingProfile(true)}
         />
 

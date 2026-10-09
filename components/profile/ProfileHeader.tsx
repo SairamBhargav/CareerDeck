@@ -32,16 +32,25 @@ interface ProfileHeaderProps {
   streakWeeks: number;
   applications: number;
   autoApplyCredits: number;
+  following: number;
+  /** Opens the followed-companies list. The only figure here that leads anywhere. */
+  onPressFollowing: () => void;
   onEdit: () => void;
 }
 
 /**
  * Who the user is, and how their season is going.
  *
- * The three figures underneath used to live as rows in the list below — buried among
- * follow counts, which made "how am I actually doing" a thing you had to go and read.
- * They belong beside the name, and they're the same numbers Activity leads on rather
- * than a second tally that can drift away from it.
+ * The figures underneath used to live as rows in the list below — buried among follow
+ * counts, which made "how am I actually doing" a thing you had to go and read. They belong
+ * beside the name, and the first three are the same numbers Activity leads on rather than
+ * a second tally that can drift away from it.
+ *
+ * The follow count rejoined them afterwards, which reverses part of that — but it earns
+ * the place by being the one figure that is also a door. The other three have nowhere to
+ * lead; this one opens the list of companies it counts, where they can be unfollowed or
+ * opened. A count you can only read is half a feature, since the reason to know it is
+ * usually to go and change it.
  */
 export function ProfileHeader({
   user,
@@ -50,6 +59,8 @@ export function ProfileHeader({
   streakWeeks,
   applications,
   autoApplyCredits,
+  following,
+  onPressFollowing,
   onEdit,
 }: ProfileHeaderProps) {
   const { colors } = useTheme();
@@ -152,6 +163,20 @@ export function ProfileHeader({
         />
         <Stat value={applications} label="applications" />
         <Stat value={autoApplyCredits} label="auto applies" tint={colors.autoApply} />
+        {/*
+          * The one figure here that is also a door.
+          *
+          * The other three are a readout — how the season is going — and there is nowhere
+          * for them to lead that Activity does not already show. A follow count is a
+          * collection, and a collection the reader can only look at is half a feature: the
+          * reason to know the number is to go and change it.
+          */}
+        <Stat
+          value={following}
+          label="following"
+          onPress={onPressFollowing}
+          accessibilityLabel={`${following} companies followed. Opens the list.`}
+        />
       </Animated.View>
     </View>
   );
@@ -164,18 +189,35 @@ interface StatProps {
   tint?: string;
   /** The leading stat has no divider to its left. */
   first?: boolean;
+  /** Makes the figure a control. Omitted for the ones that are only a readout. */
+  onPress?: () => void;
+  accessibilityLabel?: string;
 }
 
-function Stat({ value, label, tint, first = false }: StatProps) {
+function Stat({ value, label, tint, first = false, onPress, accessibilityLabel }: StatProps) {
   const styles = useStyles();
 
-  return (
-    <View style={[styles.stat, first ? styles.statFirst : null]}>
+  const body = (
+    <>
       <AnimatedCount value={value} style={tint ? [styles.statValue, { color: tint }] : styles.statValue} />
       <Text style={styles.statLabel} numberOfLines={1}>
         {label}
       </Text>
-    </View>
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={[styles.stat, first ? styles.statFirst : null]}>{body}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [styles.stat, first ? styles.statFirst : null, pressed ? styles.statPressed : null]}>
+      {body}
+    </Pressable>
   );
 }
 
@@ -316,12 +358,15 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     alignItems: 'center',
     gap: 1,
-    // Hairlines between the three rather than around each: one object, divided.
+    // Hairlines between them rather than around each: one object, divided.
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: colors.border,
   },
   statFirst: {
     borderLeftWidth: 0,
+  },
+  statPressed: {
+    opacity: 0.6,
   },
   statValue: {
     fontSize: fontSize.heading,
