@@ -123,10 +123,16 @@ export function ReelActionRail({
             * rail. The glyph matches its neighbours exactly, which is what makes the ring
             * read as the distinction rather than as decoration around an already-special
             * icon.
+            *
+            * Outlined rather than solid, for the same reason and one more: a filled bolt
+            * inside a ring is two weights of the same idea stacked, a heavy shape wrapped
+            * in a hairline. Drawn in line it matches the stroke around it and the
+            * chatbubble and heart above it, so the whole column is one weight and only the
+            * ring's colour sets this apart.
             */}
           <Ionicons
-            name="flash"
-            size={21}
+            name="flash-outline"
+            size={22}
             color={autoApplyCredits === 0 ? colors.textTertiary : colors.text}
           />
         </View>
