@@ -23,7 +23,8 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import { adminClient, type AuthedUser } from './auth.ts';
-import { classify, type Category } from './moderation/classifier.ts';
+import { classify } from './moderation/classifier.ts';
+import { scheduleRecheck, TAKEDOWN_HEADLINE, takedownDetail } from './moderation/recheck.ts';
 
 type Env = { Variables: { user: AuthedUser } };
 
@@ -38,6 +39,13 @@ interface PostBody {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A bundled reaction's id (`lgtm`) or a KLIPY slug (`klipy:<slug>`). Never a URL: the app turns
+ * a slug into media through KLIPY itself, so a comment cannot point readers' phones at an
+ * arbitrary image host. The `comments_gif_id_shape` constraint holds the same line.
+ */
+const GIF_ID = /^(klipy:[A-Za-z0-9_-]{1,120}|[a-z0-9_-]{1,40})$/;
 
 function uuidOrThrow(value: unknown, field: string): string {
   if (typeof value !== 'string' || !UUID.test(value)) {
@@ -64,17 +72,6 @@ const STATUS_BY_CODE: Record<string, { status: 403 | 404 | 422 | 428 | 429; code
   22001: { status: 422, code: 'invalid' },
 };
 
-/** Completes "It looked like …" in a takedown notice: plain words, never a policy citation. */
-const TAKEDOWN_REASON: Record<Category, string> = {
-  harassment: 'harassment of a person',
-  threat: 'a threat',
-  sexual: 'sexual content',
-  doxxing: 'personal information about someone',
-  spam: 'spam or self-promotion',
-  employer_claim: 'an unverified claim about a company or someone who works there',
-  none: 'something against the content policy',
-};
-
 comments.post('/', async (c) => {
   const user = c.get('user');
   const payload = (await c.req.json().catch(() => ({}))) as PostBody;
@@ -86,6 +83,9 @@ comments.post('/', async (c) => {
 
   const body = typeof payload.body === 'string' ? payload.body : '';
   const gifId = typeof payload.gifId === 'string' && payload.gifId.length > 0 ? payload.gifId : null;
+  if (gifId !== null && !GIF_ID.test(gifId)) {
+    throw new HTTPException(422, { message: 'That GIF is not one the app can show.' });
+  }
 
   if (body.trim().length === 0 && gifId === null) {
     throw new HTTPException(422, { message: 'A comment needs text or a GIF.' });
@@ -177,8 +177,8 @@ comments.post('/', async (c) => {
   if (takenDown) {
     const notified = await adminClient.rpc('notify_moderation', {
       p_user_id: user.id,
-      p_headline: 'Your comment was flagged and taken down',
-      p_detail: `It looked like ${TAKEDOWN_REASON[verdict.category]}. A moderator will review it, and it comes back if it was flagged by mistake.`,
+      p_headline: TAKEDOWN_HEADLINE,
+      p_detail: takedownDetail(verdict.category),
       p_subject_id: (data as { id: string }).id,
     });
     // A failed notification must not fail a comment that has already been written. A retried
@@ -186,6 +186,10 @@ comments.post('/', async (c) => {
     if (notified.error) console.error('[moderation] takedown notice failed:', notified.error.message);
     return c.json({ comment: data, takenDown: true }, 201);
   }
+
+  // Published unchecked because the model ran out of time. It gets a second look now, with no
+  // one waiting on it — see moderation/recheck.ts.
+  if (verdict.source === 'unavailable') scheduleRecheck((data as { id: string }).id);
 
   return c.json({ comment: data, takenDown: false }, 201);
 });

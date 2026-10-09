@@ -96,3 +96,24 @@ export type ReportReason =
   | 'spam'
   | 'false information'
   | 'something else';
+
+/**
+ * One of the reader's own comments, for the Activity tab — `my_comments()`.
+ *
+ * `status` is the author's view of moderation: `live` is published, `underReview` was taken down
+ * pending a human (the author was told), `removed` is final.
+ */
+export interface MyComment {
+  id: string;
+  jobId: string;
+  parentId: string | null;
+  body: string;
+  gifId?: string;
+  likeCount: number;
+  replyCount: number;
+  createdAt: string;
+  status: 'live' | 'underReview' | 'removed';
+  jobTitle: string;
+  companyName: string;
+  companyLogoUrl: string | null;
+}

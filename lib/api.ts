@@ -40,6 +40,7 @@ import type {
   EmploymentType,
   Job,
   JobComment,
+  MyComment,
   LocationType,
   MatchScore,
   NewsItem,
@@ -797,6 +798,32 @@ export async function fetchJobComments(
     items: rows.map(toComment),
     nextCursor: rows.length < limit ? null : (rows[rows.length - 1]?.page_cursor ?? null),
   };
+}
+
+/** The reader's own comments, newest first, with the posting each sits on. */
+export async function fetchMyComments(cursor?: string | null, limit = 30): Promise<Page<MyComment>> {
+  const { data, error } = await supabase.rpc('my_comments', {
+    p_cursor: cursor ?? undefined,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const items = rows.map((row): MyComment => ({
+    id: row.id,
+    jobId: row.job_id,
+    parentId: row.parent_id,
+    body: row.body,
+    ...(row.gif_id === null ? {} : { gifId: row.gif_id }),
+    likeCount: row.like_count,
+    replyCount: row.reply_count,
+    createdAt: row.created_at,
+    status: row.status === 'under_review' ? 'underReview' : row.status === 'removed' ? 'removed' : 'live',
+    jobTitle: row.job_title,
+    companyName: row.company_name,
+    companyLogoUrl: row.company_logo,
+  }));
+  return { items, nextCursor: rows.length < limit ? null : (rows[rows.length - 1]?.next_cursor ?? null) };
 }
 
 export async function fetchCommentReplies(commentId: string): Promise<JobComment[]> {

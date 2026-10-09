@@ -2,7 +2,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -25,16 +24,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentPolicySheet } from '@/components/comments/CommentPolicySheet';
 import { CommentRow } from '@/components/comments/CommentRow';
+import { GifPicker } from '@/components/comments/GifPicker';
 import { ReportSheet } from '@/components/comments/ReportSheet';
 import { EmptyState } from '@/components/common/EmptyState';
 import { IconButton } from '@/components/common/IconButton';
 import { Skeleton } from '@/components/common/Skeleton';
 import { CONTENT_POLICY_VERSION } from '@/constants/policy';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
-import { reactionGifs } from '@/data/mockGifs';
 import { useCommentActions, useCommentGate, useJobComments } from '@/hooks/useComments';
+import { reportGifShared } from '@/lib/klipy';
 import { ServiceError, ServiceUnavailable } from '@/lib/service';
 import type { CommentGate, Job, ReportReason } from '@/types';
 
@@ -56,7 +57,12 @@ const DISMISS_VELOCITY = 700;
 const OPEN = { duration: 260, easing: Easing.out(Easing.cubic) };
 const CLOSE = { duration: 200, easing: Easing.in(Easing.cubic) };
 
-const GIF_COLUMNS = 4;
+/**
+ * Unsent text per posting, for as long as the app runs. Closing the sheet by a stray tap on the
+ * backdrop or a swipe used to throw the draft away; now it is waiting when the sheet reopens.
+ */
+const drafts = new Map<string, string>();
+
 /** However tall the keyboard gets, leave at least this much thread on screen. */
 const MIN_LIST_HEIGHT = 180;
 
@@ -106,16 +112,26 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { isCommentLiked, toggleCommentLike } = useCareerDeck();
+  const { userId } = useAuth();
   const { threads, total, isLoading, hasMore, loadMore, openThread, openThreadIds, closeThread } =
     useJobComments(job?.id);
   const { gate, acceptPolicy } = useCommentGate();
-  const { post, isPosting, remove, report } = useCommentActions(job?.id);
+  const { post, remove, report } = useCommentActions(job?.id);
 
   const sheetHeight = windowHeight * SHEET_HEIGHT_RATIO;
   const maxSheetHeight = windowHeight * SHEET_MAX_RATIO;
 
   const inputRef = useRef<TextInput>(null);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState(() => (job ? (drafts.get(job.id) ?? '') : ''));
+  const setDraft = (next: string | ((current: string) => string)) =>
+    setDraftState((current) => {
+      const value = typeof next === 'function' ? next(current) : next;
+      if (job) {
+        if (value.length > 0) drafts.set(job.id, value);
+        else drafts.delete(job.id);
+      }
+      return value;
+    });
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
   /** Set when the last attempt was refused. Cleared as soon as the draft changes. */
@@ -293,9 +309,10 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
   const handlePost = () => void submit();
 
-  const handlePickGif = (gifId: string) => {
+  const handlePickGif = (gifId: string, slug?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     void submit(gifId);
+    if (slug !== undefined) reportGifShared(slug, userId);
   };
 
   const handleDelete = (commentId: string) => {
@@ -345,260 +362,255 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
    * muted, or banned.
    */
   const gateReason = reasonFor(gate);
-  const canPost = draft.trim().length > 0 && !isPosting;
+  // Not blocked while an earlier comment is still in flight: it is already on screen, and each
+  // comment carries its own idempotency key (useCommentActions), so two sends stay two comments.
+  const canPost = draft.trim().length > 0;
 
   return (
     <Modal visible={visible} animationType="none" transparent onRequestClose={dismiss}>
       <Pressable style={styles.backdrop} onPress={dismiss} accessibilityLabel="Close comments" />
 
       <View style={styles.lift}>
-        <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, sheetStyle]}>
-            <View style={styles.grabberZone}>
-              <View style={styles.grabber} />
-            </View>
+        <Animated.View style={[styles.sheet, sheetStyle]}>
+          {/* The drag-to-close gesture covers the grabber, the header and the thread, and stops at
+              the composer: a drag in the text box or the GIF grid is somebody typing or browsing,
+              never a request to close. */}
+          <GestureDetector gesture={pan}>
+            <View style={styles.dragArea} collapsable={false}>
+              <View style={styles.grabberZone}>
+                <View style={styles.grabber} />
+              </View>
 
-            {/* No job title here: the reel it belongs to is still on screen above the
-                sheet, so restating it spends the widest line on something already known. */}
-            <View style={styles.header}>
-              {/*
-                * A count of nothing is worse than no count: the empty state below already
-                * says there are no comments, and "0 comments" spends the widest line in
-                * the sheet saying it a second time, in the one place a reader looks to
-                * find out whether it is worth scrolling.
-                *
-                * A spacer rather than nothing, because the title's `flex: 1` is what holds
-                * the close button against the right edge.
-                */}
-              {total === 0 ? (
-                <View style={styles.titleSpacer} />
-              ) : (
-                <Text style={styles.title} accessibilityRole="header">
-                  {total === 1 ? '1 comment' : `${total} comments`}
-                </Text>
-              )}
-              <IconButton name="close" accessibilityLabel="Close comments" onPress={dismiss} />
-            </View>
-
-            <GestureDetector gesture={listGesture}>
-              <Animated.ScrollView
-                onScroll={scrollHandler}
-                scrollEventThrottle={16}
-                contentContainerStyle={styles.list}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}>
-                {isLoading ? (
-                  <View style={styles.loading}>
-                    <Skeleton height={54} borderRadius={radius.lg} />
-                    <Skeleton height={54} borderRadius={radius.lg} />
-                    <Skeleton height={54} borderRadius={radius.lg} />
-                  </View>
-                ) : threads.length === 0 ? (
-                  <EmptyState
-                    icon="chatbubble-outline"
-                    title="No comments yet"
-                    message="Ask about the timeline, the interview, anything the posting leaves out."
-                  />
+              {/* No job title here: the reel it belongs to is still on screen above the
+                  sheet, so restating it spends the widest line on something already known. */}
+              <View style={styles.header}>
+                {/*
+                  * A count of nothing is worse than no count: the empty state below already
+                  * says there are no comments, and "0 comments" spends the widest line in
+                  * the sheet saying it a second time, in the one place a reader looks to
+                  * find out whether it is worth scrolling.
+                  *
+                  * A spacer rather than nothing, because the title's `flex: 1` is what holds
+                  * the close button against the right edge.
+                  */}
+                {total === 0 ? (
+                  <View style={styles.titleSpacer} />
                 ) : (
-                  threads.map(({ comment, replies, loadingReplies }) => {
-                    const open = openThreadIds.has(comment.id);
-
-                    return (
-                      <Fragment key={comment.id}>
-                        <CommentRow
-                          comment={comment}
-                          liked={isCommentLiked(comment.id)}
-                          onDelete={comment.isYou && !comment.pending ? () => handleDelete(comment.id) : undefined}
-                          onReport={
-                            comment.isYou
-                              ? undefined
-                              : () => setReporting({ id: comment.id, handle: comment.authorHandle })
-                          }
-                          onToggleLike={() => handleToggleLike(comment.id)}
-                          onReply={() =>
-                            handleReplyTo(comment.id, comment.authorHandle, comment.isYou, false)
-                          }
-                        />
-
-                        {/* The count comes from the comment's own `replyCount`, not from how many
-                            replies happen to be loaded — the link has to say "View 3 replies"
-                            before any of them have been fetched. */}
-                        {comment.replyCount > 0 ? (
-                          <Pressable
-                            onPress={() => toggleThread(comment.id)}
-                            hitSlop={8}
-                            accessibilityRole="button"
-                            accessibilityState={{ expanded: open }}
-                            accessibilityLabel={
-                              open
-                                ? 'Hide replies'
-                                : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`
-                            }
-                            style={({ pressed }) => [styles.threadToggle, pressed ? styles.pressed : null]}>
-                            <View style={styles.threadRule} />
-                            <Text style={styles.threadToggleLabel}>
-                              {open
-                                ? loadingReplies
-                                  ? 'Loading replies…'
-                                  : 'Hide replies'
-                                : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`}
-                            </Text>
-                          </Pressable>
-                        ) : null}
-
-                        {open
-                          ? replies.map((reply) => (
-                              <CommentRow
-                                key={reply.id}
-                                comment={reply}
-                                isReply
-                                liked={isCommentLiked(reply.id)}
-                                onDelete={reply.isYou && !reply.pending ? () => handleDelete(reply.id) : undefined}
-                                onReport={
-                                  reply.isYou
-                                    ? undefined
-                                    : () => setReporting({ id: reply.id, handle: reply.authorHandle })
-                                }
-                                onToggleLike={() => handleToggleLike(reply.id)}
-                                // Attaches to the same parent rather than nesting a level
-                                // deeper — see JobComment.
-                                onReply={() =>
-                                  handleReplyTo(comment.id, reply.authorHandle, reply.isYou, true)
-                                }
-                              />
-                            ))
-                          : null}
-                      </Fragment>
-                    );
-                  })
+                  <Text style={styles.title} accessibilityRole="header">
+                    {total === 1 ? '1 comment' : `${total} comments`}
+                  </Text>
                 )}
+                <IconButton name="close" accessibilityLabel="Close comments" onPress={dismiss} />
+              </View>
 
-                {/* A button rather than `onEndReached`: the sheet's list shares its pan with the
-                    dismiss gesture, and a fetch that fires while somebody is dragging the sheet
-                    closed is work nobody asked for. */}
-                {hasMore ? (
-                  <Pressable
-                    onPress={loadMore}
-                    accessibilityRole="button"
-                    accessibilityLabel="Load older comments"
-                    style={({ pressed }) => [styles.loadMore, pressed ? styles.pressed : null]}>
-                    <Text style={styles.threadToggleLabel}>Older comments</Text>
-                  </Pressable>
-                ) : null}
-              </Animated.ScrollView>
-            </GestureDetector>
+              <GestureDetector gesture={listGesture}>
+                <Animated.ScrollView
+                  onScroll={scrollHandler}
+                  scrollEventThrottle={16}
+                  contentContainerStyle={styles.list}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  showsVerticalScrollIndicator={false}>
+                  {isLoading ? (
+                    <View style={styles.loading}>
+                      <Skeleton height={54} borderRadius={radius.lg} />
+                      <Skeleton height={54} borderRadius={radius.lg} />
+                      <Skeleton height={54} borderRadius={radius.lg} />
+                    </View>
+                  ) : threads.length === 0 ? (
+                    <EmptyState
+                      icon="chatbubble-outline"
+                      title="No comments yet"
+                      message="Ask about the timeline, the interview, anything the posting leaves out."
+                    />
+                  ) : (
+                    threads.map(({ comment, replies, loadingReplies }) => {
+                      const open = openThreadIds.has(comment.id);
 
-            <Animated.View style={[styles.composer, composerStyle]}>
-              {/* Why you cannot write, when you cannot. Above the composer rather than replacing
-                  it, so the thread stays readable — reading is most of what this sheet is for, and
-                  an unverified reader is still a reader. */}
-              {gateReason ? (
-                <View style={styles.gateBanner}>
-                  <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
-                  <Text style={styles.gateText}>{gateReason}</Text>
-                </View>
-              ) : null}
+                      return (
+                        <Fragment key={comment.id}>
+                          <CommentRow
+                            comment={comment}
+                            liked={isCommentLiked(comment.id)}
+                            onDelete={comment.isYou && !comment.pending ? () => handleDelete(comment.id) : undefined}
+                            onReport={
+                              comment.isYou
+                                ? undefined
+                                : () => setReporting({ id: comment.id, handle: comment.authorHandle })
+                            }
+                            onToggleLike={() => handleToggleLike(comment.id)}
+                            onReply={() =>
+                              handleReplyTo(comment.id, comment.authorHandle, comment.isYou, false)
+                            }
+                          />
 
-              {postError ? (
-                <View style={styles.errorBanner}>
-                  <Ionicons name="alert-circle-outline" size={14} color={colors.textOnBrand} />
-                  <Text style={styles.errorText}>{postError}</Text>
-                </View>
-              ) : null}
+                          {/* The count comes from the comment's own `replyCount`, not from how many
+                              replies happen to be loaded — the link has to say "View 3 replies"
+                              before any of them have been fetched. */}
+                          {comment.replyCount > 0 ? (
+                            <Pressable
+                              onPress={() => toggleThread(comment.id)}
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityState={{ expanded: open }}
+                              accessibilityLabel={
+                                open
+                                  ? 'Hide replies'
+                                  : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`
+                              }
+                              style={({ pressed }) => [styles.threadToggle, pressed ? styles.pressed : null]}>
+                              <View style={styles.threadRule} />
+                              <Text style={styles.threadToggleLabel}>
+                                {open
+                                  ? loadingReplies
+                                    ? 'Loading replies…'
+                                    : 'Hide replies'
+                                  : `View ${comment.replyCount} ${comment.replyCount === 1 ? 'reply' : 'replies'}`}
+                              </Text>
+                            </Pressable>
+                          ) : null}
 
-              {replyTo ? (
-                <View style={styles.replyBanner}>
-                  <Text style={styles.replyBannerText} numberOfLines={1}>
-                    Replying to {replyTo.authorLabel}
-                  </Text>
-                  <Pressable
-                    onPress={() => setReplyTo(null)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="Cancel reply">
-                    <Ionicons name="close" size={14} color={colors.textTertiary} />
-                  </Pressable>
-                </View>
-              ) : null}
+                          {open
+                            ? replies.map((reply) => (
+                                <CommentRow
+                                  key={reply.id}
+                                  comment={reply}
+                                  isReply
+                                  liked={isCommentLiked(reply.id)}
+                                  onDelete={reply.isYou && !reply.pending ? () => handleDelete(reply.id) : undefined}
+                                  onReport={
+                                    reply.isYou
+                                      ? undefined
+                                      : () => setReporting({ id: reply.id, handle: reply.authorHandle })
+                                  }
+                                  onToggleLike={() => handleToggleLike(reply.id)}
+                                  // Attaches to the same parent rather than nesting a level
+                                  // deeper — see JobComment.
+                                  onReply={() =>
+                                    handleReplyTo(comment.id, reply.authorHandle, reply.isYou, true)
+                                  }
+                                />
+                              ))
+                            : null}
+                        </Fragment>
+                      );
+                    })
+                  )}
 
-              {gifOpen ? (
-                <View style={styles.gifGrid}>
-                  {reactionGifs.map((gif) => (
+                  {/* A button rather than `onEndReached`: the sheet's list shares its pan with the
+                      dismiss gesture, and a fetch that fires while somebody is dragging the sheet
+                      closed is work nobody asked for. */}
+                  {hasMore ? (
                     <Pressable
-                      key={gif.id}
-                      onPress={() => handlePickGif(gif.id)}
+                      onPress={loadMore}
                       accessibilityRole="button"
-                      accessibilityLabel={'Post the ' + gif.label + ' GIF'}
-                      style={({ pressed }) => [styles.gifTile, pressed ? styles.pressed : null]}>
-                      <Image source={gif.source} style={styles.gifImage} resizeMode="cover" />
+                      accessibilityLabel="Load older comments"
+                      style={({ pressed }) => [styles.loadMore, pressed ? styles.pressed : null]}>
+                      <Text style={styles.threadToggleLabel}>Older comments</Text>
                     </Pressable>
-                  ))}
-                </View>
-              ) : null}
+                  ) : null}
+                </Animated.ScrollView>
+              </GestureDetector>
+            </View>
+          </GestureDetector>
 
-              <View style={styles.inputRow}>
-                <TextInput
-                  ref={inputRef}
-                  value={draft}
-                  onChangeText={(text) => {
-                    setDraft(text);
-                    // The error described the previous attempt. Once the text changes it describes
-                    // nothing, and leaving it up makes a fixed comment look still-broken.
-                    if (postError !== null) setPostError(null);
-                  }}
-                  editable={gateReason === null}
-                  placeholder={
-                    gateReason === null
-                      ? replyTo
-                        ? 'Write a reply…'
-                        : 'Add a comment…'
-                      : 'Commenting is locked'
-                  }
-                  placeholderTextColor={colors.textTertiary}
-                  style={styles.input}
-                  multiline
-                  maxLength={500}
-                  accessibilityLabel={replyTo ? 'Write a reply' : 'Add a comment'}
-                />
+          <Animated.View style={[styles.composer, composerStyle]}>
+            {/* Why you cannot write, when you cannot. Above the composer rather than replacing
+                it, so the thread stays readable — reading is most of what this sheet is for, and
+                an unverified reader is still a reader. */}
+            {gateReason ? (
+              <View style={styles.gateBanner}>
+                <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
+                <Text style={styles.gateText}>{gateReason}</Text>
+              </View>
+            ) : null}
 
+            {postError ? (
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.textOnBrand} />
+                <Text style={styles.errorText}>{postError}</Text>
+              </View>
+            ) : null}
+
+            {replyTo ? (
+              <View style={styles.replyBanner}>
+                <Text style={styles.replyBannerText} numberOfLines={1}>
+                  Replying to {replyTo.authorLabel}
+                </Text>
                 <Pressable
-                  onPress={() => setGifOpen((open) => !open)}
-                  disabled={gateReason !== null}
-                  hitSlop={6}
+                  onPress={() => setReplyTo(null)}
+                  hitSlop={10}
                   accessibilityRole="button"
-                  accessibilityState={{ expanded: gifOpen }}
-                  accessibilityLabel={gifOpen ? 'Hide GIFs' : 'Choose a GIF'}
-                  style={({ pressed }) => [
-                    styles.gifButton,
-                    gifOpen ? styles.gifButtonOpen : null,
-                    pressed ? styles.pressed : null,
-                  ]}>
-                  <Text style={[styles.gifButtonLabel, gifOpen ? styles.gifButtonLabelOpen : null]}>
-                    GIF
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={handlePost}
-                  disabled={!canPost}
-                  accessibilityRole="button"
-                  accessibilityLabel="Post comment"
-                  accessibilityState={{ disabled: !canPost }}
-                  style={({ pressed }) => [
-                    styles.post,
-                    canPost ? styles.postReady : styles.postIdle,
-                    pressed && canPost ? styles.pressed : null,
-                  ]}>
-                  <Ionicons
-                    name="arrow-up"
-                    size={18}
-                    color={canPost ? colors.accentText : colors.textTertiary}
-                  />
+                  accessibilityLabel="Cancel reply">
+                  <Ionicons name="close" size={14} color={colors.textTertiary} />
                 </Pressable>
               </View>
-            </Animated.View>
+            ) : null}
+
+            {gifOpen ? <GifPicker onPick={handlePickGif} /> : null}
+
+            <View style={styles.inputRow}>
+              <TextInput
+                ref={inputRef}
+                value={draft}
+                onChangeText={(text) => {
+                  setDraft(text);
+                  // The error described the previous attempt. Once the text changes it describes
+                  // nothing, and leaving it up makes a fixed comment look still-broken.
+                  if (postError !== null) setPostError(null);
+                }}
+                editable={gateReason === null}
+                placeholder={
+                  gateReason === null
+                    ? replyTo
+                      ? 'Write a reply…'
+                      : 'Add a comment…'
+                    : 'Commenting is locked'
+                }
+                placeholderTextColor={colors.textTertiary}
+                style={styles.input}
+                multiline
+                maxLength={500}
+                accessibilityLabel={replyTo ? 'Write a reply' : 'Add a comment'}
+              />
+
+              <Pressable
+                onPress={() => setGifOpen((open) => !open)}
+                disabled={gateReason !== null}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: gifOpen }}
+                accessibilityLabel={gifOpen ? 'Hide GIFs' : 'Choose a GIF'}
+                style={({ pressed }) => [
+                  styles.gifButton,
+                  gifOpen ? styles.gifButtonOpen : null,
+                  pressed ? styles.pressed : null,
+                ]}>
+                <Text style={[styles.gifButtonLabel, gifOpen ? styles.gifButtonLabelOpen : null]}>
+                  GIF
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handlePost}
+                disabled={!canPost}
+                accessibilityRole="button"
+                accessibilityLabel="Post comment"
+                accessibilityState={{ disabled: !canPost }}
+                style={({ pressed }) => [
+                  styles.post,
+                  canPost ? styles.postReady : styles.postIdle,
+                  pressed && canPost ? styles.pressed : null,
+                ]}>
+                <Ionicons
+                  name="arrow-up"
+                  size={18}
+                  color={canPost ? colors.accentText : colors.textTertiary}
+                />
+              </Pressable>
+            </View>
           </Animated.View>
-        </GestureDetector>
+        </Animated.View>
       </View>
 
       <CommentPolicySheet
@@ -699,6 +711,9 @@ const useStyles = makeStyles((colors) => ({
     borderTopRightRadius: radius.xl,
     overflow: 'hidden',
   },
+  dragArea: {
+    flex: 1,
+  },
   // A generous target around the grabber, since it's the obvious thing to grab.
   grabberZone: {
     paddingTop: spacing.md,
@@ -761,24 +776,6 @@ const useStyles = makeStyles((colors) => ({
     paddingTop: spacing.sm,
     gap: spacing.sm,
     backgroundColor: colors.surface,
-  },
-  gifGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  gifTile: {
-    width: `${100 / GIF_COLUMNS}%`,
-    flexGrow: 1,
-    flexBasis: `${100 / GIF_COLUMNS - 6}%`,
-    aspectRatio: 4 / 3,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    backgroundColor: colors.backgroundMuted,
-  },
-  gifImage: {
-    width: '100%',
-    height: '100%',
   },
   replyBanner: {
     flexDirection: 'row',

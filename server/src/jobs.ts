@@ -10,6 +10,7 @@
  * | digest    | every 30 min, Mondays from 14:00 UTC | the weekly email, in batches        |
  * | purge     | every 6 h        | delete accounts whose 30-day grace has run out           |
  * | prune     | daily            | drop push delivery records older than 30 days            |
+ * | moderation| every 2 min      | re-check comments the classifier timed out on            |
  *
  * **In process, not a queue.** The API service is already a long-running process (Fly), and
  * every job here is claimed in the database — `for update skip locked` or a unique key — so two
@@ -18,17 +19,18 @@
  *
  * Also a CLI, for a deployment without the service and for verification:
  *
- *   node --env-file-if-exists=.env src/jobs.ts push|receipts|alerts|news|digest|purge|prune
+ *   node --env-file-if-exists=.env src/jobs.ts push|receipts|alerts|news|digest|purge|prune|moderation
  */
 
 import { capabilities } from './env.ts';
+import { sweepUnavailable } from './moderation/recheck.ts';
 import { ingestNews } from './news/ingest.ts';
 import { sendDigestBatch } from './notify/digest.ts';
 import { checkPushReceipts, sendPendingPushes } from './notify/push.ts';
 import { adminClient } from './auth.ts';
 import { purgeDueAccounts } from './privacy.ts';
 
-type JobName = 'push' | 'receipts' | 'alerts' | 'news' | 'digest' | 'purge' | 'prune';
+type JobName = 'push' | 'receipts' | 'alerts' | 'news' | 'digest' | 'purge' | 'prune' | 'moderation';
 
 export const JOBS: Record<JobName, () => Promise<unknown>> = {
   push: async () => {
@@ -61,6 +63,7 @@ export const JOBS: Record<JobName, () => Promise<unknown>> = {
     if (r.error) throw r.error;
     return r.data;
   },
+  moderation: () => (capabilities.classifier ? sweepUnavailable() : Promise.resolve('skipped: no ANTHROPIC_API_KEY')),
 };
 
 const EVERY: Record<JobName, number> = {
@@ -71,7 +74,17 @@ const EVERY: Record<JobName, number> = {
   digest: 30 * 60_000,
   purge: 6 * 3_600_000,
   prune: 24 * 3_600_000,
+  moderation: 2 * 60_000,
 };
+
+/** The two frequent loops only log when they did something. */
+function quiet(name: JobName, result: unknown): boolean {
+  if (name === 'push') return !(typeof result === 'number' && result > 0);
+  if (name === 'moderation' && typeof result === 'object' && result !== null) {
+    return Object.values(result).every((n) => n === 0);
+  }
+  return false;
+}
 
 /** Starts every loop. Each is non-overlapping, jittered, and logs rather than crashes. */
 export function startBackgroundJobs(): void {
@@ -79,7 +92,7 @@ export function startBackgroundJobs(): void {
     const tick = async () => {
       try {
         const result = await JOBS[name]();
-        if (name !== 'push' || (typeof result === 'number' && result > 0)) {
+        if (!quiet(name, result)) {
           console.log(`[jobs] ${name}`, JSON.stringify(result));
         }
       } catch (error) {

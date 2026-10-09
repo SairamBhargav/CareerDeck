@@ -32,6 +32,9 @@ export const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
 export const REVENUECAT_IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || undefined;
 export const REVENUECAT_ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || undefined;
 
+/** KLIPY's app key (lib/klipy.ts). Unset, the GIF picker falls back to the bundled reactions. */
+export const KLIPY_APP_KEY = process.env.EXPO_PUBLIC_KLIPY_APP_KEY || undefined;
+
 /**
  * The API service — phase 3's one new piece of configuration, and deliberately optional.
  *

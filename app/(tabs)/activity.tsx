@@ -11,13 +11,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Pressable, Text } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActivityHeader } from '@/components/activity/ActivityHeader';
 import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
+import { MyCommentCard } from '@/components/activity/MyCommentCard';
 import { NotificationCard } from '@/components/activity/NotificationCard';
 import { ProCard } from '@/components/activity/ProCard';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
@@ -27,11 +28,12 @@ import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
 import { EmptyState } from '@/components/common/EmptyState';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
-import { screenPadding, spacing } from '@/constants/theme';
+import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
+import { useMyComments } from '@/hooks/useComments';
 import { useResumes } from '@/hooks/useResumes';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
@@ -202,13 +204,19 @@ export default function ActivityScreen() {
     return () => clearTimeout(timer);
   }, [tab, notifications, markAllNotificationsRead]);
 
+  // Fetched as soon as the screen mounts, so the tab's count is right before anybody opens it.
+  const myComments = useMyComments(true);
+
   const tabCounts: Record<ActivityTab, number> = {
     applications: applications.length,
     liked: likedJobs.length,
-    comments: notifications.length,
+    comments: myComments.comments.length,
   };
 
   const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
+  // Straight into the thread: from a comment, the comments are what you came back for.
+  const openThread = (jobId: string) =>
+    router.push({ pathname: '/job/[id]', params: { id: jobId, comments: '1' } });
 
   const handleSelectStatus = (status: ApplicationStatus) => {
     if (pickerEntry) setApplicationStatus(pickerEntry.application.id, status);
@@ -299,33 +307,58 @@ export default function ActivityScreen() {
           ) : null}
 
           {tab === 'comments' ? (
-            notifications.length > 0 ? (
-              notifications.map((entry, index) => {
-                const job = entry.jobId === null ? undefined : jobById.get(entry.jobId);
-                return (
-                  <Animated.View
-                    key={entry.id}
-                    entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                    <NotificationCard
-                      entry={entry}
-                      // A posting that has since closed and been swept is a real case, not an
-                      // error: the notification still reads, it just cannot be opened.
-                      jobTitle={job?.title ?? 'A posting'}
-                      companyName={job?.companyName ?? ''}
-                      onPress={() => {
-                        markNotificationRead(entry.id);
-                        if (job) handlePressJob(job);
-                      }}
-                    />
-                  </Animated.View>
-                );
-              })
-            ) : (
+            notifications.length === 0 && myComments.comments.length === 0 ? (
               <EmptyState
                 icon="chatbubbles-outline"
-                title="Nothing yet"
-                message="Replies to your comments, and anything that happens to your account, land here."
+                title={myComments.isLoading ? 'Loading…' : 'No comments yet'}
+                message="Ask about the interview, the team, the timeline. Your comments, and the replies they get, land here."
               />
+            ) : (
+              <>
+                {notifications.length > 0 ? (
+                  <Text style={styles.section} accessibilityRole="header">
+                    Updates
+                  </Text>
+                ) : null}
+                {notifications.map((entry, index) => {
+                  const job = entry.jobId === null ? undefined : jobById.get(entry.jobId);
+                  return (
+                    <Animated.View
+                      key={entry.id}
+                      entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
+                      <NotificationCard
+                        entry={entry}
+                        // A posting that has since closed and been swept is a real case, not an
+                        // error: the notification still reads, it just cannot be opened.
+                        jobTitle={job?.title ?? 'A posting'}
+                        companyName={job?.companyName ?? ''}
+                        onPress={() => {
+                          markNotificationRead(entry.id);
+                          if (entry.jobId !== null) openThread(entry.jobId);
+                        }}
+                      />
+                    </Animated.View>
+                  );
+                })}
+
+                {myComments.comments.length > 0 ? (
+                  <Text style={styles.section} accessibilityRole="header">
+                    Your comments
+                  </Text>
+                ) : null}
+                {myComments.comments.map((comment, index) => (
+                  <Animated.View
+                    key={comment.id}
+                    entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
+                    <MyCommentCard comment={comment} onPress={() => openThread(comment.jobId)} />
+                  </Animated.View>
+                ))}
+                {myComments.hasMore ? (
+                  <Pressable onPress={myComments.loadMore} accessibilityRole="button" style={styles.more}>
+                    <Text style={styles.moreText}>Show older comments</Text>
+                  </Pressable>
+                ) : null}
+              </>
             )
           ) : null}
         </Animated.View>
@@ -383,5 +416,21 @@ const useStyles = makeStyles((colors) => ({
   },
   list: {
     gap: spacing.md,
+  },
+  section: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  more: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  moreText: {
+    fontSize: fontSize.small,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
 }));

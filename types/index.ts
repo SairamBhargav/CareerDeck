@@ -19,6 +19,6 @@ export type {
 } from './resume';
 export type { StoryGroup } from './story';
 export type { Application, ApplicationStatus, ApplicationSource } from './application';
-export type { JobComment, CommentThread, CommentGate, ReportReason } from './comment';
+export type { JobComment, CommentThread, CommentGate, MyComment, ReportReason } from './comment';
 export type { AppNotification, NotificationKind } from './notification';
 export type { VerificationTier, VerificationState, EduChallenge } from './verification';

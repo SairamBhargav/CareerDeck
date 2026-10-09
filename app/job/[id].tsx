@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { CommentSheet } from '@/components/comments/CommentSheet';
 import { CompanyLogo } from '@/components/common/CompanyLogo';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
@@ -12,17 +13,21 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { makeStyles } from '@/context/ThemeContext';
+import { useCommentCounts } from '@/hooks/useComments';
 import { useJobById } from '@/hooks/useJobFeeds';
 import { useResumes } from '@/hooks/useResumes';
 
 export default function JobDetailScreen() {
   const styles = useStyles();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `comments=1` arrives from Activity → Comments, which opens straight into the thread.
+  const { id, comments } = useLocalSearchParams<{ id: string; comments?: string }>();
   const openCompany = useOpenCompany();
   const { user, toggleLike } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   const { job, isLoading } = useJobById(id);
   const [applyVisible, setApplyVisible] = useState(false);
+  const [commentsVisible, setCommentsVisible] = useState(comments === '1');
+  const commentCount = useCommentCounts(id ? [id] : []).get(id ?? '') ?? 0;
 
   if (isLoading) {
     return (
@@ -84,6 +89,11 @@ export default function JobDetailScreen() {
             variant="secondary"
             onPress={() => toggleLike(job.id)}
           />
+          <PrimaryButton
+            label={commentCount === 0 ? 'Comments' : commentCount === 1 ? '1 comment' : `${commentCount} comments`}
+            variant="ghost"
+            onPress={() => setCommentsVisible(true)}
+          />
         </View>
       </ScrollView>
 
@@ -93,6 +103,11 @@ export default function JobDetailScreen() {
         visible={applyVisible}
         onClose={() => setApplyVisible(false)}
       />
+
+      {/* Mounted only while open: the sheet slides in on mount and resets its composer per open. */}
+      {commentsVisible ? (
+        <CommentSheet job={job} visible onClose={() => setCommentsVisible(false)} />
+      ) : null}
     </View>
   );
 }

@@ -13,6 +13,8 @@ import Animated, {
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { gifById } from '@/data/mockGifs';
+import { useKlipyGif } from '@/hooks/useGifs';
+import { klipySlugOf } from '@/lib/klipy';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { JobComment } from '@/types';
 import { formatPostedAt } from '@/utils/format';
@@ -27,6 +29,9 @@ const SLIDE = { duration: 170, easing: Easing.out(Easing.cubic) };
 
 /** Width of the delete action revealed behind the row. */
 const DELETE_WIDTH = 84;
+/** A KLIPY GIF in a comment, the way Instagram sizes them: a little larger than the bundled set. */
+const KLIPY_GIF_HEIGHT = 150;
+const KLIPY_GIF_MAX_WIDTH = 220;
 /** Past this much drag, releasing snaps the action open rather than shut. */
 const OPEN_THRESHOLD = 40;
 
@@ -81,6 +86,9 @@ export function CommentRow({
 
   const size = isReply ? REPLY_AVATAR : AVATAR;
   const gif = gifById(comment.gifId);
+  const klipySlug = klipySlugOf(comment.gifId);
+  const klipyQuery = useKlipyGif(klipySlug);
+  const klipy = klipyQuery.data ?? null;
   const canDelete = onDelete !== undefined;
 
   const scale = useSharedValue(1);
@@ -175,6 +183,31 @@ export function CommentRow({
                 accessibilityRole="image"
                 accessibilityLabel={gif.label + ' GIF'}
               />
+            ) : klipy ? (
+              <Image
+                source={{ uri: klipy.full.url }}
+                style={[
+                  styles.gif,
+                  // Its real shape at a fixed height, so a tall GIF cannot take over the thread
+                  // and a wide one cannot run off the row.
+                  {
+                    height: KLIPY_GIF_HEIGHT,
+                    width: Math.min(KLIPY_GIF_MAX_WIDTH, (KLIPY_GIF_HEIGHT * klipy.full.width) / klipy.full.height),
+                  },
+                ]}
+                resizeMode="cover"
+                accessible
+                accessibilityRole="image"
+                accessibilityLabel={klipy.title + ' GIF'}
+              />
+            ) : klipySlug !== null ? (
+              // Holds the GIF's place while it loads, so the row does not jump when it lands, and
+              // says so when KLIPY no longer has it rather than leaving a comment with nothing in it.
+              <View style={[styles.gif, styles.gifPlaceholder, { height: KLIPY_GIF_HEIGHT }]}>
+                {klipyQuery.isPending || klipyQuery.isFetching ? null : (
+                  <Text style={styles.gifMissing}>GIF unavailable</Text>
+                )}
+              </View>
             ) : null}
 
             <View style={styles.actions}>
@@ -303,6 +336,15 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     lineHeight: 19,
     color: colors.textSecondary,
+  },
+  gifPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+  },
+  gifMissing: {
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
   },
   gif: {
     width: 150,
