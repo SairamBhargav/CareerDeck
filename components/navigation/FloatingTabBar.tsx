@@ -24,9 +24,8 @@ import {
 } from '@/constants/theme';
 import { useTabBarVisibility } from '@/context/TabBarVisibilityContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { DeckTabIcon, HomeTabIcon } from '@/components/navigation/TabIcons';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
-
-type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 // expo-router's own MaterialTopTabBarProps types as `any & {...}`, which makes every
 // field implicitly `any`. This mirrors the actual runtime shape TopTabs passes to a
@@ -47,15 +46,23 @@ const INDICATOR_INSET = 6;
 const INDICATOR_SPRING = { damping: 18, stiffness: 220 };
 const PRESS_SPRING = { damping: 12, stiffness: 200 };
 
-function iconsForRoute(routeName: string): { active: IconName; inactive: IconName } {
+/*
+ * Home and Deck are drawn in TabIcons.tsx; Activity keeps Ionicons' heart, which is one
+ * shape with nothing extraneous on it and already right.
+ *
+ * The Deck was a play-in-a-circle — the symbol for video, which says nothing about a stack
+ * of postings — and Home was Ionicons' house, which carries a door, a sill and a notch in
+ * the roofline. At 24pt that detail reads as noise next to a label.
+ */
+function renderTabIcon(routeName: string, color: string, filled: boolean) {
   switch (routeName) {
     case 'reels':
-      return { active: 'play-circle', inactive: 'play-circle-outline' };
+      return <DeckTabIcon color={color} filled={filled} />;
     case 'activity':
-      return { active: 'heart', inactive: 'heart-outline' };
+      return <Ionicons name={filled ? 'heart' : 'heart-outline'} size={24} color={color} />;
     case 'index':
     default:
-      return { active: 'home', inactive: 'home-outline' };
+      return <HomeTabIcon color={color} filled={filled} />;
   }
 }
 
@@ -157,7 +164,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
             {state.routes.map((route, index) => {
               const options = descriptors[route.key]?.options ?? {};
               const focused = state.index === index;
-              const icons = iconsForRoute(route.name);
               const label = typeof options.title === 'string' ? options.title : route.name;
 
               const onPress = () => {
@@ -173,7 +179,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
                 <TabBarButton
                   key={route.key}
                   focused={focused}
-                  icon={focused ? icons.active : icons.inactive}
+                  routeName={route.name}
                   label={label}
                   iconColor={iconColor}
                   onPress={onPress}
@@ -189,14 +195,14 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
 
 interface TabBarButtonProps {
   focused: boolean;
-  icon: IconName;
+  routeName: string;
   label: string;
   iconColor: string;
   onPress: () => void;
 }
 
 /** A single tab: bounces with a spring whenever it becomes the active tab. */
-function TabBarButton({ focused, icon, label, iconColor, onPress }: TabBarButtonProps) {
+function TabBarButton({ focused, routeName, label, iconColor, onPress }: TabBarButtonProps) {
   const styles = useStyles();
   const scale = useSharedValue(1);
 
@@ -216,7 +222,7 @@ function TabBarButton({ focused, icon, label, iconColor, onPress }: TabBarButton
       accessibilityLabel={`${label} tab`}
       style={({ pressed }) => [styles.tab, pressed ? styles.tabPressed : null]}>
       <Animated.View style={[styles.tabContent, animatedStyle]}>
-        <Ionicons name={icon} size={24} color={iconColor} />
+        {renderTabIcon(routeName, iconColor, focused)}
         <Text style={[styles.label, { color: iconColor }]} numberOfLines={1}>
           {label}
         </Text>
