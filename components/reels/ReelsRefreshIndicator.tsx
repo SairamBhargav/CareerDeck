@@ -69,19 +69,20 @@ export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsR
   return (
     <View pointerEvents="none" style={[styles.wrap, { top }]}>
       <Animated.View style={[styles.stack, stackStyle]}>
+        {/*
+          * The ring alone, where this was a shadowed puck with a glowing halo around a
+          * lightning bolt. Three layers of chrome to say "loading" over a full-bleed card
+          * that already has plenty going on — and the bolt meant "fast" where the gesture
+          * means "again", wearing an icon Auto Apply had already taken.
+          *
+          * SpinnerRing rather than Spinner: the rotation is already driven here, across
+          * the whole gesture including the wind-up as the finger pulls, so a
+          * self-rotating component would turn twice.
+          */}
         <Animated.View style={[styles.halo, haloStyle]} />
-        <View style={styles.puck}>
-          {/*
-            * The same ring Home's footer uses, turned by the rotation this component
-            * already drives — which is why it draws SpinnerRing rather than Spinner. A
-            * lightning bolt said "fast" where the gesture means "again", and it was the
-            * only place in the app wearing that icon for a meaning Auto Apply had already
-            * taken.
-            */}
-          <Animated.View style={boltStyle}>
-            <SpinnerRing size={24} />
-          </Animated.View>
-        </View>
+        <Animated.View style={boltStyle}>
+          <SpinnerRing size={INDICATOR_SIZE - 8} stroke={2.5} />
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -100,27 +101,17 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  /*
+   * A ripple that leaves as the refresh starts, rather than a permanent ring around a
+   * puck. It is the only thing left of the old chrome, kept because the gesture needs one
+   * beat of acknowledgement at the moment it fires.
+   */
   halo: {
     position: 'absolute',
     width: INDICATOR_SIZE,
     height: INDICATOR_SIZE,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: colors.autoApply,
-  },
-  puck: {
-    width: INDICATOR_SIZE,
-    height: INDICATOR_SIZE,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.controlSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    ...colors.shadowSoft,
-    // Same violet halo the Auto Apply button carries, so the two read as one family.
-    shadowColor: colors.autoApplyGlow,
-    shadowOpacity: 0.6,
-    shadowRadius: 14,
+    borderColor: colors.autoApply,
   },
 }));

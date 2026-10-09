@@ -253,13 +253,17 @@ export default function ReelsScreen() {
      * Measured: two sessions built back to back with nothing flushed between them agree
      * on all twenty of their first cards.
      *
-     * Not awaited. The indicator is held open for REFRESH_DURATION regardless, which is
-     * longer than the flush, and making the gesture wait on a round trip to show a
-     * spinner the reader is already looking at buys nothing.
+     * Awaited, and that is the whole point — this is an ordering problem, not a latency
+     * one. Firing both at once raced them: sometimes the flush committed first and the
+     * deck changed, sometimes the refetch reached the server first and the session was
+     * built against the same stale counts as before. Which is exactly "it works
+     * sometimes". The indicator is held open for REFRESH_DURATION regardless, so waiting
+     * costs nothing the reader can see.
      */
-    void flushImpressions();
-
-    refetchActive();
+    void (async () => {
+      await flushImpressions();
+      await refetchActive();
+    })();
 
     refreshTimer.current = setTimeout(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
