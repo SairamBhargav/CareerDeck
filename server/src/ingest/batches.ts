@@ -40,7 +40,14 @@ export async function writeBatches<T>(
         return;
       }
       const delay = TRANSIENT_DELAYS_MS[retry];
-      if (delay !== undefined && isTransient(failure)) {
+      /*
+       * A single row that still times out is waiting on the database, not too big for it: on
+       * 2026-10-08 one Elastic posting hit the 8 s limit, failing the whole nightly run, and saved
+       * in well under a second when the board was re-run minutes later. So it gets the same
+       * backoff as a dropped connection before it counts as a failure.
+       */
+      const slowMoment = failure?.code === '57014' && batch.length === 1;
+      if (delay !== undefined && (isTransient(failure) || slowMoment)) {
         await sleep(delay);
         await attempt(batch, retry + 1);
         return;
