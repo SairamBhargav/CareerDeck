@@ -78,6 +78,16 @@ export function FollowButton({
   // The mark leads the label in both states, as a plus and then a tick.
   const markColor = isFollowing ? colors.textSecondary : minimal ? colors.accent : colors.accentText;
 
+  /*
+   * Two points larger without the pill than with it.
+   *
+   * The solid variant gets its presence from the fill, so the label can stay small inside
+   * it. Strip the fill and the type is the only thing left carrying the control, so it has
+   * to do more of the work. Still inside the 108pt a 132pt card leaves after its padding,
+   * which is what caps this.
+   */
+  const labelSize = minimal ? metrics.font + 2 : metrics.font;
+
   // Bumped on each *follow* so the burst can re-run; a plain boolean couldn't retrigger
   // it, and a shared value written from here would be a JS-side mutation.
   const [burstKey, setBurstKey] = useState(0);
@@ -170,13 +180,13 @@ export function FollowButton({
         ]}>
         {isFollowing ? (
           <Animated.View entering={followedHere ? FadeIn.duration(160) : undefined} style={styles.check}>
-            <Ionicons name="checkmark" size={metrics.font + 3} color={markColor} />
+            <Ionicons name="checkmark" size={labelSize + 3} color={markColor} />
           </Animated.View>
         ) : minimal ? (
-          <Ionicons name="add" size={metrics.font + 4} color={markColor} />
+          <Ionicons name="add" size={labelSize + 4} color={markColor} />
         ) : null}
 
-        <Animated.Text style={[styles.label, { fontSize: metrics.font }, labelStyle]}>
+        <Animated.Text style={[styles.label, { fontSize: labelSize }, labelStyle]}>
           {isFollowing ? 'Following' : 'Follow'}
         </Animated.Text>
       </AnimatedPressable>
