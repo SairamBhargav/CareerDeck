@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,6 +13,7 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCompany } from '@/hooks/useCompanies';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useRenderedImpressions } from '@/hooks/useImpressions';
 import { useCompanyJobs } from '@/hooks/useJobFeeds';
 import { hexToRgba } from '@/utils/color';
@@ -30,7 +31,7 @@ const HEADER_WASH_ALPHA = 0.12;
  * openings list is the reason to be here — the identity block above it is context.
  */
 export default function CompanyDetailScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();

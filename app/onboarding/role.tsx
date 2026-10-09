@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Pressable, Text, View } from 'react-native';
 
@@ -6,6 +5,7 @@ import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import { ROLE_OPTIONS, useOnboarding, type RoleKey } from '@/context/OnboardingContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 
 /**
  * Step one: who you are and what you want, in one tap.
@@ -24,7 +24,7 @@ import { ROLE_OPTIONS, useOnboarding, type RoleKey } from '@/context/OnboardingC
  * reading as one.
  */
 export default function RoleStep() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const { role, setRole } = useOnboarding();
 

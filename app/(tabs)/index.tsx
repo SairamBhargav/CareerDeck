@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -19,6 +18,7 @@ import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
 import { useListImpressions } from '@/hooks/useImpressions';
 import { RelevantHint } from '@/components/home/RelevantHint';
@@ -40,7 +40,7 @@ const REVEAL_MS = 260;
 const END_REACHED_THRESHOLD = 0.5;
 
 export default function HomeScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { colors } = useTheme();
   const styles = useStyles();
   const {

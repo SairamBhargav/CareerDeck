@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
@@ -11,6 +11,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DeckMark } from '@/components/brand/DeckMark';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, screenPadding, spacing } from '@/constants/theme';
@@ -37,7 +38,7 @@ import { makeStyles } from '@/context/ThemeContext';
  * sign-in is the link at the bottom, for people who already have an account.
  */
 export default function WelcomeScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const onboarding = useOnboarding();
 

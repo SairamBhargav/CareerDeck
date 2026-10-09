@@ -9,7 +9,7 @@ import * as DocumentPicker from 'expo-document-picker';
  * way to keep using the functional API. One import, everything below is unchanged.
  */
 import * as FileSystem from 'expo-file-system/legacy';
-import { useRouter } from 'expo-router';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -30,6 +30,7 @@ import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
 import { useResumes } from '@/hooks/useResumes';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
@@ -53,7 +54,7 @@ const MAX_STAGGER_INDEX = 7;
  * says so rather than implying a live integration that doesn't exist.
  */
 export default function ActivityScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const {
     isInitialLoading,

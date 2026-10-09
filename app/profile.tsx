@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -6,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useVerification } from '@/hooks/useVerification';
 import { useAuth } from '@/context/AuthContext';
 import { SectionHeader } from '@/components/common/SectionHeader';
@@ -33,7 +33,7 @@ const PREVIEW_CHIPS = 3;
  * Preferences and account live on Settings, reached via the gear — see app/settings.tsx.
  */
 export default function ProfileScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const {
     user,

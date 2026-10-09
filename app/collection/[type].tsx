@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -12,6 +12,7 @@ import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { makeStyles } from '@/context/ThemeContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
@@ -57,7 +58,7 @@ function isCollectionType(value: string | undefined): value is CollectionType {
  * differ only in what they hold, and three near-identical files would drift apart.
  */
 export default function CollectionScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const openCompany = useOpenCompany();
   const styles = useStyles();
   const { type } = useLocalSearchParams<{ type: string }>();

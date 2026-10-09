@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Pressable, Text, View } from 'react-native';
 
@@ -7,6 +6,7 @@ import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { MIN_SECTORS, SECTORS } from '@/constants/industries';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 /**
@@ -29,7 +29,7 @@ import { useOnboarding } from '@/context/OnboardingContext';
  * would widen the chip it appears in, re-wrapping the whole cluster on every tap.
  */
 export default function IndustriesStep() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const { industries, toggleIndustry } = useOnboarding();
 

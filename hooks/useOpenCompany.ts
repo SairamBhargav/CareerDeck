@@ -1,8 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+
 import { useCallback } from 'react';
 
 import { fetchCompany, fetchCompanyJobs } from '@/lib/api';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 
 /**
  * Open a company's page, with its data already on the way.
@@ -31,7 +32,7 @@ import { fetchCompany, fetchCompanyJobs } from '@/lib/api';
  * simply fetches normally.
  */
 export function useOpenCompany() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const queryClient = useQueryClient();
 
   return useCallback(

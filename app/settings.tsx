@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { useRouter } from 'expo-router';
+
 import { useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -11,6 +11,7 @@ import { DeleteAccountSheet } from '@/components/common/DeleteAccountSheet';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
 import { IconButton } from '@/components/common/IconButton';
 import { RowGroup, type RowGroupItem } from '@/components/common/RowGroup';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useVerification } from '@/hooks/useVerification';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
@@ -33,7 +34,7 @@ const STAGGER_MS = 55;
  * icon existed on Profile as a dead tap before this screen did.
  */
 export default function SettingsScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const { scheme } = useTheme();
   const isDark = scheme === 'dark';

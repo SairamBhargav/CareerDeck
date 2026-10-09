@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -9,6 +8,7 @@ import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { PER_FIELD, companiesForSectors } from '@/constants/industries';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import type { Company } from '@/types';
@@ -47,7 +47,7 @@ const MIN_SUGGESTIONS = 5;
  * signed-out: `companies` is world-readable (phase 1 §2.10).
  */
 export default function CompaniesStep() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const styles = useStyles();
   const { industries, followedCompanySlugs, toggleCompany } = useOnboarding();
   const directory = useCompanyDirectory();
