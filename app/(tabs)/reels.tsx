@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, View, type LayoutChangeEvent } from 'react-native';
+import { FlatList, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -24,6 +24,7 @@ import { AutoApplySheet } from '@/components/jobs/AutoApplySheet';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
+import { Spinner } from '@/components/common/Spinner';
 import { INDICATOR_TRAVEL, ReelsRefreshIndicator } from '@/components/reels/ReelsRefreshIndicator';
 import { MatchExplainSheet } from '@/components/reels/MatchExplainSheet';
 import { MATCH_RING_SIZE, ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
@@ -36,6 +37,7 @@ import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
+import { flushImpressions } from '@/lib/impressions';
 import type { Job } from '@/types';
 
 const TOGGLE_HEIGHT = 44;
@@ -239,6 +241,24 @@ export default function ReelsScreen() {
     spin.set(withRepeat(withTiming(360, { duration: 850, easing: Easing.linear }), -1, false));
     pulse.set(withRepeat(withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }), -1, false));
 
+    /*
+     * Send what has been watched before asking for a new deck.
+     *
+     * A refresh builds a whole new feed session, and the ranker drops a posting by about
+     * twenty-one points the first time somebody has already been shown it — so the cards
+     * just scrolled past are meant to sink and let new ones up. That only works if the
+     * database knows they were seen, and impressions batch every ten seconds or
+     * twenty-five items. A pull arrives inside that window almost every time, so the new
+     * session was being scored against stale counts and came back as the same deck.
+     * Measured: two sessions built back to back with nothing flushed between them agree
+     * on all twenty of their first cards.
+     *
+     * Not awaited. The indicator is held open for REFRESH_DURATION regardless, which is
+     * longer than the flush, and making the gesture wait on a round trip to show a
+     * spinner the reader is already looking at buys nothing.
+     */
+    void flushImpressions();
+
     refetchActive();
 
     refreshTimer.current = setTimeout(() => {
@@ -353,7 +373,7 @@ export default function ReelsScreen() {
         ) : (
           <View style={[styles.empty, { paddingTop: cardPaddingTop }]}>
             {activeFeed.isLoading ? (
-              <ActivityIndicator />
+              <Spinner size={26} />
             ) : (
               <EmptyState
                 icon={feed === 'following' ? 'people-outline' : 'briefcase-outline'}

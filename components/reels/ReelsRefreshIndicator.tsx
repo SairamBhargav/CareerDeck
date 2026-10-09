@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Extrapolation,
@@ -8,7 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { radius } from '@/constants/theme';
-import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { SpinnerRing } from '@/components/common/Spinner';
+import { makeStyles } from '@/context/ThemeContext';
 
 /** Diameter of the indicator puck, and the strip the list holds open while refreshing. */
 export const INDICATOR_SIZE = 46;
@@ -34,7 +34,6 @@ interface ReelsRefreshIndicatorProps {
  * "the app is doing the work for you" gesture rather than a generic spinner.
  */
 export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsRefreshIndicatorProps) {
-  const { colors } = useTheme();
   const styles = useStyles();
 
   // The puck is revealed by whichever is further along: the live drag, or a held refresh.
@@ -72,8 +71,15 @@ export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsR
       <Animated.View style={[styles.stack, stackStyle]}>
         <Animated.View style={[styles.halo, haloStyle]} />
         <View style={styles.puck}>
+          {/*
+            * The same ring Home's footer uses, turned by the rotation this component
+            * already drives — which is why it draws SpinnerRing rather than Spinner. A
+            * lightning bolt said "fast" where the gesture means "again", and it was the
+            * only place in the app wearing that icon for a meaning Auto Apply had already
+            * taken.
+            */}
           <Animated.View style={boltStyle}>
-            <Ionicons name="flash" size={22} color={colors.autoApply} />
+            <SpinnerRing size={24} />
           </Animated.View>
         </View>
       </Animated.View>

@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { SectionHeader } from '@/components/common/SectionHeader';
+import { Spinner } from '@/components/common/Spinner';
 import { UndoBar, type UndoBarContent } from '@/components/common/UndoBar';
 import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { FeedSortBar } from '@/components/home/FeedSortBar';
@@ -345,7 +346,13 @@ export default function HomeScreen() {
           )
         }
         ListFooterComponent={
-          feed.isFetchingNextPage ? <ActivityIndicator style={styles.footer} /> : <View style={styles.footer} />
+          feed.isFetchingNextPage ? (
+            <View style={styles.footer}>
+              <Spinner size={26} />
+            </View>
+          ) : (
+            <View style={styles.footer} />
+          )
         }
         onEndReached={feed.hasNextPage ? feed.fetchNextPage : undefined}
         onEndReachedThreshold={END_REACHED_THRESHOLD}
@@ -416,5 +423,6 @@ const useStyles = makeStyles((colors) => ({
   },
   footer: {
     paddingVertical: spacing.lg,
+    alignItems: 'center',
   },
 }));
