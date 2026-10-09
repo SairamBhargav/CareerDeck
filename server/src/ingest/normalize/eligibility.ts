@@ -86,6 +86,8 @@ const NO_SPONSOR: RegExp[] = [
   /\b(?:not|unable to|cannot|won['’]?t|will not|do(?:es)? not)\s+sponsor\b/i,
   /\bsponsorship\s+(?:is\s+)?(?:not\s+(?:available|offered|provided|possible)|unavailable)\b/i,
   /\bno\s+(?:visa\s+|h-?1b\s+)?sponsorship\b/i,
+  // "not currently able to sponsor", "unable at this time to sponsor": an adverb or two between.
+  /\b(?:not|unable)\b(?:\s+\w+){0,3}?\s+(?:able\s+)?to\s+sponsor\b/i,
   /\bnot\s+eligible\s+for\s+(?:visa\s+)?sponsorship\b/i,
   /\bwithout\s+(?:the\s+)?(?:need\s+for|requiring|requirement of)?\s*(?:current\s+or\s+future\s+|future\s+)?(?:visa\s+|employer\s+|employment\s+|company\s+)?sponsorship\b/i,
 ];
@@ -104,9 +106,18 @@ export function sponsorship(text: string): Sponsorship | null {
     }
   }
   // Only after every sentence had its chance to say no: "we sponsor events" is not a visa, and a
-  // posting that says both has said no.
-  return sentences(text).some((sentence) => SPONSORS.some((pattern) => pattern.test(sentence))) ? 'offered' : null;
+  // posting that says both has said no. A sentence about another country's visa ("we can sponsor
+  // visas to Germany") or a security clearance ("sponsor you through the clearance process") is
+  // not an offer to sponsor a US or Canadian work visa.
+  return sentences(text).some(
+    (sentence) => SPONSORS.some((pattern) => pattern.test(sentence)) && !NOT_A_VISA_HERE.test(sentence),
+  )
+    ? 'offered'
+    : null;
 }
+
+const NOT_A_VISA_HERE =
+  /\bclearance\b|\bto\s+(?:germany|the uk|uk|united kingdom|ireland|the netherlands|netherlands|france|spain|poland|portugal|india|singapore|japan|australia|israel|switzerland|sweden|denmark)\b/i;
 
 const CITIZEN_ONLY: RegExp[] = [
   /\b(?:must|required to|need to)\s+be\s+(?:a\s+)?(?:u\.?\s?s\.?|united states|american)\s+citizen/i,
@@ -191,8 +202,12 @@ export function graduationWindow(text: string): { from: string | null; to: strin
       const date = readDate(one, 1);
       if (!date) continue;
       const before = after.slice(0, one.index).toLowerCase();
+      const following = after.slice(one.index + one[0].length).toLowerCase();
       if (/\b(?:by|before|no later than|prior to|on or before)\s*$/.test(before)) return { from: null, to: fmt(date, 'to') };
       if (/\b(?:after|no earlier than|on or after|from)\s*$/.test(before)) return { from: fmt(date, 'from'), to: null };
+      // "December 2027 or later" is a floor, not a month; "or earlier" a ceiling.
+      if (/^\s*,?\s*(?:or|and)\s+(?:later|after|beyond|onwards?|thereafter)\b/.test(following)) return { from: fmt(date, 'from'), to: null };
+      if (/^\s*,?\s*(?:or)\s+(?:earlier|before|sooner)\b/.test(following)) return { from: null, to: fmt(date, 'to') };
       return { from: fmt(date, 'from'), to: fmt(date, 'to') };
     }
   }
