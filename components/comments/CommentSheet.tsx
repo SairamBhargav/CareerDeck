@@ -361,9 +361,22 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
             {/* No job title here: the reel it belongs to is still on screen above the
                 sheet, so restating it spends the widest line on something already known. */}
             <View style={styles.header}>
-              <Text style={styles.title} accessibilityRole="header">
-                {total === 1 ? '1 comment' : `${total} comments`}
-              </Text>
+              {/*
+                * A count of nothing is worse than no count: the empty state below already
+                * says there are no comments, and "0 comments" spends the widest line in
+                * the sheet saying it a second time, in the one place a reader looks to
+                * find out whether it is worth scrolling.
+                *
+                * A spacer rather than nothing, because the title's `flex: 1` is what holds
+                * the close button against the right edge.
+                */}
+              {total === 0 ? (
+                <View style={styles.titleSpacer} />
+              ) : (
+                <Text style={styles.title} accessibilityRole="header">
+                  {total === 1 ? '1 comment' : `${total} comments`}
+                </Text>
+              )}
               <IconButton name="close" accessibilityLabel="Close comments" onPress={dismiss} />
             </View>
 
@@ -707,6 +720,9 @@ const useStyles = makeStyles((colors) => ({
     paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  titleSpacer: {
+    flex: 1,
   },
   title: {
     flex: 1,
