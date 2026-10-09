@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { fetchNotificationPrefs, normalizePrefs, saveNotificationPrefs, type NotificationPrefs } from '@/lib/api';
 import { disablePush, enablePush, pushPermissionGranted, type PushOutcome } from '@/lib/push';
@@ -35,14 +35,23 @@ export function useNotificationSettings(userId: string | null) {
     onError: (_error, _next, previous) => queryClient.setQueryData(key, previous),
   });
 
-  const current = prefs.data ?? normalizePrefs(null);
+  /*
+   * Memoized because `setPref` depends on it, and `normalizePrefs(null)` builds a fresh
+   * object on every render before the query has answered.
+   */
+  const current = useMemo(() => prefs.data ?? normalizePrefs(null), [prefs.data]);
 
   const setPref = useCallback(
     (channel: 'push' | 'email', name: string, value: boolean) => {
       const next = normalizePrefs({ ...current, [channel]: { ...current[channel], [name]: value } });
       save.mutate(next);
     },
-    [current, save],
+    // `save.mutate` rather than `save`: react-query replaces the mutation object on every
+    // state change, and `mutate` is stable for the life of the hook. Nothing keys an
+    // effect on this one, so it was only costing re-renders — but it is the same shape as
+    // the suggestion-row cycle, and the next person to add an effect here would find out
+    // the hard way.
+    [current, save.mutate],
   );
 
   const setDevicePush = useCallback(
