@@ -28,10 +28,14 @@ interface ReelsRefreshIndicatorProps {
 }
 
 /**
- * The Reels pull-to-refresh affordance: a violet bolt that scales up out of nothing as you
- * drag, tips over as it approaches the release point, then spins with an expanding halo
- * while the feed reloads. It borrows Auto Apply's violet so refreshing reads as the same
- * "the app is doing the work for you" gesture rather than a generic spinner.
+ * The Deck's pull-to-refresh affordance: a ring that scales up out of nothing as you drag,
+ * tips over as it nears the release point, then turns while the deck is rebuilt, with a
+ * single ripple leaving at the moment it fires.
+ *
+ * Monochrome. This was a violet bolt in a shadowed puck, borrowing Auto Apply's colour so
+ * that refreshing would read as the same "the app is doing the work for you" gesture. It
+ * does not: pulling to refresh is the reader doing the work, and the violet is the one
+ * colour in the app that means something is paid for.
  */
 export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsRefreshIndicatorProps) {
   const styles = useStyles();
@@ -62,7 +66,8 @@ export function ReelsRefreshIndicator({ pull, active, spin, pulse, top }: ReelsR
   });
 
   const haloStyle = useAnimatedStyle(() => ({
-    opacity: (1 - pulse.value) * 0.55 * active.value,
+    // Fainter than the violet it replaces: ink at full strength would read as a border.
+    opacity: (1 - pulse.value) * 0.28 * active.value,
     transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.9]) }],
   }));
 
@@ -112,6 +117,7 @@ const useStyles = makeStyles((colors) => ({
     height: INDICATOR_SIZE,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.autoApply,
+    // The page's own ink, faint. Nothing here is a brand moment.
+    borderColor: colors.text,
   },
 }));

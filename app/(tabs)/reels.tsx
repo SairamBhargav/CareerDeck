@@ -24,7 +24,7 @@ import { AutoApplySheet } from '@/components/jobs/AutoApplySheet';
 import { JobDetailsModal } from '@/components/jobs/JobDetailsModal';
 import { FeedToggle } from '@/components/reels/FeedToggle';
 import { JobReelCard } from '@/components/reels/JobReelCard';
-import { Spinner } from '@/components/common/Spinner';
+import { ReelSkeleton } from '@/components/reels/ReelSkeleton';
 import { INDICATOR_TRAVEL, ReelsRefreshIndicator } from '@/components/reels/ReelsRefreshIndicator';
 import { MatchExplainSheet } from '@/components/reels/MatchExplainSheet';
 import { MATCH_RING_SIZE, ResumeMatchRing } from '@/components/reels/ResumeMatchRing';
@@ -429,7 +429,7 @@ export default function ReelsScreen() {
         ) : (
           <View style={[styles.empty, { paddingTop: cardPaddingTop }]}>
             {activeFeed.isLoading ? (
-              <Spinner size={26} />
+              <ReelSkeleton />
             ) : (
               <EmptyState
                 icon={feed === 'following' ? 'people-outline' : 'briefcase-outline'}

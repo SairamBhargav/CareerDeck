@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { SectionHeader } from '@/components/common/SectionHeader';
-import { Spinner } from '@/components/common/Spinner';
 import { UndoBar, type UndoBarContent } from '@/components/common/UndoBar';
 import { FeedSkeleton } from '@/components/home/FeedSkeleton';
 import { FeedSortBar } from '@/components/home/FeedSortBar';
@@ -347,8 +346,13 @@ export default function HomeScreen() {
         }
         ListFooterComponent={
           feed.isFetchingNextPage ? (
+            /*
+             * The shape of what is arriving, not a spinner floating in the gap below the
+             * last card. The list already opens on these, so a page loading looks like the
+             * feed continuing rather than like the screen stopping to think.
+             */
             <View style={styles.footer}>
-              <Spinner size={26} />
+              <FeedSkeleton rows={1} />
             </View>
           ) : (
             <View style={styles.footer} />
@@ -422,7 +426,7 @@ const useStyles = makeStyles((colors) => ({
     paddingBottom: spacing.md,
   },
   footer: {
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
+    paddingHorizontal: screenPadding,
+    paddingBottom: spacing.lg,
   },
 }));

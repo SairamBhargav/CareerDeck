@@ -10,7 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 
-import { usePaywallColors } from '@/components/paywall/palette';
+import { useTheme } from '@/context/ThemeContext';
 
 /** One turn. Slow enough to read as deliberate rather than frantic. */
 const SPIN_MS = 900;
@@ -19,6 +19,8 @@ interface SpinnerProps {
   size?: number;
   /** Stroke width. Scales with size unless given. */
   stroke?: number;
+  /** Defaults to the page's own ink. Given only where the ring sits on something else. */
+  tint?: string;
 }
 
 /**
@@ -28,8 +30,9 @@ interface SpinnerProps {
  * shared value for the whole refresh gesture, including the wind-up as the finger pulls —
  * and dropping a self-spinning component inside that would turn twice.
  */
-export function SpinnerRing({ size = 24, stroke }: SpinnerProps) {
-  const c = usePaywallColors();
+export function SpinnerRing({ size = 24, stroke, tint }: SpinnerProps) {
+  const { colors } = useTheme();
+  const ink = tint ?? colors.text;
   const width = stroke ?? Math.max(2, Math.round(size / 10));
   const radius = (size - width) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -37,10 +40,12 @@ export function SpinnerRing({ size = 24, stroke }: SpinnerProps) {
   return (
     <Svg width={size} height={size}>
       <Defs>
+        {/* One colour at three opacities: the head is solid and the tail disappears into
+            the track, which is what reads as motion rather than a spinning dash. */}
         <LinearGradient id="spinnerArc" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={c.violet} stopOpacity="0" />
-          <Stop offset="0.5" stopColor={c.magenta} stopOpacity="0.9" />
-          <Stop offset="1" stopColor={c.gold} stopOpacity="1" />
+          <Stop offset="0" stopColor={ink} stopOpacity="0" />
+          <Stop offset="0.55" stopColor={ink} stopOpacity="0.35" />
+          <Stop offset="1" stopColor={ink} stopOpacity="0.9" />
         </LinearGradient>
       </Defs>
 
@@ -50,8 +55,8 @@ export function SpinnerRing({ size = 24, stroke }: SpinnerProps) {
         cx={size / 2}
         cy={size / 2}
         r={radius}
-        stroke={c.violet}
-        strokeOpacity={0.16}
+        stroke={ink}
+        strokeOpacity={0.1}
         strokeWidth={width}
         fill="none"
       />
@@ -75,8 +80,12 @@ export function SpinnerRing({ size = 24, stroke }: SpinnerProps) {
  * A ring with a bright arc travelling round it.
  *
  * Replaces `ActivityIndicator`, which is the platform's grey pinwheel and belongs to no
- * app in particular. This borrows the Pro card's beam — violet into magenta into gold —
- * so the one piece of chrome a reader stares at while waiting is recognisably ours.
+ * app in particular.
+ *
+ * Monochrome. It first borrowed the Pro card's beam — violet into magenta into gold —
+ * which put the one colour in the app that means "paid" on every wait anywhere, including
+ * the Deck where it read as a Pro feature loading. The arc fades from the page's own ink
+ * into nothing instead, which is quieter and claims no meaning it has not got.
  *
  * ── Why an SVG rather than a bordered View ───────────────────────────────────
  *
@@ -85,7 +94,7 @@ export function SpinnerRing({ size = 24, stroke }: SpinnerProps) {
  * what makes a spinner look cheap. A stroked circle with a dash pattern gives a real arc
  * with round caps, and a gradient along it fades the tail into the track.
  */
-export function Spinner({ size = 24, stroke }: SpinnerProps) {
+export function Spinner({ size = 24, stroke, tint }: SpinnerProps) {
   const turn = useSharedValue(0);
 
   useEffect(() => {
@@ -100,7 +109,7 @@ export function Spinner({ size = 24, stroke }: SpinnerProps) {
   return (
     <View accessibilityRole="progressbar" accessibilityLabel="Loading">
       <Animated.View style={style}>
-        <SpinnerRing size={size} stroke={stroke} />
+        <SpinnerRing size={size} stroke={stroke} tint={tint} />
       </Animated.View>
     </View>
   );
