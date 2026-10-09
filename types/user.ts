@@ -11,6 +11,8 @@ export interface User {
   location: string;
   preferredRoles: string[];
   preferredLocations: string[];
+  /** When the first-run tour was finished. Null: it is still owed, and the app opens on it. */
+  tourCompletedAt: string | null;
 }
 
 /** The fields the profile editor can change. Identity only — preferences have their own sheet. */

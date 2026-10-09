@@ -58,9 +58,15 @@ export default withObservability(RootLayout);
 function RootNavigator() {
   const { scheme, colors } = useTheme();
   const { session, isResolved, signOut } = useAuth();
-  const { isInitialLoading, profileError, retryProfile } = useCareerDeck();
+  const { isInitialLoading, profileError, retryProfile, user } = useCareerDeck();
 
   const isSignedIn = session !== null;
+  /*
+   * A new account opens on the first-run tour, and on nothing else until it is done: the app's
+   * own screens are behind the guard below until `tutorial_completed_at` is set. Accounts from
+   * before the tour existed were stamped by its migration, so they never see it.
+   */
+  const needsTour = isSignedIn && user !== null && user.tourCompletedAt === null;
   // Signed out, there is nothing left to wait for. Signed in, the profile is what every
   // screen above reads from, so showing the app before it lands is showing a blank one.
   const isReady = isResolved && (!isSignedIn || !isInitialLoading);
@@ -103,8 +109,12 @@ function RootNavigator() {
           headerTintColor: colors.text,
           headerTitleStyle: { color: colors.text },
         }}>
-        <Stack.Protected guard={isSignedIn}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Protected guard={needsTour}>
+          <Stack.Screen name="tour" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
+        </Stack.Protected>
+
+        <Stack.Protected guard={isSignedIn && !needsTour}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="profile" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ headerShown: false }} />
           <Stack.Screen name="verify" options={{ headerShown: false }} />

@@ -30,7 +30,8 @@ interface PreferencesPatch {
   weeklyGoal?: number;
 }
 
-const PROFILE_COLUMNS = 'id, handle, first_name, last_name, school_name_raw, major, graduation_year, location';
+const PROFILE_COLUMNS =
+  'id, handle, first_name, last_name, school_name_raw, major, graduation_year, location, tutorial_completed_at';
 const PREFERENCE_COLUMNS = 'preferred_roles, preferred_locations, weekly_goal';
 
 export function profileKey(userId: string) {
@@ -80,6 +81,7 @@ async function fetchProfile(userId: string): Promise<Profile> {
       location: profile.location ?? '',
       preferredRoles: preferences.preferred_roles ?? [],
       preferredLocations: preferences.preferred_locations ?? [],
+      tourCompletedAt: profile.tutorial_completed_at ?? null,
     },
     weeklyGoal: preferences.weekly_goal ?? DEFAULT_WEEKLY_GOAL,
   };

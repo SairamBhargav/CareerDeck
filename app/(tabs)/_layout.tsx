@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import { TopTabs } from 'expo-router/js-top-tabs';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { FloatingTabBar, type FloatingTabBarProps } from '@/components/navigation/FloatingTabBar';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { TabBarVisibilityProvider } from '@/context/TabBarVisibilityContext';
 import { claimPaywallMoment } from '@/lib/paywallPrompts';
+import { tourJustFinished } from '@/lib/tour';
 
 /**
  * Home / Deck / Activity ride on a swipeable top-tabs navigator (react-native-tab-view,
@@ -19,9 +20,12 @@ import { claimPaywallMoment } from '@/lib/paywallPrompts';
  */
 export default function TabsLayout() {
   useWelcomePaywall();
+  // The first-run tour ends on "Start swiping", so the app it hands over to opens on the Deck.
+  const [openOnDeck] = useState(tourJustFinished);
   return (
     <TabBarVisibilityProvider>
       <TopTabs
+        initialRouteName={openOnDeck ? 'reels' : undefined}
         tabBar={(props: FloatingTabBarProps) => <FloatingTabBar {...props} />}
         tabBarPosition="bottom">
         {/*
@@ -64,7 +68,9 @@ function useWelcomePaywall() {
   const isPro = credits.isPro;
 
   useEffect(() => {
-    if (!ready || isPro || userId === null) return;
+    // Not over the end of the tour: the reader was just handed four free Auto Applies, and a
+    // paywall sliding up over that reads as a bait and switch. It waits for the next launch.
+    if (!ready || isPro || userId === null || tourJustFinished()) return;
     // Claimed only when it is about to open, so a re-render inside the delay cannot spend it.
     const timer = setTimeout(() => {
       void claimPaywallMoment('welcome', userId).then((first) => {

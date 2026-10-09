@@ -1944,6 +1944,7 @@ export type Database = {
           location: string | null
           major: string | null
           onboarding_completed_at: string | null
+          tutorial_completed_at: string | null
           school_id: string | null
           school_id_claimed: string | null
           school_name_raw: string | null
@@ -1966,6 +1967,7 @@ export type Database = {
           location?: string | null
           major?: string | null
           onboarding_completed_at?: string | null
+          tutorial_completed_at?: string | null
           school_id?: string | null
           school_id_claimed?: string | null
           school_name_raw?: string | null
@@ -1988,6 +1990,7 @@ export type Database = {
           location?: string | null
           major?: string | null
           onboarding_completed_at?: string | null
+          tutorial_completed_at?: string | null
           school_id?: string | null
           school_id_claimed?: string | null
           school_name_raw?: string | null
@@ -2966,6 +2969,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      complete_tour: { Args: never; Returns: number }
       claim_streak_bonus: {
         Args: { p_week_start: string }
         Returns: Database["public"]["CompositeTypes"]["streak_award"]
