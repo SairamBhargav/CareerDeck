@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -24,7 +24,7 @@ function rotationKey(userId: string | null) {
 export function useSuggestionRotation() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
-  const key = rotationKey(userId);
+  const key = useMemo(() => rotationKey(userId), [userId]);
 
   const query = useQuery({
     queryKey: key,
@@ -34,7 +34,7 @@ export function useSuggestionRotation() {
     staleTime: Infinity,
   });
 
-  const mutation = useMutation({
+  const { mutate } = useMutation({
     mutationFn: (slugs: string[]) => recordSuggestionsShown(userId as string, slugs),
     onSuccess: (next) => queryClient.setQueryData<SuggestionShownAt>(key, next),
   });
@@ -50,9 +50,15 @@ export function useSuggestionRotation() {
   const record = useCallback(
     (slugs: string[]) => {
       if (userId === null || slugs.length === 0) return;
-      mutation.mutate(slugs);
+      mutate(slugs);
     },
-    [userId, mutation],
+    /*
+     * `mutate`, not the mutation object. useSuggestedCompanies runs an effect keyed on
+     * this callback to stamp whatever ended up on screen — so an identity that changed
+     * every time a write settled meant the effect re-ran, recorded again, and settled
+     * again. `mutate` is stable for the life of the hook.
+     */
+    [userId, mutate],
   );
 
   return { shownAt: query.data ?? EMPTY, isLoading: query.isPending, record };

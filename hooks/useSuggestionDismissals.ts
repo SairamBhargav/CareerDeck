@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
 import { dismissSuggestion, readDismissedSuggestions } from '@/lib/suggestionDismissals';
@@ -20,7 +20,9 @@ function dismissalsKey(userId: string | null) {
 export function useSuggestionDismissals() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
-  const key = dismissalsKey(userId);
+  // Memoized because it is a dependency below, and a fresh array each render would make
+  // every callback that closes over it fresh too.
+  const key = useMemo(() => dismissalsKey(userId), [userId]);
 
   const query = useQuery({
     queryKey: key,
@@ -31,7 +33,7 @@ export function useSuggestionDismissals() {
     staleTime: Infinity,
   });
 
-  const mutation = useMutation({
+  const { mutate } = useMutation({
     mutationFn: (slug: string) => dismissSuggestion(userId as string, slug),
     onSuccess: (next) => queryClient.setQueryData<string[]>(key, next),
   });
@@ -43,9 +45,11 @@ export function useSuggestionDismissals() {
       queryClient.setQueryData<string[]>(key, (current) =>
         current?.includes(slug) ? current : [slug, ...(current ?? [])],
       );
-      mutation.mutate(slug);
+      mutate(slug);
     },
-    [userId, queryClient, key, mutation],
+    // `mutate` rather than the mutation object: the object is replaced on every state
+    // change, which would make this callback new on every settle.
+    [userId, queryClient, key, mutate],
   );
 
   return { dismissed: query.data ?? EMPTY, dismiss };

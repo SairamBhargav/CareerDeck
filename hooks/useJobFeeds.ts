@@ -275,13 +275,23 @@ export function useDeckProfile(): { profile: DeckProfile | undefined; isLoading:
  *
  * The surplus is the reserve: dismissing a card has to put a different company in its
  * place, and a round trip to find one would leave a hole in the row for as long as it took.
- * `suggested_companies()` caps `p_limit` at 50, so this is well inside what it will serve.
+ *
+ * Fifty is the ceiling `suggested_companies()` will serve, and it is asked for all of it
+ * because the pool arrives *before* the two client-side exclusions rather than after. The
+ * function does not know who is asking, so a reader's follows come out of the fetched
+ * list: at thirty, an account following twenty-eight of the big employers had thirteen
+ * companies left — three in reserve behind ten on screen, which ran dry after three
+ * dismissals and looked like the X doing nothing. At fifty the same account has
+ * twenty-eight eligible.
+ *
+ * The pending personalization migration moves that exclusion into SQL, after which the
+ * pool comes back already filtered and this arithmetic stops applying.
  */
-const SUGGESTION_POOL = 30;
+const SUGGESTION_POOL = 50;
 
 /** How many of the pool are on screen. The row scrolls, so this is a judgement about how
  *  far anyone wants to scroll sideways, not about what fits. */
-const SUGGESTION_SHOWN = 10;
+const SUGGESTION_SHOWN = 15;
 
 export function useSuggestedCompanies(): {
   companies: Company[];
