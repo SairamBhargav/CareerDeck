@@ -196,6 +196,27 @@ export function postingInScope(posting: ParsedPosting): boolean {
 }
 
 /**
+ * Postings first published more than this long ago are not stored (decision 2026-10-09, when
+ * the database passed the free plan's 500 MB). The deck's fit arm only reaches back 30–60
+ * days, so an evergreen requisition from last spring costs storage and is almost never shown.
+ */
+export const MAX_POSTING_AGE_DAYS = 90;
+
+/**
+ * Whether a posting is recent enough to store. A posting with no date is kept: an unknown age
+ * is not evidence of an old one.
+ *
+ * This gates *landing* only, not "seen". An old job already in the corpus — one kept because a
+ * student liked it or applied to it — is still touched as alive, so the staleness sweep does
+ * not close a posting its board still lists.
+ */
+export function postingIsRecent(posting: Pick<ParsedPosting, 'postedAt'>, now = Date.now()): boolean {
+  if (!posting.postedAt) return true;
+  const posted = Date.parse(posting.postedAt);
+  return Number.isNaN(posted) || now - posted <= MAX_POSTING_AGE_DAYS * 86_400_000;
+}
+
+/**
  * One posting → one `jobs` row per location (§4.4's fan-out).
  *
  * The rows share a `dedup_group_id`, which is what lets the UI say "also in 2 other
@@ -481,9 +502,14 @@ export async function crawlSource(
       log(`      ${label} — ${everything.length - postings.length} posting(s) outside the US/Canada or above new-grad level skipped`);
     }
 
+    const recent = postings.filter((posting) => postingIsRecent(adapter.parse(posting)));
+    if (recent.length < postings.length) {
+      log(`      ${label} — ${postings.length - recent.length} posting(s) older than ${MAX_POSTING_AGE_DAYS} days not stored`);
+    }
+
     const changed = options.dryRun
-      ? postings
-      : await landRawPostings(client, source.id, runId, postings, totals);
+      ? recent
+      : await landRawPostings(client, source.id, runId, recent, totals);
 
     if (!options.dryRun) {
       // Every posting the board still lists is alive, changed or not.

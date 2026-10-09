@@ -66,6 +66,8 @@ const AUTO_APPLY_READY_DAYS = 7;
 const RAW_CLOSED_KEEP_DAYS = 30;
 /** How long a closed posting nobody touched is kept, so a mistaken close can still be undone. */
 const CLOSED_JOB_KEEP_DAYS = 30;
+// Matches MAX_POSTING_AGE_DAYS in server/src/ingest/pipeline.ts.
+const OLD_JOB_KEEP_DAYS = 90;
 
 let failed = false;
 
@@ -117,6 +119,24 @@ await run('auto apply runs closed and refunded', () =>
  */
 await run('closed jobs removed', () =>
   admin.rpc('prune_closed_jobs', { p_closed_days: CLOSED_JOB_KEEP_DAYS }),
+);
+
+/*
+ * Postings first published over three months ago, open or not, unless somebody touched them
+ * (20261026000000_old_job_retention.sql). The crawl no longer stores them, so this only ever
+ * finds jobs that aged past the line since last night.
+ */
+await run('old jobs removed', () =>
+  admin.rpc('prune_old_jobs', { p_days: OLD_JOB_KEEP_DAYS }),
+);
+
+/*
+ * One row per pull-to-refresh, each with a 200-job array — about 16 KB. Kept a day past expiry
+ * for the experiment query. Nothing called this until 2026-10-09, by which point three test
+ * accounts had nine days of sessions.
+ */
+await run('feed sessions pruned', () =>
+  admin.rpc('prune_feed_sessions', { p_keep_hours: 24 }),
 );
 
 /*
