@@ -139,7 +139,7 @@ const lightPalette: Palette = {
 
   logoPlate: '#FFFFFF',
 
-  chromeFill: 'rgba(255,255,255,0.55)',
+  chromeFill: 'rgba(255,255,255,0.14)',
   // The selected capsule is lighter than the bar it sits in, which is what separates it
   // without a second colour.
   chromeSurface: 'rgba(255,255,255,0.75)',
@@ -215,7 +215,7 @@ const darkPalette: Palette = {
 
   logoPlate: '#EEEEF2',
 
-  chromeFill: 'rgba(18,18,22,0.45)',
+  chromeFill: 'rgba(12,12,16,0.14)',
   chromeSurface: 'rgba(255,255,255,0.14)',
   chromeText: '#FFFFFF',
   chromeTextMuted: 'rgba(255,255,255,0.52)',

@@ -135,7 +135,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
           */}
         <BlurView
           intensity={78}
-          tint={scheme === 'dark' ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
+          tint={scheme === 'dark' ? 'systemThinMaterialDark' : 'systemThinMaterialLight'}
           blurMethod="dimezisBlurViewSdk31Plus"
           style={styles.pill}>
           <View style={styles.row} onLayout={handleRowLayout}>
@@ -239,9 +239,13 @@ const useStyles = makeStyles((colors) => ({
      * Translucent, where this was `colors.surface`.
      *
      * An opaque parent is what the blur samples, so the bar was a frosted pane in front of
-     * a painted wall — all the cost of a BlurView and none of the effect. A tint with alpha
-     * lets the page through and still gives the shadow a shape to be cast from, which a
-     * fully transparent background would not.
+     * a painted wall — all the cost of a BlurView and none of the effect.
+     *
+     * Barely there, at fourteen percent. The first attempt at this put it at fifty-five,
+     * which simply moved the wall rather than removing it: the blur sampled a near-white
+     * sheet and came back near-white. All it has to do now is give the shadow something
+     * with alpha to be cast from, since a fully transparent background casts nothing. The
+     * material does the tinting.
      */
     backgroundColor: colors.chromeFill,
     ...colors.shadowLifted,
