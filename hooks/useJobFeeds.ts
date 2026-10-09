@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useCompanyDirectory } from '@/hooks/useCompanies';
 import { useSuggestionDismissals } from '@/hooks/useSuggestionDismissals';
 import { useSuggestionRotation } from '@/hooks/useSuggestionRotation';
 import { isRetired } from '@/lib/suggestionRotation';
@@ -305,6 +306,8 @@ export function useSuggestedCompanies(): {
   const { dismissed, dismiss } = useSuggestionDismissals();
   const hidden = useMemo(() => new Set(dismissed), [dismissed]);
   const { shownAt, record: recordShown } = useSuggestionRotation();
+  // Already fetched and cached for Home's story rings, so this is a read, not a request.
+  const directory = useCompanyDirectory();
 
   /*
    * Companies followed from the row since the last time Home was focused.
@@ -335,6 +338,42 @@ export function useSuggestedCompanies(): {
   });
 
   /*
+   * The ranked fifty, then the directory behind them.
+   *
+   * Fifty is all `suggested_companies()` will serve, and a reader's follows come out of
+   * that fifty rather than being excluded by the query — so following the row empties it.
+   * Following twenty in one sitting emptied it completely, and the section hid itself,
+   * which is the correct response to an empty row and the wrong thing to have happened.
+   *
+   * The directory is already in the cache — Home loads it for the story rings and the
+   * company lookups — and holds two hundred companies in the same order. Appending it
+   * costs no request and makes the tail four times deeper, which is the difference between
+   * a row that can be exhausted in one sitting and one that cannot.
+   *
+   * Order matters: the ranked fifty stay in front, so once the personalization migration
+   * lands and those fifty are chosen *for* this reader, the directory is only ever the
+   * part nobody reaches.
+   */
+  const pool = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Company[] = [];
+
+    for (const company of query.data ?? []) {
+      if (seen.has(company.slug)) continue;
+      seen.add(company.slug);
+      out.push(company);
+    }
+    for (const company of directory.companies) {
+      // `suggested_companies()` only offers companies that are hiring, and a suggestion to
+      // follow somebody with nothing posted is a worse suggestion.
+      if (company.openJobCount <= 0 || seen.has(company.slug)) continue;
+      seen.add(company.slug);
+      out.push(company);
+    }
+    return out;
+  }, [query.data, directory.companies]);
+
+  /*
    * Both exclusions are applied before the slice, which is what makes the row refill:
    * removing one company promotes the next out of the reserve rather than leaving nine
    * cards.
@@ -345,10 +384,10 @@ export function useSuggestedCompanies(): {
    */
   const eligible = useMemo(
     () =>
-      (query.data ?? [])
+      pool
         .filter((company) => !hidden.has(company.slug))
         .filter((company) => !followed.has(company.slug) || justFollowed.includes(company.slug)),
-    [query.data, followed, hidden, justFollowed],
+    [pool, followed, hidden, justFollowed],
   );
 
   /*
