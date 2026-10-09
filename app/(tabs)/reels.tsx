@@ -147,8 +147,9 @@ export default function ReelsScreen() {
   const matchMap = activeFeed.matches;
 
   // In the same order as `jobs`, so the scroll-position math below can index straight into it.
+  // Null for a posting with no score, which the ring treats as "hold", not as zero.
   const matchScores = useMemo(
-    () => jobs.map((job) => matchMap.get(job.id)?.score ?? 0),
+    () => jobs.map((job) => matchMap.get(job.id)?.score ?? null),
     [jobs, matchMap],
   );
   const hasScores = matchMap.size > 0;
@@ -160,6 +161,9 @@ export default function ReelsScreen() {
   // The match ring's live value: interpolated between the current and next reel's score
   // by how far through the swipe the drag is, so dragging between two jobs morphs the
   // ring smoothly from one score to the other instead of snapping at the page boundary.
+  //
+  // An unscored card takes its neighbour's score, so swiping toward one holds the ring still
+  // instead of draining it to 0 and turning it red on the way to a dash.
   const matchProgress = useDerivedValue(() => {
     if (pageHeight <= 0 || matchScores.length === 0) return matchScores[0] ?? 0;
 
@@ -168,7 +172,7 @@ export default function ReelsScreen() {
     const upperIndex = Math.min(lowerIndex + 1, matchScores.length - 1);
     const fraction = floatIndex - lowerIndex;
 
-    const lowerScore = matchScores[lowerIndex] ?? 0;
+    const lowerScore = matchScores[lowerIndex] ?? matchScores[upperIndex] ?? 0;
     const upperScore = matchScores[upperIndex] ?? lowerScore;
     return lowerScore + (upperScore - lowerScore) * fraction;
   }, [matchScores, pageHeight]);
@@ -193,21 +197,9 @@ export default function ReelsScreen() {
 
   const activeJob = jobs[Math.min(Math.max(activeIndex, 0), Math.max(jobs.length - 1, 0))] ?? null;
   const activeMatch = activeJob ? matchMap.get(activeJob.id) ?? null : null;
-  const activeExplanation = useMemo(
-    () =>
-      activeMatch
-        ? {
-            skills: activeMatch.components.skills,
-            field: activeMatch.components.field,
-            seniority: activeMatch.components.seniority,
-            location: activeMatch.components.location,
-            limited: activeMatch.components.limited,
-          }
-        : null,
-    [activeMatch],
-  );
   // Tapping the ring: the breakdown for whichever posting is on screen at that moment.
   const [explainJob, setExplainJob] = useState<Job | null>(null);
+  const explainMatch = explainJob ? matchMap.get(explainJob.id) ?? null : null;
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setPageHeight(event.nativeEvent.layout.height);
@@ -392,18 +384,26 @@ export default function ReelsScreen() {
           ]}>
           <ResumeMatchRing
             progress={matchProgress}
-            explain={activeExplanation}
+            scored={activeMatch !== null}
             onPress={() => setExplainJob(activeJob)}
           />
         </View>
       ) : null}
 
-      <MatchExplainSheet
-        job={explainJob}
-        match={explainJob ? matchMap.get(explainJob.id) ?? null : null}
-        visible={explainJob !== null}
-        onClose={() => setExplainJob(null)}
-      />
+      {explainJob && explainMatch ? (
+        // Mounted only while open: it slides itself in on mount and out before unmounting.
+        <MatchExplainSheet
+          key={explainJob.id}
+          job={explainJob}
+          match={explainMatch}
+          resume={defaultResume}
+          onClose={() => setExplainJob(null)}
+          onUpgrade={() => {
+            setExplainJob(null);
+            router.push({ pathname: '/paywall', params: { from: 'match' } });
+          }}
+        />
+      ) : null}
 
       <JobDetailsModal
         job={detailsJob}

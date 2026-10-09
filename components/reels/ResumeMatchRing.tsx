@@ -36,28 +36,21 @@ const POOR_COLOR = '#FF5A5F';
 const FAIR_COLOR = '#F5A623';
 const GOOD_COLOR = '#3DD16F';
 
+/** The ring's colour stops, shared with the breakdown sheet so one score is one colour everywhere. */
+export const MATCH_COLOR_STOPS = { input: [0, 50, 100], output: [POOR_COLOR, FAIR_COLOR, GOOD_COLOR] };
+
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface ResumeMatchRingProps {
   /** 0-100. Update continuously (e.g. from scroll) for the "cool" morphing effect. */
   progress: SharedValue<number>;
   /**
-   * What the number is made of, for the posting currently on screen — §3.10's `components`.
-   *
-   * Null when the posting has no score: the ring then shows a dash and can't be tapped.
+   * Whether the posting on screen has a score. When it does not, the ring shows a dash, draws no
+   * arc, and can't be tapped.
    */
-  explain?: MatchExplanation | null;
+  scored: boolean;
   /** Opens the breakdown for the posting on screen. */
   onPress?: () => void;
-}
-
-export interface MatchExplanation {
-  skills?: number;
-  field?: number;
-  seniority?: number;
-  location?: number;
-  /** The posting listed no core skills, so the score is an estimate. */
-  limited: boolean;
 }
 
 /**
@@ -70,7 +63,7 @@ export interface MatchExplanation {
  * the word underneath is doing the real work: it says the figure is a percentage *of a
  * resume against this posting*, not a level of something filling up.
  */
-export function ResumeMatchRing({ progress, explain, onPress }: ResumeMatchRingProps) {
+export function ResumeMatchRing({ progress, scored, onPress }: ResumeMatchRingProps) {
   const { colors } = useTheme();
   const styles = useStyles();
 
@@ -102,12 +95,9 @@ export function ResumeMatchRing({ progress, explain, onPress }: ResumeMatchRingP
     const clamped = Math.min(Math.max(progress.value, 0), 100);
     return {
       strokeDashoffset: CIRCUMFERENCE * (1 - clamped / 100),
-      stroke: interpolateColor(progress.value, [0, 50, 100], [POOR_COLOR, FAIR_COLOR, GOOD_COLOR]),
+      stroke: interpolateColor(progress.value, MATCH_COLOR_STOPS.input, MATCH_COLOR_STOPS.output),
     };
   });
-
-  // No score for this posting (nothing to compare it on): a dash, never "0%", which reads as a verdict.
-  const scored = explain !== null && explain !== undefined;
 
   return (
     <Animated.View style={[styles.wrap, entranceStyle]}>
@@ -128,6 +118,9 @@ export function ResumeMatchRing({ progress, explain, onPress }: ResumeMatchRingP
             fill="none"
             strokeLinecap="round"
             strokeDasharray={`${CIRCUMFERENCE}, ${CIRCUMFERENCE}`}
+            // No score: a dash, never "0%", which reads as a verdict, and no arc held over from
+            // the card before, which would draw a number's worth of ring around the dash.
+            opacity={scored ? 1 : 0}
             rotation={-90}
             origin={`${CENTER}, ${CENTER}`}
             animatedProps={ringProps}

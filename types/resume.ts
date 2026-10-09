@@ -79,26 +79,46 @@ export interface Resume {
  */
 export interface MatchScore {
   score: number;
-  /** Scorer v2 (20261010000000_match_score_v2.sql). */
+  /** Scorer v3 (20261020000000_match_score_v3.sql). */
   components: {
     /** Share of the posting's core skills the resume has, 0–1, with 60% scored as full marks. */
     skills?: number;
-    /** The posting's field against the reader's degree and major, 0–1. */
+    /** What the resume's past roles say about this posting, 0–1. 0 when none are relevant. */
+    experience?: number;
+    /** The posting's field against the reader's degree, major, or relevant roles, 0–1. */
     field?: number;
+    /** Whether `field` came from what the reader studied or from where they have worked. */
+    fieldSource?: 'degree' | 'experience';
     seniority?: number;
-    location?: number;
     /** The posting's skills the resume has, and the core ones it does not, as the posting labels them. */
     matched: string[];
     missing: string[];
+    /** The past roles that counted, strongest first. `index` points into the resume's `experience`. */
+    roles: MatchRole[];
     jobFamily?: string;
-    /** The posting listed no core skills to compare, so the score is capped and an estimate. */
+    /** No core skills to compare, so the score is capped and an estimate. */
     limited: boolean;
+    /** Which side had no skills: the posting listed none, or the resume did. */
+    limitedReason?: 'posting' | 'resume';
+    /** The weighted score before any cap or the ceiling, 0–100. */
+    raw?: number;
+    /** The cap that held the score down, when one did. */
+    cap?: { at: number; reason: MatchCapReason };
   };
   /**
-   * How much of the formula had an input, 0–1. A posting that lists no skills is scored on
-   * seniority and location alone and renormalized, so a 90 at 0.45 coverage and a 90 at 1.0
-   * are different claims — this is what lets the UI say so instead of showing both as 90.
+   * How much of the formula had an input, 0–1: the sum of the weights that were answerable.
+   * Each component's points are `100 × weight × value / coverage`.
    */
   coverage: number;
   computedAt: string;
+}
+
+export type MatchCapReason = 'off_field' | 'adjacent_field' | 'level' | 'no_skills';
+
+export interface MatchRole {
+  index: number;
+  family: string;
+  months: number | null;
+  /** How close the role's field is to the posting's, 0–1. */
+  relevance: number;
 }

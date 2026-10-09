@@ -42,6 +42,8 @@ import type {
   JobComment,
   MyComment,
   LocationType,
+  MatchCapReason,
+  MatchRole,
   MatchScore,
   NewsItem,
   NotificationKind,
@@ -1253,6 +1255,25 @@ const numberOrUndefined = (value: unknown) => (typeof value === 'number' ? value
 const stringList = (value: unknown) =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+const CAP_REASONS: readonly MatchCapReason[] = ['off_field', 'adjacent_field', 'level', 'no_skills'];
+const isCapReason = (value: unknown): value is MatchCapReason =>
+  typeof value === 'string' && (CAP_REASONS as readonly string[]).includes(value);
+
+/** `components.roles` as the scorer writes it: `{ i, family, months, rel }`, strongest first. */
+function matchRoles(value: unknown): MatchRole[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): MatchRole[] => {
+    const role = (entry ?? {}) as Record<string, unknown>;
+    if (typeof role.i !== 'number' || typeof role.family !== 'string' || typeof role.rel !== 'number') return [];
+    return [{
+      index: role.i,
+      family: role.family,
+      months: typeof role.months === 'number' ? role.months : null,
+      relevance: role.rel,
+    }];
+  });
+}
+
 /**
  * Match scores for the postings on screen — §3.10.
  *
@@ -1274,17 +1295,24 @@ export async function fetchMatchScores(jobIds: string[]): Promise<Map<string, Ma
   const scores = new Map<string, MatchScore>();
   for (const row of (data ?? []) as MatchScoreRow[]) {
     const raw = row.components ?? {};
+    const cap = raw.cap as { at?: unknown; reason?: unknown } | undefined;
     scores.set(row.job_id, {
       score: row.score,
       components: {
         skills: numberOrUndefined(raw.skills),
+        experience: numberOrUndefined(raw.experience),
         field: numberOrUndefined(raw.field),
+        fieldSource: raw.fieldSource === 'experience' || raw.fieldSource === 'degree' ? raw.fieldSource : undefined,
         seniority: numberOrUndefined(raw.seniority),
-        location: numberOrUndefined(raw.location),
         matched: stringList(raw.matched),
         missing: stringList(raw.missing),
+        roles: matchRoles(raw.roles),
         jobFamily: typeof raw.jobFamily === 'string' ? raw.jobFamily : undefined,
         limited: raw.limited === true,
+        limitedReason: raw.limitedReason === 'posting' || raw.limitedReason === 'resume' ? raw.limitedReason : undefined,
+        raw: numberOrUndefined(raw.raw),
+        cap:
+          cap && typeof cap.at === 'number' && isCapReason(cap.reason) ? { at: cap.at, reason: cap.reason } : undefined,
       },
       coverage: numberOrUndefined(raw.coverage) ?? 1,
       computedAt: row.computed_at,

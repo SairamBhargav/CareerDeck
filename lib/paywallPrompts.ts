@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type PaywallMoment = 'welcome' | 'first-auto-apply';
 
 /** Where the paywall was opened from. It picks the headline. */
-export type PaywallSource = PaywallMoment | 'activity' | 'settings' | 'limit';
+export type PaywallSource = PaywallMoment | 'activity' | 'settings' | 'limit' | 'match';
 
 const key = (moment: PaywallMoment, userId: string) => `paywall:${moment}:${userId}`;
 

@@ -80,6 +80,10 @@ const HEADLINES: Record<PaywallSource, { title: string; lede: (pro: number) => s
     title: 'Out of Auto Applies?',
     lede: (pro) => `Pro refills ${pro} every day and banks what you don’t use.`,
   },
+  match: {
+    title: 'See what’s behind\nevery match',
+    lede: (pro) => `Pro takes every score apart: the skills you’re missing, what to fix first, and ${pro} Auto Applies a day.`,
+  },
   activity: {
     title: 'Apply to more.\nHear back sooner.',
     lede: (pro) => `${pro} Auto Applies a day, more resumes, and everything free stays free.`,
