@@ -21,6 +21,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Circle, Svg } from 'react-native-svg';
 
+import { FullDetails, FullHero } from '@/components/reels/MatchBreakdownFull';
 import { MATCH_COLOR_STOPS } from '@/components/reels/ResumeMatchRing';
 import { FREE_MATCH_LOOKS } from '@/constants/limits';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
@@ -91,12 +92,12 @@ const lookKey = (jobId: string, week: string) => ['match-look', jobId, week] as 
 /**
  * Why the ring says what it says.
  *
- * Everyone sees the score and how it adds up: points per part, and whatever a cap or the ceiling
- * took off. The rest (which skills, which past roles, eligibility, what would raise it) is Pro,
- * and free readers can open it on three postings a week (20261025000000_match_free_looks.sql).
- * Until they do, it sits blurred under the open part, with the offer below it.
+ * Open (Pro, or a free reader who spent one of the week's three looks on this posting): the full
+ * breakdown in MatchBreakdownFull.tsx, unchanged.
  *
- * Kept plain on purpose: sections divided by hairlines rather than boxed, no icons on headings,
+ * Locked (a free reader who hasn't): the score and how it adds up, readable; the rest blurred
+ * beneath, with the offer below it (20261025000000_match_free_looks.sql). This locked view is
+ * kept plain on purpose: sections divided by hairlines rather than boxed, no icons on headings,
  * and nothing animates in except the ring drawing to its number.
  *
  * Mounted only while open (the caller keys it on the job): it slides itself in on mount, and out
@@ -203,14 +204,30 @@ export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade, onOp
               bounces={false}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
-              <Hero job={job} score={match.score} reduced={reduced} warning={blocking} />
-
-              <AddsUp parts={parts} jobFamily={match.components.jobFamily} />
-
               {open ? (
-                <Details job={job} match={match} resume={resume} onOpenProfile={() => leave(onOpenProfile)} />
+                // Open (Pro, or a free look spent): the full breakdown exactly as it was.
+                <>
+                  <FullHero
+                    job={job}
+                    score={match.score}
+                    tier={matchTier(match.score)}
+                    reduced={reduced}
+                    warning={blocking}
+                    onClose={() => leave(onClose)}
+                  />
+                  <FullDetails
+                    job={job}
+                    match={match}
+                    parts={parts}
+                    resume={resume}
+                    reduced={reduced}
+                    onOpenProfile={() => leave(onOpenProfile)}
+                  />
+                </>
               ) : (
                 <>
+                  <Hero job={job} score={match.score} reduced={reduced} warning={blocking} />
+                  <AddsUp parts={parts} jobFamily={match.components.jobFamily} />
                   <Locked>
                     <Details job={job} match={match} resume={resume} onOpenProfile={() => undefined} />
                   </Locked>
@@ -225,12 +242,6 @@ export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade, onOp
                 </>
               )}
 
-              {open ? (
-                <Text style={styles.footnote}>
-                  Compares {resume ? `your default resume, ${resume.name},` : 'your default resume'} with what the
-                  posting asks for. No resume matches a posting perfectly, so scores stop at {MATCH_CEILING}.
-                </Text>
-              ) : null}
             </Animated.ScrollView>
           </GestureDetector>
         </Animated.View>
