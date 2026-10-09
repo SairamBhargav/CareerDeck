@@ -70,7 +70,7 @@ function iconsForRoute(routeName: string): { active: IconName; inactive: IconNam
  */
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const styles = useStyles();
   const { hiddenOffset } = useTabBarVisibility();
   const hideDistance = useTabBarHeight();
@@ -126,9 +126,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
       style={[styles.wrapper, pillAnimatedStyle]}
       accessibilityRole="tablist">
       <View style={[styles.shadowWrap, { marginBottom: insets.bottom + tabBarFloatGap }]}>
+        {/*
+          * The tint follows the scheme rather than being dark always.
+          *
+          * A permanently dark material was the safe choice while the bar was opaque — white
+          * type on it reads over any page. Now that the page shows through, a dark slab over
+          * a light feed is the one thing that stops it looking like glass.
+          */}
         <BlurView
           intensity={78}
-          tint="systemChromeMaterialDark"
+          tint={scheme === 'dark' ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
           blurMethod="dimezisBlurViewSdk31Plus"
           style={styles.pill}>
           <View style={styles.row} onLayout={handleRowLayout}>
@@ -137,7 +144,11 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
                 pointerEvents="none"
                 style={[
                   styles.indicator,
-                  { width: tabWidth - INDICATOR_INSET * 2, backgroundColor: colors.chromeSurface },
+                  {
+                    width: tabWidth - INDICATOR_INSET * 2,
+                    backgroundColor: colors.chromeSurface,
+                    borderColor: colors.chromeBorder,
+                  },
                   indicatorAnimatedStyle,
                 ]}
               />
@@ -224,7 +235,15 @@ const useStyles = makeStyles((colors) => ({
   shadowWrap: {
     marginHorizontal: screenPadding,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    /*
+     * Translucent, where this was `colors.surface`.
+     *
+     * An opaque parent is what the blur samples, so the bar was a frosted pane in front of
+     * a painted wall — all the cost of a BlurView and none of the effect. A tint with alpha
+     * lets the page through and still gives the shadow a shape to be cast from, which a
+     * fully transparent background would not.
+     */
+    backgroundColor: colors.chromeFill,
     ...colors.shadowLifted,
   },
   pill: {
@@ -232,8 +251,8 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: radius.pill,
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
-    // Transparent in light, where the dark capsule separates itself against a white page.
-    // In dark it needs a rim, or the blur dissolves into the background behind it.
+    // A rim in both schemes now. The bar no longer has an opaque fill to separate itself
+    // with, so the edge is the only thing stating where it stops.
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.chromeBorder,
   },
@@ -247,6 +266,9 @@ const useStyles = makeStyles((colors) => ({
     top: 8,
     bottom: 8,
     borderRadius: radius.pill,
+    // The selected capsule gets the same rim as the bar, which is what makes it read as a
+    // piece of the same glass rather than a lighter patch of it.
+    borderWidth: StyleSheet.hairlineWidth,
   },
   tab: {
     flex: 1,
