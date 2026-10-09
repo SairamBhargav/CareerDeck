@@ -154,13 +154,15 @@ export function SearchOverlay({
       <Animated.View style={[styles.panel, { paddingTop: insets.top + spacing.sm }, panelStyle]}>
         <View style={styles.searchRow}>
           <View style={styles.field}>
-            <Ionicons name="search" size={18} color={colors.textTertiary} />
+            {/* No magnifier and no placeholder once the overlay is open. The reader just
+                tapped a search bar and the keyboard is up, so both are restating where
+                they are — and the caret alone is a cleaner invitation than an icon and a
+                sentence sharing the line with it. The collapsed bar on Home keeps them,
+                because there they are the only thing saying what it is for. */}
             <TextInput
               ref={inputRef}
               value={query}
               onChangeText={setQuery}
-              placeholder="Search jobs and companies"
-              placeholderTextColor={colors.textTertiary}
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
