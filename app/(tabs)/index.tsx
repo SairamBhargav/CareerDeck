@@ -15,7 +15,6 @@ import { StoriesRow } from '@/components/home/StoriesRow';
 import { SuggestedCompanies } from '@/components/home/SuggestedCompanies';
 import { HomeFeedRow } from '@/components/home/HomeFeedRow';
 import { SearchOverlay } from '@/components/search/SearchOverlay';
-import { StoryViewer } from '@/components/stories/StoryViewer';
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -52,7 +51,6 @@ export default function HomeScreen() {
     toggleFollow,
     toggleLike,
     toggleHide,
-    markNewsSeen,
   } = useCareerDeck();
 
   // Relevant by default: a student opening the app wants roles for them, not the newest anything.
@@ -141,11 +139,6 @@ export default function HomeScreen() {
     () => feed.jobs.filter((job) => !excluded.has(job.id)),
     [feed.jobs, excluded],
   );
-
-  // A snapshot of the rings taken at open time. The live `storyGroups` array re-sorts as
-  // stories are marked watched, which would shuffle the deck out from under an open
-  // viewer mid-playback.
-  const [storySession, setStorySession] = useState<StorySession | null>(null);
 
   const handlePressJob = useCallback(
     (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } }),
@@ -260,11 +253,15 @@ export default function HomeScreen() {
     [toggleFollow, noteSuggestionFollowed],
   );
 
-  const handlePressStory = (group: StoryGroup, index: number) =>
-    setStorySession({
-      groups: storyGroups,
-      groupIndex: index,
-      itemIndex: firstUnseenIndex(group, seenNewsIds),
+  /*
+   * The story viewer is its own screen. It takes which ring was tapped and where in it to
+   * start; the groups themselves it reads and snapshots for itself, which is what lets the
+   * company sheet open over it without this screen being involved.
+   */
+  const handlePressStory = (group: StoryGroup) =>
+    router.push({
+      pathname: '/story',
+      params: { group: group.id, item: String(firstUnseenIndex(group, seenNewsIds)) },
     });
 
   /*
@@ -383,25 +380,8 @@ export default function HomeScreen() {
         onPressCompanySlug={openCompany}
       />
 
-      {storySession ? (
-        <StoryViewer
-          groups={storySession.groups}
-          startGroupIndex={storySession.groupIndex}
-          startItemIndex={storySession.itemIndex}
-          companyBySlug={directory.bySlug}
-          onClose={() => setStorySession(null)}
-          onSeen={markNewsSeen}
-          onToggleFollow={toggleFollow}
-        />
-      ) : null}
     </SafeAreaView>
   );
-}
-
-interface StorySession {
-  groups: StoryGroup[];
-  groupIndex: number;
-  itemIndex: number;
 }
 
 const useStyles = makeStyles((colors) => ({

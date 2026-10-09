@@ -118,6 +118,15 @@ function RootNavigator() {
             options={{ presentation: 'modal', headerShown: false }}
           />
           <Stack.Screen name="collection/[type]" options={{ headerShown: false }} />
+          {/*
+            * Full-screen so it covers the floating tab bar, which is what the native Modal
+            * this replaced was really for. Being a route rather than a Modal is what lets
+            * a company sheet open over a story and hand it back on dismissal.
+            */}
+          <Stack.Screen
+            name="story"
+            options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+          />
           {/* Phase 6. A modal for the same reason as resume-review: it is reached from inside a
               flow (an empty Auto Apply balance), and closing it should land back in that flow.
               Full screen since 2026-10-06: the paywall is its own dark stage, not a card. */}

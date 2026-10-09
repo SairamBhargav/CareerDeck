@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
-  Modal,
   StyleSheet,
   useWindowDimensions,
   type NativeScrollEvent,
@@ -208,15 +207,20 @@ export function StoryViewer({
 
   if (!group || !item) return null;
 
+  /*
+   * A plain full-screen view, where this used to be wrapped in a native Modal.
+   *
+   * The Modal drew above the whole navigator, which covered the floating tab bar but also
+   * meant nothing could ever be pushed on top of the story — so opening a company from a
+   * story header had to dismiss it first. app/story.tsx presents this as a
+   * fullScreenModal route instead: it covers the tab bar the same way, and the company
+   * sheet can rise over it and reveal it again on dismissal.
+   *
+   * Android's hardware back arrived through the Modal's onRequestClose; it now comes from
+   * the navigator, which pops the route and runs the same path onClose does.
+   */
   return (
-    <Modal
-      visible
-      transparent
-      statusBarTranslucent
-      presentationStyle="overFullScreen"
-      animationType="fade"
-      onRequestClose={onClose}>
-      <Animated.View style={[styles.stage, { backgroundColor: colors.background }, stageStyle]}>
+    <Animated.View style={[styles.stage, { backgroundColor: colors.background }, stageStyle]}>
         <FlatList
           ref={listRef}
           data={groups}
@@ -261,28 +265,18 @@ export function StoryViewer({
                   ? undefined
                   : () => {
                       /*
-                       * Navigate first, dismiss second — the reverse of what this did.
+                       * The story stays open underneath.
                        *
-                       * Closing first unmounts the Modal, which reveals Home, and only
-                       * then does the push slide the company in from the side. The reader
-                       * watches the story drop back to the feed before the page they asked
-                       * for arrives from somewhere else entirely.
-                       *
-                       * Pushing first puts the company screen in place behind the story,
-                       * which is still covering the screen, so nothing of Home is ever
-                       * shown. Dismissing then reveals the company directly. The earlier
-                       * comment here was right that a push alone looks like nothing
-                       * happening — the answer is to dismiss straight after it, not to
-                       * dismiss before it.
-                       *
-                       * On the next frame rather than the same one, so the route has
-                       * committed before the thing hiding it goes away.
+                       * Both are screens in one stack now, so the company sheet rises over
+                       * the story and dismissing it puts the reader back exactly where they
+                       * were, mid-item. Closing first — which this did while the viewer was
+                       * a Modal, because nothing could cover a Modal — dropped them to the
+                       * feed on the way past.
                        */
                       // `group.id` is the company slug for company groups — §1.3(c) kept
                       // slugs as the URL through the move to uuid primary keys, and
                       // /company/[id] resolves one.
                       openCompany(storyGroup.id);
-                      requestAnimationFrame(onClose);
                     }
               }
               onToggleFollow={
@@ -293,8 +287,7 @@ export function StoryViewer({
             />
           )}
         />
-      </Animated.View>
-    </Modal>
+    </Animated.View>
   );
 }
 
