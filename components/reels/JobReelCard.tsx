@@ -62,6 +62,7 @@ interface JobReelCardProps {
   /** Company's real logo image, when available — falls back to job.companyLogo's monogram. */
   logoUrl?: string;
   commentCount: number;
+  likeCount: number;
   onLike: () => void;
   onComment: () => void;
   onMore: () => void;
@@ -81,6 +82,7 @@ export function JobReelCard({
   logoColor,
   logoUrl,
   commentCount,
+  likeCount,
   onLike,
   onComment,
   onMore,
@@ -324,6 +326,7 @@ export function JobReelCard({
         <ReelActionRail
           isLiked={job.isLiked}
           commentCount={commentCount}
+          likeCount={likeCount}
           onLike={handleLike}
           onComment={onComment}
           onMore={onMore}

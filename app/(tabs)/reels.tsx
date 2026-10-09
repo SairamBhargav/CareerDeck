@@ -31,7 +31,7 @@ import { MATCH_RING_SIZE, ResumeMatchRing } from '@/components/reels/ResumeMatch
 import { screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
-import { useCommentCounts } from '@/hooks/useComments';
+import { useCommentCounts, useLikeCounts } from '@/hooks/useComments';
 import { useResumes } from '@/hooks/useResumes';
 import { useDwellImpressions } from '@/hooks/useImpressions';
 import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds';
@@ -138,7 +138,9 @@ export default function ReelsScreen() {
    * a comment count is the second of those — folding it into `job_card` would make every feed page
    * uncacheable for a number nobody reads while scrolling. PHASE3.md §3.
    */
-  const commentCounts = useCommentCounts(useMemo(() => jobs.map((job) => job.id), [jobs]));
+  const visibleJobIds = useMemo(() => jobs.map((job) => job.id), [jobs]);
+  const commentCounts = useCommentCounts(visibleJobIds);
+  const likeCounts = useLikeCounts(visibleJobIds);
 
   // No company lookup any more: the feed payload carries the logo and brand colour on
   // each posting, because the query already joins `companies` to build the card.
@@ -416,6 +418,7 @@ export default function ReelsScreen() {
                   logoColor={item.companyLogoColor ?? undefined}
                   logoUrl={item.companyLogoUrl ?? undefined}
                   commentCount={commentCounts.get(item.id) ?? 0}
+                  likeCount={likeCounts.get(item.id) ?? 0}
                   onLike={() => toggleLike(item.id)}
                   onComment={() => setCommentsJob(item)}
                   onMore={() => setDetailsJob(item)}

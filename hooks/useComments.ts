@@ -9,6 +9,7 @@ import {
   fetchCommentGate,
   fetchCommentReplies,
   fetchCommentCounts,
+  fetchLikeCounts,
   fetchJobComments,
   postComment,
   type Page,
@@ -551,4 +552,31 @@ function bumpReplyCount(queryClient: QueryClient, jobId: string, parentId: strin
 
 function newKey(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Likes per posting, from everybody.
+ *
+ * Alongside `useCommentCounts` because it is the same read with a different table behind
+ * it, and the Deck wants both for the same twenty cards — two batched calls rather than
+ * forty.
+ *
+ * Unlike comments, these cannot be counted by the client at all: `job_interactions` is
+ * readable only by its owner, so the aggregate comes from a security-definer function that
+ * publishes the number without the rows.
+ */
+export function useLikeCounts(jobIds: string[]): Map<string, number> {
+  const key = useMemo(() => [...jobIds].sort().join(','), [jobIds]);
+
+  const query = useQuery({
+    queryKey: ['likes', 'counts', key],
+    queryFn: () => fetchLikeCounts(jobIds),
+    enabled: jobIds.length > 0,
+    // Decoration, like the comment counts. A number that moves by one does not justify a
+    // request per scroll.
+    staleTime: 60_000,
+  });
+
+  const empty = useMemo(() => new Map<string, number>(), []);
+  return query.data ?? empty;
 }

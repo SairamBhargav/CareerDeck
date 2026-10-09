@@ -5,6 +5,8 @@ import { fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 
 interface ReelActionRailProps {
+  /** Likes from everybody, not just this reader. Zero hides the number entirely. */
+  likeCount: number;
   isLiked: boolean;
   commentCount: number;
   onLike: () => void;
@@ -19,6 +21,7 @@ interface ReelActionRailProps {
 /** Vertical social-style rail on the right edge of a reel. */
 export function ReelActionRail({
   isLiked,
+  likeCount,
   commentCount,
   onLike,
   onComment,
@@ -34,7 +37,7 @@ export function ReelActionRail({
     <View style={styles.rail}>
       <RailAction
         icon={isLiked ? 'heart' : 'heart-outline'}
-        label="Like"
+        label={likeCount > 0 ? compactCount(likeCount) : undefined}
         active={isLiked}
         activeColor={colors.like}
         onPress={onLike}
@@ -42,9 +45,7 @@ export function ReelActionRail({
       />
       <RailAction
         icon="chatbubble-outline"
-        // The count is the label once there is one: the icon already says what this is,
-        // and how busy a thread is decides whether it's worth opening.
-        label={commentCount > 0 ? String(commentCount) : 'Comment'}
+        label={commentCount > 0 ? compactCount(commentCount) : undefined}
         onPress={onComment}
         accessibilityLabel={
           commentCount === 0
@@ -54,7 +55,6 @@ export function ReelActionRail({
       />
       <RailAction
         icon="ellipsis-horizontal"
-        label="More"
         onPress={onMore}
         accessibilityLabel={`More options for ${jobTitle}`}
       />
@@ -86,11 +86,23 @@ export function ReelActionRail({
 
 interface RailActionProps {
   icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
+  /**
+   * Shown under the mark. Omitted where there is nothing to say — a posting nobody has
+   * liked yet, and "More", which has never needed a word under three dots.
+   */
+  label?: string;
   onPress: () => void;
   accessibilityLabel: string;
   active?: boolean;
   activeColor?: string;
+}
+
+/** 1200 -> 1.2k. A rail is forty-four points wide and four digits do not fit in it. */
+function compactCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
 }
 
 function RailAction({ icon, label, onPress, accessibilityLabel, active = false, activeColor }: RailActionProps) {
@@ -111,7 +123,12 @@ function RailAction({ icon, label, onPress, accessibilityLabel, active = false, 
       <View style={styles.actionCircle}>
         <Ionicons name={icon} size={23} color={active ? activeColor ?? colors.text : colors.text} />
       </View>
-      <Text style={styles.actionLabel}>{label}</Text>
+      {/*
+        * No placeholder when there is no number. An empty line under the mark would hold
+        * the rail's spacing steady, which is tidier and a lie — it would read as a count
+        * of nothing rather than as an action nobody has taken yet.
+        */}
+      {label ? <Text style={styles.actionLabel}>{label}</Text> : null}
     </Pressable>
   );
 }
