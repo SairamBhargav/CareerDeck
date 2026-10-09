@@ -76,7 +76,7 @@ const END_REACHED_THRESHOLD = 8;
 export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { user, toggleLike, autoApplyCredits } = useCareerDeck();
+  const { user, toggleLike, autoApplyCredits, isFollowing, toggleFollow } = useCareerDeck();
   const { defaultResume } = useResumes(user?.id ?? null);
   /*
    * §5, finally wired up. "For You" is the ranked feed; it was `'recent'` — phase 1's
@@ -421,6 +421,8 @@ export default function ReelsScreen() {
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
                   onCompanyPress={() => openCompany(item.companySlug)}
+                  isFollowing={isFollowing(item.companySlug)}
+                  onToggleFollow={() => toggleFollow(item.companySlug)}
                   autoApplyCredits={autoApplyCredits}
                 />
               )}

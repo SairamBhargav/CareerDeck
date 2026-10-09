@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { fontSize, minTapTarget, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -105,8 +105,11 @@ function RailAction({ icon, label, onPress, accessibilityLabel, active = false, 
       accessibilityState={{ selected: active }}
       hitSlop={6}
       style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
-      <View style={[styles.actionCircle, active ? styles.actionCircleActive : null]}>
-        <Ionicons name={icon} size={22} color={active ? activeColor ?? colors.text : colors.text} />
+      {/* Liking now shows in the mark itself rather than in a plate behind it: the icon
+          swaps to the filled heart and takes the like colour. Which is the whole state,
+          where before the fill was doing the talking and the icon followed. */}
+      <View style={styles.actionCircle}>
+        <Ionicons name={icon} size={23} color={active ? activeColor ?? colors.text : colors.text} />
       </View>
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
@@ -123,22 +126,23 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.xs,
     minWidth: minTapTarget,
   },
+  /*
+   * The mark alone, with nothing drawn behind it.
+   *
+   * This was a lifted white plate per action — surface, hairline border and a soft shadow
+   * — on the argument that the icons float over a company-tinted card and need separating
+   * from it. They do not: the tint is seven percent in light and twenty in dark, so the
+   * card is very nearly the page, and the icons read against it on their own. Three
+   * shadowed discs stacked down the edge of a reel were the loudest thing on a screen
+   * whose job is to show one posting.
+   *
+   * The tap target is unchanged; it is the paint that went, not the area.
+   */
   actionCircle: {
     width: minTapTarget,
     height: minTapTarget,
-    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    // Floats on top of the company-tinted reel, so it needs the lifted control surface
-    // rather than a flat page surface.
-    backgroundColor: colors.controlSurface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    ...colors.shadowSoft,
-  },
-  actionCircleActive: {
-    backgroundColor: colors.likeSurface,
-    borderColor: colors.likeBorder,
   },
   actionLabel: {
     fontSize: fontSize.caption,

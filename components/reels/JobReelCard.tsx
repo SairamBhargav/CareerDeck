@@ -6,6 +6,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
+import { FollowButton } from '@/components/common/FollowButton';
 import { SkillChip } from '@/components/common/SkillChip';
 import { JobMetadata } from '@/components/jobs/JobMetadata';
 import { LikeBurst } from '@/components/reels/LikeBurst';
@@ -67,6 +68,8 @@ interface JobReelCardProps {
   onAutoApply: () => void;
   /** Tapping the logo or company name. */
   onCompanyPress: () => void;
+  isFollowing: boolean;
+  onToggleFollow: () => void;
   autoApplyCredits: number;
 }
 
@@ -83,6 +86,8 @@ export function JobReelCard({
   onMore,
   onAutoApply,
   onCompanyPress,
+  isFollowing,
+  onToggleFollow,
   autoApplyCredits,
 }: JobReelCardProps) {
   const { colors } = useTheme();
@@ -219,20 +224,42 @@ export function JobReelCard({
                 that pass; once the description is clamped, everything fits inside it. */}
             <View style={styles.contentInner} onLayout={capture('content')}>
               {/* The logo and name open the company's page, as a profile picture does. */}
-              <Pressable
-                onPress={onCompanyPress}
-                accessibilityRole="link"
-                accessibilityLabel={`Open ${job.companyName}'s page`}
-                hitSlop={6}
-                style={styles.companyRow}>
-                <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
-                <View style={styles.companyText}>
-                  <Text style={styles.companyName} numberOfLines={1}>
-                    {job.companyName}
-                  </Text>
-                  <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
-                </View>
-              </Pressable>
+              <View style={styles.companyRow}>
+                <Pressable
+                  onPress={onCompanyPress}
+                  accessibilityRole="link"
+                  accessibilityLabel={`Open ${job.companyName}'s page`}
+                  hitSlop={6}
+                  style={styles.companyIdentity}>
+                  <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
+                  <View style={styles.companyText}>
+                    <Text style={styles.companyName} numberOfLines={1}>
+                      {job.companyName}
+                    </Text>
+                    <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
+                  </View>
+                </Pressable>
+
+                {/*
+                  * Following, from the card itself.
+                  *
+                  * Until now the only way to follow from the Deck was to open the company
+                  * page and come back, which is a long way round for a decision made while
+                  * looking at the posting that prompted it. Beside the name rather than in
+                  * the rail: the rail is about this posting, and following is about who
+                  * wrote it.
+                  *
+                  * A sibling of the identity rather than inside it, so tapping follow does
+                  * not also open the company.
+                  */}
+                <FollowButton
+                  isFollowing={isFollowing}
+                  companyName={job.companyName}
+                  onToggle={onToggleFollow}
+                  size="sm"
+                  variant="minimal"
+                />
+              </View>
 
               <Text style={styles.title} numberOfLines={MAX_TITLE_LINES}>
                 {job.title}
@@ -349,6 +376,14 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.md,
   },
   companyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  // Takes the room the follow control does not, so a long company name truncates rather
+  // than pushing the control off the card.
+  companyIdentity: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
