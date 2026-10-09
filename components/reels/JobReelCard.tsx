@@ -249,7 +249,8 @@ export function JobReelCard({
                   * page and come back, which is a long way round for a decision made while
                   * looking at the posting that prompted it. Beside the name rather than in
                   * the rail: the rail is about this posting, and following is about who
-                  * wrote it.
+                  * wrote it. A bare plus, because the company it would follow is written
+                  * immediately to its left, and a label there says the same thing twice.
                   *
                   * A sibling of the identity rather than inside it, so tapping follow does
                   * not also open the company.
@@ -259,7 +260,7 @@ export function JobReelCard({
                   companyName={job.companyName}
                   onToggle={onToggleFollow}
                   size="sm"
-                  variant="minimal"
+                  variant="icon"
                 />
               </View>
 
