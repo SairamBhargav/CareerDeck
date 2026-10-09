@@ -75,6 +75,13 @@ export interface Palette {
   logoPlate: string;
 
   /** The floating tab bar's blurred capsule, dark in both schemes. */
+  /**
+   * The tab bar's own tint, behind its blur.
+   *
+   * Translucent on purpose: the bar used to sit on an opaque `surface`, which gave the
+   * blur a solid wall to sample and made a frosted material look like a painted one.
+   */
+  chromeFill: string;
   chromeSurface: string;
   chromeText: string;
   chromeTextMuted: string;
@@ -132,10 +139,14 @@ const lightPalette: Palette = {
 
   logoPlate: '#FFFFFF',
 
-  chromeSurface: 'rgba(255,255,255,0.06)',
-  chromeText: '#FFFFFF',
-  chromeTextMuted: 'rgba(255,255,255,0.48)',
-  chromeBorder: 'transparent',
+  chromeFill: 'rgba(255,255,255,0.14)',
+  // The selected capsule is lighter than the bar it sits in, which is what separates it
+  // without a second colour.
+  chromeSurface: 'rgba(255,255,255,0.75)',
+  chromeText: '#111114',
+  chromeTextMuted: 'rgba(17,17,20,0.46)',
+  // A visible rim. Frosted glass with no edge reads as a smudge rather than an object.
+  chromeBorder: 'rgba(255,255,255,0.72)',
 
   reelWashAlpha: 0.07,
   reelGlowAlpha: 0.22,
@@ -204,10 +215,11 @@ const darkPalette: Palette = {
 
   logoPlate: '#EEEEF2',
 
-  chromeSurface: 'rgba(255,255,255,0.10)',
+  chromeFill: 'rgba(12,12,16,0.14)',
+  chromeSurface: 'rgba(255,255,255,0.14)',
   chromeText: '#FFFFFF',
   chromeTextMuted: 'rgba(255,255,255,0.52)',
-  chromeBorder: 'rgba(255,255,255,0.12)',
+  chromeBorder: 'rgba(255,255,255,0.18)',
 
   reelWashAlpha: 0.2,
   reelGlowAlpha: 0.4,
