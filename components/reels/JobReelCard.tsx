@@ -226,43 +226,44 @@ export function JobReelCard({
                 that pass; once the description is clamped, everything fits inside it. */}
             <View style={styles.contentInner} onLayout={capture('content')}>
               {/* The logo and name open the company's page, as a profile picture does. */}
-              <View style={styles.companyRow}>
-                <Pressable
-                  onPress={onCompanyPress}
-                  accessibilityRole="link"
-                  accessibilityLabel={`Open ${job.companyName}'s page`}
-                  hitSlop={6}
-                  style={styles.companyIdentity}>
-                  <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
-                  <View style={styles.companyText}>
+              <Pressable
+                onPress={onCompanyPress}
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${job.companyName}'s page`}
+                hitSlop={6}
+                style={styles.companyRow}>
+                <CompanyLogo logo={logoUrl ?? job.companyLogo} name={job.companyName} color={logoColor} size="md" />
+                <View style={styles.companyText}>
+                  <View style={styles.nameLine}>
                     <Text style={styles.companyName} numberOfLines={1}>
                       {job.companyName}
                     </Text>
-                    <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
-                  </View>
-                </Pressable>
 
-                {/*
-                  * Following, from the card itself.
-                  *
-                  * Until now the only way to follow from the Deck was to open the company
-                  * page and come back, which is a long way round for a decision made while
-                  * looking at the posting that prompted it. Beside the name rather than in
-                  * the rail: the rail is about this posting, and following is about who
-                  * wrote it. A bare plus, because the company it would follow is written
-                  * immediately to its left, and a label there says the same thing twice.
-                  *
-                  * A sibling of the identity rather than inside it, so tapping follow does
-                  * not also open the company.
-                  */}
-                <FollowButton
-                  isFollowing={isFollowing}
-                  companyName={job.companyName}
-                  onToggle={onToggleFollow}
-                  size="sm"
-                  variant="icon"
-                />
-              </View>
+                    {/*
+                      * On the name's line, immediately after it.
+                      *
+                      * It used to sit at the far right of the card, because the identity
+                      * block took the remaining width — which meant a short company name
+                      * left the mark stranded halfway across the card with nothing between
+                      * them. Here it travels with the name: adjacent when the name is
+                      * short, and still adjacent when a long one truncates, because the
+                      * text shrinks and the mark does not.
+                      *
+                      * Nested inside the company Pressable, which the inner one wins — the
+                      * same arrangement the like button on a feed card already relies on.
+                      */}
+                    <FollowButton
+                      isFollowing={isFollowing}
+                      companyName={job.companyName}
+                      onToggle={onToggleFollow}
+                      size="sm"
+                      variant="icon"
+                    />
+                  </View>
+
+                  <Text style={styles.posted}>{formatPostedAt(job.postedAt)}</Text>
+                </View>
+              </Pressable>
 
               <Text style={styles.title} numberOfLines={MAX_TITLE_LINES}>
                 {job.title}
@@ -384,18 +385,20 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     gap: spacing.md,
   },
-  // Takes the room the follow control does not, so a long company name truncates rather
-  // than pushing the control off the card.
-  companyIdentity: {
-    flex: 1,
+  companyText: {
+    // Shrinks rather than grows: the row hugs its content, so nothing is pushed to the
+    // card's edge by a column that insisted on filling it.
+    flexShrink: 1,
+  },
+  nameLine: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
-  companyText: {
-    flex: 1,
+    gap: spacing.xs,
   },
   companyName: {
+    // The one element allowed to shrink, so a long name truncates and the mark beside it
+    // stays put rather than being pushed out of the row.
+    flexShrink: 1,
     fontSize: fontSize.title,
     fontWeight: '600',
     color: colors.text,
