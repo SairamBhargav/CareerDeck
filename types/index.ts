@@ -9,6 +9,8 @@ export type { Company } from './company';
 export type { User, UserIdentityEdit } from './user';
 export type { NewsItem, NewsCategory } from './news';
 export type {
+  MatchCapReason,
+  MatchRole,
   MatchScore,
   Resume,
   ResumeEducation,
