@@ -736,23 +736,29 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
           {gifOpen ? (
             <GestureDetector gesture={gifPan}>
               <Animated.View style={[styles.gifOverlay, gifOverlayStyle]}>
-                {/* The same grabber the sheet has, and now it means the same thing: this overlay
-                    drags down to go back. */}
-                <View style={styles.grabberZone}>
+                {/*
+                  * The grabber, and nothing else above the search box.
+                  *
+                  * There was a title and a close button here. The title said "Add a GIF" over a
+                  * grid of GIFs and a box that says Search KLIPY, which is a caption for something
+                  * already obvious, and the two of them cost a row of grid to say it.
+                  *
+                  * It is a Pressable as well as the drag handle, so the way out is not gesture-only
+                  * — a tap closes, and screen readers get a real control where otherwise there
+                  * would be none.
+                  */}
+                <Pressable
+                  onPress={closeGif}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close GIFs"
+                  style={styles.grabberZone}>
                   <View style={styles.grabber} />
-                </View>
-
-                <View style={styles.header}>
-                  <Text style={styles.title} accessibilityRole="header">
-                    Add a GIF
-                  </Text>
-                  <IconButton name="close" size={18} accessibilityLabel="Close GIFs" onPress={closeGif} />
-                </View>
+                </Pressable>
 
                 {/*
-                  * Exactly `screenPadding` each side, because that is what the picker assumes when
-                  * it works out a tile width from the window. The header brings its own padding, so
-                  * this cannot live on the overlay without doubling it.
+                  * Exactly `screenPadding` each side, because that is the inset the picker assumes
+                  * when it works out a tile width from the window. It lives here rather than on the
+                  * overlay so the grabber above still spans the full width.
                   */}
                 <View style={[styles.gifBody, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
                   <GifPicker
@@ -977,8 +983,19 @@ const useStyles = makeStyles((colors) => ({
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    /*
+     * Tighter than the `radius.xl` the app's other sheets use.
+     *
+     * A rounded top over a 45%-black backdrop cuts a wedge out of the white and fills it with the
+     * dimmed screen, and at 26pt that wedge is big enough next to the bright sheet to read as a
+     * smudge of shading rather than as background. 18 keeps the sheet reading as a sheet and takes
+     * roughly a third off it.
+     *
+     * The other fifteen sheets still use 26 and have the same wedge; this is the one that was
+     * noticed, not the only one.
+     */
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     overflow: 'hidden',
   },
   dragArea: {

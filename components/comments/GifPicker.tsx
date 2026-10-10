@@ -261,33 +261,36 @@ function KlipyPicker({ onPick, fill = false, scrollY, listGesture }: GifPickerPr
 
   return (
     <View style={fill ? styles.panelFill : styles.panel}>
-      <View style={styles.searchRow}>
-        <Ionicons name="search" size={15} color={colors.textTertiary} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search KLIPY"
-          placeholderTextColor={colors.textTertiary}
-          style={styles.search}
-          returnKeyType="search"
-          autoCorrect={false}
-          accessibilityLabel="Search GIFs"
-        />
-        {query.length > 0 ? (
-          <Pressable
-            onPress={() => setQuery('')}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Clear search">
-            <Ionicons name="close-circle" size={16} color={colors.textTertiary} />
-          </Pressable>
-        ) : null}
+      <View style={styles.searchLine}>
+        <View style={styles.searchRow}>
+          <Ionicons name="search" size={15} color={colors.textTertiary} />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search KLIPY"
+            placeholderTextColor={colors.textTertiary}
+            style={styles.search}
+            returnKeyType="search"
+            autoCorrect={false}
+            accessibilityLabel="Search GIFs"
+          />
+          {query.length > 0 ? (
+            <Pressable
+              onPress={() => setQuery('')}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={16} color={colors.textTertiary} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* KLIPY's terms require their branding wherever their content appears. Beside the search
+            box rather than on a line of its own, where it was costing the grid a row to say it. */}
+        <Text style={styles.attribution}>Powered by KLIPY</Text>
       </View>
 
       <View style={styles.results}>{body}</View>
-
-      {/* KLIPY's terms require their branding wherever their content appears. */}
-      <Text style={styles.attribution}>Powered by KLIPY</Text>
     </View>
   );
 }
@@ -343,7 +346,13 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     gap: spacing.sm,
   },
+  searchLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   searchRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -405,7 +414,6 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: spacing.sm,
   },
   attribution: {
-    alignSelf: 'flex-end',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.3,
