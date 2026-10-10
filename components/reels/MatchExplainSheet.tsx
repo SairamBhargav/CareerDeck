@@ -72,6 +72,9 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 /** How far down the blurred details the offer starts: enough of them shows above it to see what is there. */
 const OFFER_TOP = 96;
 
+/** An account with a larger allowance (20261033000000) gets the sentence only, not a row of dots. */
+const MAX_LOOK_DOTS = 5;
+
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 const ELIGIBILITY_CAPS = new Set<string>(['sponsorship', 'sponsorship_soft', 'citizenship', 'graduation']);
@@ -597,7 +600,7 @@ function Unlock({
 
   return (
     <View style={styles.unlock}>
-      {left !== null ? (
+      {left !== null && limit <= MAX_LOOK_DOTS ? (
         <View style={styles.looks} accessible accessibilityLabel={`${left} of ${limit} free looks left this week`}>
           {Array.from({ length: limit }, (_, i) => (
             <View key={i} style={[styles.lookDot, i >= left ? styles.lookDotUsed : null]} />
