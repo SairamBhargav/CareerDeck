@@ -33,6 +33,7 @@ import { CONTENT_POLICY_VERSION } from '@/constants/policy';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCommentActions, useCommentGate, useJobComments } from '@/hooks/useComments';
 import { reportGifShared } from '@/lib/klipy';
@@ -115,6 +116,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const { userId } = useAuth();
   const { threads, total, isLoading, hasMore, loadMore, openThread, openThreadIds, closeThread } =
     useJobComments(job?.id);
+  const router = useGuardedRouter();
   const { gate, acceptPolicy } = useCommentGate();
   const { post, remove, report } = useCommentActions(job?.id);
 
@@ -362,6 +364,24 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
    * muted, or banned.
    */
   const gateReason = reasonFor(gate);
+
+  /*
+   * Push, then close.
+   *
+   * This sheet is a native transparent Modal, so it draws above the navigator and a pushed
+   * screen cannot appear over it. Closing first would drop the reader onto the Deck for a
+   * beat before verification arrived; pushing first commits the route behind a sheet that
+   * is still covering everything, and the slide-down reveals it.
+   *
+   * The story viewer hit the same wall and took the other way out — it became a route
+   * (app/story.tsx) so the company sheet could rise over it without closing anything.
+   * That is the better fix when the thing underneath should survive the trip, and the
+   * wrong one here: somebody leaving to verify is done with this thread for now.
+   */
+  const openVerification = () => {
+    router.push('/verify');
+    requestAnimationFrame(dismiss);
+  };
   // Not blocked while an earlier comment is still in flight: it is already on screen, and each
   // comment carries its own idempotency key (useCommentActions), so two sends stay two comments.
   const canPost = draft.trim().length > 0;
@@ -521,7 +541,21 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
             {gateReason ? (
               <View style={styles.gateBanner}>
                 <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
-                <Text style={styles.gateText}>{gateReason}</Text>
+                <Text style={styles.gateText}>{gateReason.text}</Text>
+
+                {/* The one gate a reader can clear, with the way to clear it attached. It used
+                    to read "verify from your profile", which is an errand: three taps away, and
+                    only if they still remember why they went. */}
+                {gateReason.verify ? (
+                  <Pressable
+                    onPress={openVerification}
+                    accessibilityRole="button"
+                    accessibilityLabel="Verify your account"
+                    hitSlop={10}
+                    style={({ pressed }) => (pressed ? styles.gateActionPressed : undefined)}>
+                    <Text style={styles.gateAction}>Verify</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
 
@@ -639,17 +673,30 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
  * date, and a rate-limited one needs to know it is temporary. An unread policy is deliberately not
  * in here: that one is one tap away and the send button handles it.
  */
-function reasonFor(gate: CommentGate): string | null {
-  if (gate.banned) return 'This account can no longer comment.';
+/**
+ * Why this account cannot write, and whether there is anything it can do about it.
+ *
+ * Only one of these is actionable. Being banned, muted or over the hourly limit is a
+ * matter of waiting or of a decision already made elsewhere, and a button on those would
+ * promise a way out that does not exist. Being unverified is a thing a reader can fix in
+ * about a minute, so that one gets a door.
+ */
+function reasonFor(gate: CommentGate): { text: string; verify: boolean } | null {
+  if (gate.banned) return { text: 'This account can no longer comment.', verify: false };
   if (gate.mutedUntil !== null) {
     const until = new Date(gate.mutedUntil);
-    return `You cannot comment until ${until.toLocaleDateString()}.`;
+    return { text: `You cannot comment until ${until.toLocaleDateString()}.`, verify: false };
   }
   if (gate.tier !== 'edu' && gate.tier !== 'identity') {
-    return 'Verify your account from your profile to join the conversation.';
+    // No longer "from your profile": it is from here now.
+    return { text: 'Verify your account to join the conversation.', verify: true };
   }
-  if (gate.remainingHour <= 0) return 'You have posted a lot in the last hour. Try again later.';
-  if (gate.remainingDay <= 0) return 'You have posted a lot today. Try again tomorrow.';
+  if (gate.remainingHour <= 0) {
+    return { text: 'You have posted a lot in the last hour. Try again later.', verify: false };
+  }
+  if (gate.remainingDay <= 0) {
+    return { text: 'You have posted a lot today. Try again tomorrow.', verify: false };
+  }
   return null;
 }
 
@@ -670,6 +717,14 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.backgroundMuted,
+  },
+  gateAction: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  gateActionPressed: {
+    opacity: 0.6,
   },
   gateText: {
     flex: 1,
