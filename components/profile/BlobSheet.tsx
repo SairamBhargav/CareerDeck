@@ -24,6 +24,7 @@ import { chooseBlob, fetchBlobOptions } from '@/lib/api';
 import { reportError } from '@/lib/observability';
 
 const BIG = 112;
+const BLOB_OPTIONS_KEY = ['blobOptions'] as const;
 const OPTION = 76;
 
 interface BlobSheetProps {
@@ -55,11 +56,15 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
   const [notice, setNotice] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
+  // Read fresh every time the sheet opens, and dropped when it closes: the server keeps the offer,
+  // so this never rolls new ones, and a copy kept in memory goes stale the moment a change is spent
+  // or another phone refreshes. A stale copy is what made picks come back "not on offer".
   const options = useQuery({
-    queryKey: ['blobOptions'],
+    queryKey: BLOB_OPTIONS_KEY,
     queryFn: () => fetchBlobOptions(),
     enabled: changesLeft > 0,
-    staleTime: Infinity,
+    staleTime: 0,
+    gcTime: 0,
   });
   const left = options.data?.left ?? changesLeft;
 
@@ -76,13 +81,22 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
       void Haptics.selectionAsync();
       setPicked(null);
       setNotice(null);
-      queryClient.setQueryData(['blobOptions'], next);
+      queryClient.setQueryData(BLOB_OPTIONS_KEY, next);
     },
   });
 
   const choose = useMutation({
     mutationFn: (next: string) => chooseBlob(next),
-    onError: (error) => reportError(error, { where: 'BlobSheet.choose' }),
+    onError: (error) => {
+      // The offer moved on under us (another phone, or an old copy): show the current one.
+      if ((error as { message?: string }).message === 'not on offer') {
+        setPicked(null);
+        setNotice('Those had changed. Here are your current three.');
+        void options.refetch();
+        return;
+      }
+      reportError(error, { where: 'BlobSheet.choose' });
+    },
     onSuccess: (result) => {
       if (result.taken) {
         // Nothing was spent; the offer is gone, so fetch three more.
@@ -192,7 +206,7 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
           ) : null}
           {refresh.isError ? <Text style={styles.notice}>Couldn’t get more. Try again.</Text> : null}
 
-          {choose.isError ? <Text style={styles.notice}>That didn’t go through. Try again.</Text> : null}
+          {choose.isError && !notice ? <Text style={styles.notice}>That didn’t go through. Try again.</Text> : null}
 
           {left > 0 ? (
             <>
