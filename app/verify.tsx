@@ -1,7 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { type ComponentProps, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useReducedMotion,
+  ZoomIn,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
@@ -36,12 +42,15 @@ import { ServiceError, ServiceUnavailable } from '@/lib/service';
  * still honours the `identity` tier, so an account already verified that way keeps its badge and
  * its access — that tier is simply no longer reachable from this screen.
  */
+type EnteringAnimation = ComponentProps<typeof Animated.View>['entering'];
+
 export default function VerifyScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useStyles();
   const { userId } = useAuth();
   const verification = useVerification(userId);
+  const reduced = useReducedMotion();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -108,6 +117,12 @@ export default function VerifyScreen() {
   };
 
   const verified = verification.canComment;
+  /** Which of the three states the screen is in. The hero and the heading both follow it. */
+  const stage: HeroKind = verified ? 'verified' : sentTo === null ? 'start' : 'code';
+
+  /** Entrance choreography: the mark lands, then the words, then what there is to do. */
+  const enter = (delay: number): EnteringAnimation =>
+    reduced ? FadeIn.duration(200) : FadeInDown.duration(500).delay(delay).springify().dampingRatio(0.86);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -116,19 +131,61 @@ export default function VerifyScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Keyed on the stage so the mark replays its entrance when the screen moves on, rather
+            than swapping glyph silently underneath a circle that never moves. */}
+        <Hero key={stage} kind={stage} />
+
         <View style={styles.heading}>
-          <Text style={styles.title} accessibilityRole="header">
-            {verified ? 'You are verified' : 'Join the conversation'}
-          </Text>
-          <Text style={styles.subtitle}>
+          <Animated.Text entering={enter(140)} style={styles.title} accessibilityRole="header">
+            {verified
+              ? 'You are verified'
+              : stage === 'code'
+                ? 'Check your email'
+                : 'Join the conversation'}
+          </Animated.Text>
+          <Animated.Text entering={enter(200)} style={styles.subtitle}>
             {verified
               ? 'You can comment on postings. Your comments never show your name or your email.'
-              : 'Verifying lets you comment on postings. Everything else in CareerDeck already works without it.'}
-          </Text>
+              : stage === 'code'
+                ? `A six-digit code is on its way to ${sentTo?.email ?? ''}. It is good for 30 minutes.`
+                : 'Verifying lets you comment on postings. Everything else in CareerDeck already works without it.'}
+          </Animated.Text>
         </View>
 
+        {/*
+          What it gets you, before the form asks for anything.
+
+          The screen used to open on a title and an email box, which reads as a toll gate: you
+          cannot tell what you are buying until after you have paid. These are the three things
+          verifying changes, in the order somebody would ask about them — what opens up, who they
+          appear as, and what stays private. They go away once a code is out, because by then the
+          decision is made and the only thing that matters is the box.
+        */}
+        {stage === 'start' && verification.isConfigured ? (
+          <View style={styles.benefits}>
+            <Benefit
+              delay={280}
+              icon="chatbubble-ellipses-outline"
+              title="Comment on any posting"
+              note="Ask what the process was really like, and answer it for the next person."
+            />
+            <Benefit
+              delay={350}
+              icon="school-outline"
+              title="You appear as your major, school and year"
+              note="That is the whole of your byline, taken from the address you confirm."
+            />
+            <Benefit
+              delay={420}
+              icon="eye-off-outline"
+              title="Your name and address are never shown"
+              note="Other people see the badge and nothing behind it."
+            />
+          </View>
+        ) : null}
+
         {verified ? (
-          <View style={styles.card}>
+          <Animated.View entering={enter(260)} style={styles.card}>
             <View style={styles.cardHead}>
               <Ionicons name="shield-checkmark" size={20} color={colors.goalMet} />
               <Text style={styles.cardTitle}>
@@ -149,11 +206,11 @@ export default function VerifyScreen() {
                 then.
               </Text>
             ) : null}
-          </View>
+          </Animated.View>
         ) : null}
 
         {!verification.isConfigured ? (
-          <View style={styles.card}>
+          <Animated.View entering={enter(260)} style={styles.card}>
             <View style={styles.cardHead}>
               <Ionicons name="construct-outline" size={20} color={colors.textSecondary} />
               <Text style={styles.cardTitle}>Not available on this build</Text>
@@ -162,17 +219,14 @@ export default function VerifyScreen() {
               Verification needs the CareerDeck API service, which this build is not pointed at. Set
               EXPO_PUBLIC_API_URL and restart with --clear.
             </Text>
-          </View>
+          </Animated.View>
         ) : null}
 
         {!verified && verification.isConfigured ? (
-          <View style={styles.card}>
+          <Animated.View entering={enter(stage === 'code' ? 260 : 500)} style={styles.card}>
             {sentTo === null ? (
               <>
-                <Text style={styles.cardBody}>
-                  Use your university address. We send a code, and your comments then show your
-                  major, school and year — never your name or the address itself.
-                </Text>
+                <Text style={styles.cardLabel}>School email</Text>
                 <TextInput
                   value={email}
                   onChangeText={(text) => {
@@ -197,9 +251,6 @@ export default function VerifyScreen() {
               </>
             ) : (
               <>
-                <Text style={styles.cardBody}>
-                  We sent a six-digit code to {sentTo.email}. It is good for 30 minutes.
-                </Text>
                 {/* Only a development server with no mail provider returns the code. Shown here so
                     the flow is usable on a fresh clone; a production server refuses that path. */}
                 {sentTo.devCode ? (
@@ -235,14 +286,14 @@ export default function VerifyScreen() {
                 />
               </>
             )}
-          </View>
+          </Animated.View>
         ) : null}
 
         {error ? (
-          <View style={styles.error}>
+          <Animated.View entering={FadeIn.duration(180)} style={styles.error}>
             <Ionicons name="alert-circle-outline" size={16} color={colors.like} />
             <Text style={styles.errorText}>{error}</Text>
-          </View>
+          </Animated.View>
         ) : null}
 
         <Text style={styles.footnote}>
@@ -251,6 +302,73 @@ export default function VerifyScreen() {
         </Text>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+type HeroKind = 'start' | 'code' | 'verified';
+
+/**
+ * The mark at the top of the screen.
+ *
+ * The page opened on a title and an input, which is a form rather than a place — nothing held
+ * the top of it. This is the same ink disc the app fills a selected chip and the tab bar's active
+ * mark with, at the size where it reads as an anchor, and it follows the stage so the screen
+ * visibly moves: bubbles while this is still an invitation, an opened envelope once a code is out,
+ * the shield once it is done.
+ *
+ * The finished state is the only one that takes a colour, and it takes the one the app already
+ * uses for a goal that has been met. Nothing here borrows Auto Apply's violet: that colour means
+ * "paid" everywhere else, and verifying is free.
+ */
+function Hero({ kind }: { kind: HeroKind }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const reduced = useReducedMotion();
+
+  const done = kind === 'verified';
+
+  return (
+    <Animated.View
+      entering={
+        reduced ? FadeIn.duration(200) : ZoomIn.duration(420).delay(80).springify().dampingRatio(0.62)
+      }
+      style={[styles.heroDisc, done ? styles.heroDiscDone : null]}>
+      <Ionicons
+        name={done ? 'shield-checkmark' : kind === 'code' ? 'mail-open' : 'chatbubbles'}
+        size={28}
+        color={done ? colors.goalMet : colors.accentText}
+      />
+    </Animated.View>
+  );
+}
+
+interface BenefitProps {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  title: string;
+  note: string;
+  delay: number;
+}
+
+/** One of the three things verifying changes: an icon chip, the claim, and the detail under it. */
+function Benefit({ icon, title, note, delay }: BenefitProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const reduced = useReducedMotion();
+
+  return (
+    <Animated.View
+      entering={
+        reduced ? FadeIn.duration(200) : FadeInDown.duration(460).delay(delay).springify().dampingRatio(0.9)
+      }
+      style={styles.benefit}>
+      <View style={styles.benefitIcon}>
+        <Ionicons name={icon} size={15} color={colors.text} />
+      </View>
+      <View style={styles.benefitText}>
+        <Text style={styles.benefitTitle}>{title}</Text>
+        <Text style={styles.benefitNote}>{note}</Text>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -273,8 +391,19 @@ const useStyles = makeStyles((colors) => ({
     paddingBottom: spacing.xxl,
     gap: spacing.lg,
   },
+  heroDisc: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    marginTop: spacing.sm,
+  },
+  heroDiscDone: {
+    backgroundColor: colors.goalMetSurface,
+  },
   heading: {
-    paddingTop: spacing.sm,
     gap: 6,
   },
   title: {
@@ -286,6 +415,40 @@ const useStyles = makeStyles((colors) => ({
   subtitle: {
     fontSize: fontSize.small,
     lineHeight: 20,
+    color: colors.textTertiary,
+  },
+  benefits: {
+    // Its own band rather than a card: three facts about the app, not a control to operate.
+    gap: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  benefit: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  benefitIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+  },
+  benefitText: {
+    flex: 1,
+    gap: 2,
+    // Optical: the title's cap height sits a little above the centre of its chip otherwise.
+    paddingTop: 4,
+  },
+  benefitTitle: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  benefitNote: {
+    fontSize: fontSize.caption,
+    lineHeight: 17,
     color: colors.textTertiary,
   },
   card: {
@@ -305,6 +468,13 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.body,
     fontWeight: '700',
     color: colors.text,
+  },
+  cardLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: colors.textTertiary,
   },
   cardBody: {
     fontSize: fontSize.small,
