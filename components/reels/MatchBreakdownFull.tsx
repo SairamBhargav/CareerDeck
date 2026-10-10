@@ -695,12 +695,14 @@ const useStyles = makeStyles((colors) => ({
     fontVariant: ['tabular-nums'],
   },
 
+  // Room between chips on a row and between wrapped rows, so a long list doesn't read as one block.
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    columnGap: spacing.sm,
+    rowGap: spacing.sm,
   },
-  skillGroup: { gap: spacing.xs },
+  skillGroup: { gap: spacing.sm },
   groupTitle: {
     fontSize: fontSize.caption,
     fontWeight: '700',
@@ -749,9 +751,9 @@ const useStyles = makeStyles((colors) => ({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
     borderRadius: radius.pill,
     borderWidth: 1,
   },
