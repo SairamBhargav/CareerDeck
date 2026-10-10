@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   Image,
+  Keyboard,
   Modal,
   Pressable,
   StyleSheet,
@@ -196,6 +197,18 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   };
 
   const openGif = () => {
+    /*
+     * The keyboard goes first.
+     *
+     * Browsing is not typing, and the grid wants exactly the height the keys were using — on a
+     * normal phone that is most of the panel. The sheet is tied to `keyboard.height` (see
+     * `sheetStyle`), so dismissing here is also what lets it settle back to its own size instead
+     * of holding a keyboard-shaped gap behind a full-screen grid.
+     *
+     * Tapping a Pressable does not blur a focused TextInput on its own, so this has to be said.
+     */
+    Keyboard.dismiss();
+
     // Parked off the bottom first, so it does not appear already dragged away. The rise starts a
     // frame later, once the overlay is actually mounted — starting it here would animate through
     // frames that are not on screen yet.
