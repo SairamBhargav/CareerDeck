@@ -413,10 +413,20 @@ const useStyles = makeStyles((colors) => ({
   footer: {
     paddingVertical: spacing.sm,
   },
+  /*
+   * Present, not loud.
+   *
+   * The weight is what made this read as a badge; at 500 it sits beside the search box as a
+   * credit instead of competing with it.
+   *
+   * The colour does not move. `textTertiary` is 3.24:1 on the sheet, which is the 3:1 floor for
+   * text this size, and the next step lighter measures 2.36:1 — below legible, and a credit KLIPY
+   * requires is the last thing to make hard to read.
+   */
   attribution: {
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '500',
+    letterSpacing: 0.2,
     color: colors.textTertiary,
   },
   pressed: {
