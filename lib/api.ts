@@ -1366,6 +1366,32 @@ export async function fetchMatchLook(jobId: string, week: string): Promise<Match
   return toMatchLook(data);
 }
 
+export interface BlobOptions {
+  /** Changes left for the account's lifetime. */
+  left: number;
+  /** Three generated handles, each drawing a different blob. Empty when none are left. */
+  offers: string[];
+}
+
+/** The three blobs on offer. The same three until one is picked (20261034000000). */
+export async function fetchBlobOptions(): Promise<BlobOptions> {
+  const { data, error } = await supabase.rpc('blob_options');
+  if (error) throw error;
+  const row = (data ?? {}) as { left?: number; offers?: string[] };
+  return { left: row.left ?? 0, offers: row.offers ?? [] };
+}
+
+/**
+ * Takes one of the offered blobs and spends a change. `taken` (nothing spent) when someone else
+ * was given that handle in the meantime; the offer is cleared, so fetching again gives three new ones.
+ */
+export async function chooseBlob(handle: string): Promise<{ handle?: string; left: number; taken: boolean }> {
+  const { data, error } = await supabase.rpc('choose_blob', { p_handle: handle });
+  if (error) throw error;
+  const row = (data ?? {}) as { handle?: string; left?: number; taken?: boolean };
+  return { handle: row.handle, left: row.left ?? 0, taken: row.taken === true };
+}
+
 /** Spends a look on this posting, or confirms one already spent. `open: false` when none are left. */
 export async function claimMatchLook(jobId: string, week: string): Promise<MatchLook> {
   const { data, error } = await supabase.rpc('claim_match_look', { p_job_id: jobId, p_week: week });

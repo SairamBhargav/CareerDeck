@@ -36,6 +36,8 @@ interface ProfileHeaderProps {
    */
   streakWeeks: number;
   onEdit: () => void;
+  /** Tapping the blob: opens the sheet that swaps it (twice, ever). */
+  onAvatarPress?: () => void;
 }
 
 /**
@@ -54,6 +56,7 @@ export function ProfileHeader({
   onVerify,
   streakWeeks,
   onEdit,
+  onAvatarPress,
 }: ProfileHeaderProps) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -95,9 +98,15 @@ export function ProfileHeader({
 
         {/* The one large avatar in the app, so the one that breathes and blinks — unless the
             phone asks for reduced motion. Seeded from the pseudonym, as everywhere else. */}
-        <View style={styles.avatar}>
+        <Pressable
+          onPress={onAvatarPress}
+          disabled={!onAvatarPress}
+          accessibilityRole="button"
+          accessibilityLabel="Your blob"
+          accessibilityHint={user.blobChangesLeft > 0 ? 'Opens a choice of new ones' : undefined}
+          style={({ pressed }) => [styles.avatar, pressed ? styles.pressed : null]}>
           <AnimatedBlobatar name={user?.handle || 'careerdeck'} size={AVATAR_SIZE * 0.86} animate={!reduceMotion} />
-        </View>
+        </Pressable>
 
         {onStreak ? (
           <Animated.View entering={FadeIn.duration(320).delay(180)} style={styles.flame}>
