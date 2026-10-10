@@ -1,89 +1,63 @@
-import { Text, View } from 'react-native';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import { View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
-import { fontSize, radius, spacing } from '@/constants/theme';
+import { radius, spacing } from '@/constants/theme';
 import { makeStyles } from '@/context/ThemeContext';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 
-/** Logos past this many would only crowd the strip; the count says the rest. */
-const MAX_LOGOS = 4;
+/** Past this many the stack stops reading as a row of logos and starts reading as a wall. */
+const MAX_LOGOS = 6;
 
 /**
- * What the four steps collected, as one line on the sign-up screen: the companies just
- * followed, and "3 interests · 7 a week · 2 following".
+ * The companies just followed, as an overlapping row of logos under the sign-up title.
  *
- * It is what "Save your picks." refers to. Without it the title points at something the
- * screen does not show, and the email field reads as a gate rather than a save button.
+ * It is what "Save your picks." refers to. Logos only, no line of counts: the companies
+ * are the part of onboarding somebody recognises at a glance, and a sentence of numbers
+ * under a title reads as a receipt.
  */
 export function PicksRecap() {
   const styles = useStyles();
-  const { industries, weeklyGoal, followedCompanySlugs } = useOnboarding();
+  const { followedCompanySlugs } = useOnboarding();
   const directory = useCompanyDirectory();
-
-  if (industries.length === 0 && followedCompanySlugs.length === 0) return null;
 
   const logos = followedCompanySlugs
     .map((slug) => directory.bySlug.get(slug))
     .filter((company) => company !== undefined)
     .slice(0, MAX_LOGOS);
 
-  const parts = [
-    `${industries.length} ${industries.length === 1 ? 'interest' : 'interests'}`,
-    `${weeklyGoal} a week`,
-    ...(followedCompanySlugs.length > 0 ? [`${followedCompanySlugs.length} following`] : []),
-  ];
+  if (logos.length === 0) return null;
 
   return (
-    <Animated.View entering={FadeIn.duration(320).delay(120)} style={styles.strip}>
-      {logos.length > 0 ? (
-        <View style={styles.logos}>
-          {logos.map((company, index) => (
-            <Animated.View
-              key={company.id}
-              entering={ZoomIn.duration(240).delay(200 + index * 70)}
-              style={[styles.logo, index > 0 ? styles.logoOverlap : null]}>
-              <CompanyLogo logo={company.logo} name={company.name} color={company.logoColor} size="sm" />
-            </Animated.View>
-          ))}
-        </View>
-      ) : null}
-      <Text style={styles.text} numberOfLines={1}>
-        {parts.join(' · ')}
-      </Text>
-    </Animated.View>
+    <View
+      style={styles.row}
+      accessible
+      accessibilityLabel={`Following ${logos.map((company) => company.name).join(', ')}`}>
+      {logos.map((company, index) => (
+        <Animated.View
+          key={company.id}
+          entering={ZoomIn.duration(240).delay(160 + index * 70)}
+          style={[styles.logo, index > 0 ? styles.logoOverlap : null]}>
+          <CompanyLogo logo={company.logo} name={company.name} color={company.logoColor} size="sm" />
+        </Animated.View>
+      ))}
+    </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
-  strip: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: spacing.md - 2,
-    marginTop: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.backgroundMuted,
+    marginTop: spacing.md,
   },
-  logos: {
-    flexDirection: 'row',
-  },
-  // A ring in the strip's own colour, so overlapping logos read as a stack, not a smear.
+  // A ring in the page's own colour, so overlapping logos read as a stack, not a smear.
   logo: {
-    borderRadius: radius.md,
+    borderRadius: radius.md + 2,
     borderWidth: 2,
-    borderColor: colors.backgroundMuted,
+    borderColor: colors.background,
   },
   logoOverlap: {
-    marginLeft: -10,
-  },
-  text: {
-    flexShrink: 1,
-    fontSize: fontSize.small,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    marginLeft: -8,
   },
 }));
