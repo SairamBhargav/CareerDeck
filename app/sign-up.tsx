@@ -224,8 +224,11 @@ export default function SignUpScreen() {
                 </>
               ) : null}
 
+              {/* "later" was true until the signup address itself became the edu verification
+                  (20261032000000). Confirming a school address here now grants the tier outright,
+                  so there is nothing left to come back for. */}
               <Text style={styles.footnote}>
-                Any email works to sign in. A school address unlocks commenting later.
+                Any email works to sign in. A school address also unlocks commenting.
               </Text>
             </View>
           ) : (
