@@ -173,7 +173,7 @@ export default function VerifyScreen() {
               delay={350}
               icon="school-outline"
               title="You appear as your major, school and year"
-              note="That is the whole of your byline, taken from the address you confirm."
+              note="Taken from the address you confirm. That and your blob is all anybody sees."
             />
             <Benefit
               delay={420}
