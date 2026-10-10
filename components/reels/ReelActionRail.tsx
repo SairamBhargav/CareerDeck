@@ -14,6 +14,7 @@ interface ReelActionRailProps {
   commentCount: number;
   onLike: () => void;
   onComment: () => void;
+  onShare: () => void;
   onMore: () => void;
   onAutoApply: () => void;
   jobTitle: string;
@@ -28,6 +29,7 @@ export function ReelActionRail({
   commentCount,
   onLike,
   onComment,
+  onShare,
   onMore,
   onAutoApply,
   jobTitle,
@@ -62,6 +64,7 @@ export function ReelActionRail({
           }
         />
       </TourAnchor>
+      <RailAction icon="arrow-redo-outline" onPress={onShare} accessibilityLabel={`Share ${jobTitle}`} />
       <RailAction
         icon="ellipsis-horizontal"
         onPress={onMore}

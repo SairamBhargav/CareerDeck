@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -11,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { SkillChip } from '@/components/common/SkillChip';
 import { ApplicationAnswersSheet } from '@/components/profile/ApplicationAnswersSheet';
+import { BlobSheet } from '@/components/profile/BlobSheet';
 import { EditProfileSheet } from '@/components/profile/EditProfileSheet';
 import { PreferencesSheet } from '@/components/profile/PreferencesSheet';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
@@ -18,6 +20,7 @@ import { fontSize, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles } from '@/context/ThemeContext';
 import { useApplicationAnswers } from '@/hooks/useApplicationAnswers';
+import { profileKey } from '@/hooks/useProfile';
 import { useResumes } from '@/hooks/useResumes';
 import type { ApplicationAnswers } from '@/lib/api';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
@@ -56,6 +59,8 @@ export default function ProfileScreen() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingPreferences, setEditingPreferences] = useState(false);
   const [editingAnswers, setEditingAnswers] = useState(false);
+  const [changingBlob, setChangingBlob] = useState(false);
+  const queryClient = useQueryClient();
 
   // The root layout holds the splash until the profile has loaded and shows an error
   // screen if it can't, so this screen is never reached without one. Narrowing the type
@@ -146,6 +151,7 @@ export default function ProfileScreen() {
           onVerify={() => router.push('/verify')}
           streakWeeks={goal.streakWeeks}
           onEdit={() => setEditingProfile(true)}
+          onAvatarPress={() => setChangingBlob(true)}
         />
 
         <Animated.View entering={FadeInDown.duration(300).delay(150)}>
@@ -195,6 +201,19 @@ export default function ProfileScreen() {
             setEditingAnswers(false);
           }}
           onClose={() => setEditingAnswers(false)}
+        />
+      ) : null}
+
+      {changingBlob ? (
+        <BlobSheet
+          handle={user.handle}
+          changesLeft={user.blobChangesLeft}
+          onChanged={() => {
+            // The blob is drawn from the handle wherever it appears: the profile, and every comment.
+            if (userId) void queryClient.invalidateQueries({ queryKey: profileKey(userId) });
+            void queryClient.invalidateQueries({ queryKey: ['comments'] });
+          }}
+          onClose={() => setChangingBlob(false)}
         />
       ) : null}
 

@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
@@ -16,8 +17,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
+import { MarqueeText } from '@/components/common/MarqueeText';
 import { MATCH_COLOR_STOPS } from '@/components/reels/ResumeMatchRing';
-import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import {
   capLine,
@@ -34,6 +36,7 @@ import {
   tierLine,
   type Breakdown,
   type MatchPart,
+  type Suggestion,
 } from '@/lib/matchScore';
 import type { Job, MatchScore, Resume } from '@/types';
 
@@ -212,15 +215,7 @@ export function FullDetails({
           <Section icon="shield-checkmark-outline" title="Eligibility">
             {eligibility.map((row) => (
               <View key={row.id} style={styles.verdict}>
-                <Ionicons
-                  name={
-                    row.status === 'ok' ? 'checkmark-circle'
-                      : row.status === 'blocked' ? 'close-circle'
-                        : row.status === 'ask' ? 'help-circle-outline' : 'information-circle-outline'
-                  }
-                  size={20}
-                  color={row.status === 'blocked' ? colors.danger : row.status === 'ok' ? colors.text : colors.textTertiary}
-                />
+                <Mark kind={row.status === 'ok' ? 'ok' : row.status === 'blocked' ? 'blocked' : row.status === 'ask' ? 'ask' : 'info'} />
                 <View style={styles.roleText}>
                   <Text style={styles.roleTitle}>{row.title}</Text>
                   <Text style={styles.small}>{row.line}</Text>
@@ -247,15 +242,12 @@ export function FullDetails({
                 const entry = resume?.profile.experience[role.index];
                 return (
                   <View key={role.index} style={styles.role}>
-                    <View style={styles.roleIcon}>
-                      <Ionicons name={role.relevance >= 0.99 ? 'checkmark' : 'git-branch-outline'} size={14} color={colors.text} />
-                    </View>
+                    <Mark kind={role.relevance >= 0.99 ? 'ok' : 'related'} />
                     <View style={styles.roleText}>
-                      <Text style={styles.roleTitle} numberOfLines={1}>
-                        {entry?.title ?? 'A past role'}
-                        {entry?.company ? <Text style={styles.roleCompany}> · {entry.company}</Text> : null}
-                      </Text>
+                      {/* The title alone travels when it doesn't fit; the company moves to the line under it. */}
+                      <MarqueeText style={styles.roleTitle}>{entry?.title ?? 'A past role'}</MarqueeText>
                       <Text style={styles.small}>
+                        {entry?.company ? `${entry.company} · ` : ''}
                         {role.relevance >= 0.99 ? 'Same field' : `Related: ${FAMILY_LABELS[role.family] ?? role.family}`}
                         {role.months ? ` · ${role.months} mo` : ''}
                       </Text>
@@ -295,17 +287,7 @@ export function FullDetails({
       <Animated.View entering={enter(4)}>
         <Section icon="trending-up-outline" title="How to raise it">
           {ideas.length > 0 ? (
-            ideas.map((idea) => (
-              <View key={idea.id} style={styles.idea}>
-                <View style={styles.ideaText}>
-                  <Text style={styles.ideaTitle}>{idea.title}</Text>
-                  <Text style={styles.small}>{idea.body}</Text>
-                </View>
-                <View style={styles.gain}>
-                  <Text style={styles.gainText}>+{idea.gain}</Text>
-                </View>
-              </View>
-            ))
+            <RaiseIt score={match.score} ideas={ideas} reduced={reduced} />
           ) : (
             <Text style={styles.body}>Nothing big left to fix. This is about as high as this posting goes for you.</Text>
           )}
@@ -465,19 +447,118 @@ function Chip({ label, have, fromWork = false }: { label: string; have: boolean;
 
 function Verdict({ good, title, line }: { good: boolean; title: string; line: string }) {
   const styles = useStyles();
-  const { colors } = useTheme();
   return (
     <View style={styles.verdict}>
-      <Ionicons
-        name={good ? 'checkmark-circle' : 'remove-circle-outline'}
-        size={20}
-        color={good ? colors.text : colors.textTertiary}
-      />
+      <Mark kind={good ? 'ok' : 'muted'} />
       <View style={styles.roleText}>
         <Text style={styles.roleTitle}>{title}</Text>
         <Text style={styles.small}>{line}</Text>
       </View>
     </View>
+  );
+}
+
+type MarkKind = 'ok' | 'blocked' | 'ask' | 'info' | 'muted' | 'related';
+
+const MARK_ICONS: Record<MarkKind, keyof typeof Ionicons.glyphMap> = {
+  ok: 'checkmark',
+  blocked: 'close',
+  ask: 'help',
+  info: 'information',
+  muted: 'remove',
+  related: 'git-branch-outline',
+};
+
+/**
+ * Every status mark on the sheet: one plate, the glyph inside saying what it is. Eligibility and
+ * Field used to draw a solid black disc while Experience drew a check on a white one, which read
+ * as two kinds of yes.
+ */
+function Mark({ kind }: { kind: MarkKind }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const color = kind === 'blocked' ? colors.danger : kind === 'ok' || kind === 'related' ? colors.text : colors.textTertiary;
+  return (
+    <View style={styles.mark}>
+      <Ionicons name={MARK_ICONS[kind]} size={14} color={color} />
+    </View>
+  );
+}
+
+/**
+ * The changes as a what-if: the bar shows the score now and what the picked changes add, and
+ * tapping a change takes it in or out. All picked to start. Each change is priced on its own
+ * (suggestions() in lib/matchScore.ts), so the total is their sum held under the ceiling, and
+ * says "about".
+ */
+function RaiseIt({ score, ideas, reduced }: { score: number; ideas: Suggestion[]; reduced: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(ideas.map((idea) => idea.id)));
+
+  const gain = ideas.reduce((sum, idea) => sum + (picked.has(idea.id) ? idea.gain : 0), 0);
+  const target = Math.min(MATCH_CEILING, score + gain);
+
+  const added = useSharedValue(reduced ? target - score : 0);
+  useEffect(() => {
+    const to = target - score;
+    added.set(reduced ? to : withTiming(to, { duration: 450, easing: Easing.out(Easing.cubic) }));
+  }, [added, target, score, reduced]);
+  const addedStyle = useAnimatedStyle(() => ({ width: `${added.value}%` }));
+
+  const toggle = (id: string) => {
+    void Haptics.selectionAsync();
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const count = picked.size;
+  const caption =
+    count === 0 ? 'Pick a change to see what it adds'
+      : count === ideas.length ? (ideas.length === 1 ? 'with this change' : `with all ${ideas.length}`)
+        : `with ${count} of ${ideas.length}`;
+
+  return (
+    <>
+      <View style={styles.raiseHead} accessible accessibilityLabel={`From ${score} to about ${target}, ${caption}`}>
+        <Text style={styles.raiseNow}>{score}</Text>
+        <Ionicons name="arrow-forward" size={16} color={colors.textTertiary} />
+        <Text style={[styles.raiseTarget, count === 0 ? styles.raiseTargetIdle : null]}>
+          {count === 0 ? score : `~${target}`}
+        </Text>
+        <Text style={styles.raiseCaption}>{caption}</Text>
+      </View>
+      <View style={styles.raiseTrack}>
+        <View style={[styles.raiseNowFill, { width: `${score}%` }]} />
+        <Animated.View style={[styles.raiseAddFill, addedStyle]} />
+      </View>
+
+      {ideas.map((idea) => {
+        const on = picked.has(idea.id);
+        return (
+          <Pressable
+            key={idea.id}
+            onPress={() => toggle(idea.id)}
+            style={({ pressed }) => [styles.idea, pressed ? styles.pressed : null]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={`${idea.title}, plus ${idea.gain}`}>
+            <View style={[styles.pick, on ? styles.pickOn : null]}>
+              {on ? <Ionicons name="checkmark" size={14} color={colors.goalMet} /> : null}
+            </View>
+            <View style={styles.ideaText}>
+              <Text style={[styles.ideaTitle, on ? null : styles.ideaOff]}>{idea.title}</Text>
+              <Text style={styles.small}>{idea.body}</Text>
+            </View>
+            <Text style={[styles.gainText, on ? null : styles.gainOff]}>+{idea.gain}</Text>
+          </Pressable>
+        );
+      })}
+    </>
   );
 }
 
@@ -516,10 +597,6 @@ const useStyles = makeStyles((colors) => ({
     height: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.borderStrong,
-  },
-  content: {
-    paddingHorizontal: screenPadding,
-    gap: spacing.md,
   },
   pressed: { opacity: 0.75 },
 
@@ -695,12 +772,14 @@ const useStyles = makeStyles((colors) => ({
     fontVariant: ['tabular-nums'],
   },
 
+  // Room between chips on a row and between wrapped rows, so a long list doesn't read as one block.
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    columnGap: spacing.sm,
+    rowGap: spacing.sm,
   },
-  skillGroup: { gap: spacing.xs },
+  skillGroup: { gap: spacing.sm },
   groupTitle: {
     fontSize: fontSize.caption,
     fontWeight: '700',
@@ -749,9 +828,9 @@ const useStyles = makeStyles((colors) => ({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
     borderRadius: radius.pill,
     borderWidth: 1,
   },
@@ -778,7 +857,7 @@ const useStyles = makeStyles((colors) => ({
     alignItems: 'center',
     gap: spacing.md,
   },
-  roleIcon: {
+  mark: {
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -792,40 +871,82 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: '700',
     color: colors.text,
   },
-  roleCompany: {
-    fontWeight: '500',
-    color: colors.textSecondary,
-  },
   verdict: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-
-  idea: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
+
+  raiseHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  raiseNow: {
+    fontSize: fontSize.title,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
+  },
+  raiseTarget: {
+    fontSize: fontSize.title,
+    fontWeight: '800',
+    color: colors.goalMet,
+    fontVariant: ['tabular-nums'],
+  },
+  raiseTargetIdle: { color: colors.textTertiary },
+  raiseCaption: {
+    flex: 1,
+    fontSize: fontSize.small,
+    color: colors.textSecondary,
+  },
+  raiseTrack: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  raiseNowFill: {
+    height: '100%',
+    backgroundColor: colors.text,
+  },
+  raiseAddFill: {
+    height: '100%',
+    backgroundColor: colors.goalMet,
+  },
+  idea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  // The what-if's tick: the same plate as Mark, ringed while it counts towards the bar.
+  pick: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+  },
+  pickOn: { borderColor: colors.goalMet },
   ideaText: { flex: 1, gap: 2 },
   ideaTitle: {
     fontSize: fontSize.body,
     fontWeight: '700',
     color: colors.text,
   },
-  gain: {
-    minWidth: 48,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-  },
+  ideaOff: { color: colors.textSecondary },
   gainText: {
-    fontSize: fontSize.small,
+    fontSize: fontSize.body,
     fontWeight: '800',
-    color: colors.accentText,
+    color: colors.goalMet,
     fontVariant: ['tabular-nums'],
   },
+  gainOff: { color: colors.textTertiary },
 
   footnote: {
     marginTop: spacing.xs,

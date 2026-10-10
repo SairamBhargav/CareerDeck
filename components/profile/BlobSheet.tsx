@@ -1,0 +1,369 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { AnimatedBlobatar } from '@blobatar/react-native/animated';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeIn,
+  SlideInDown,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+  ZoomIn,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { PrimaryButton } from '@/components/common/PrimaryButton';
+import { Spinner } from '@/components/common/Spinner';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
+import { chooseBlob, fetchBlobOptions } from '@/lib/api';
+import { reportError } from '@/lib/observability';
+
+const BIG = 112;
+const BLOB_OPTIONS_KEY = ['blobOptions'] as const;
+const OPTION = 76;
+
+interface BlobSheetProps {
+  /** The handle the current blob is drawn from. */
+  handle: string;
+  /** Changes left, from the profile. The server's answer replaces it once it arrives. */
+  changesLeft: number;
+  /** A new blob was taken: the caller refreshes the profile. */
+  onChanged: () => void;
+  onClose: () => void;
+}
+
+/**
+ * Swapping your blob, twice in a lifetime (20261034000000).
+ *
+ * Three new ones are on offer; tapping one shows it full size in place of yours, and "Use this
+ * one" spends a change. The refresh button swaps in three more, five times per change. "Keep
+ * mine" costs nothing, and the same three are there next time. The changes left sit beside the
+ * title throughout. With no changes left it just says so.
+ *
+ * Mounted only while open, like the other Profile sheets.
+ */
+export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheetProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  const [picked, setPicked] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+  // Read fresh every time the sheet opens, and dropped when it closes: the server keeps the offer,
+  // so this never rolls new ones, and a copy kept in memory goes stale the moment a change is spent
+  // or another phone refreshes. A stale copy is what made picks come back "not on offer".
+  const options = useQuery({
+    queryKey: BLOB_OPTIONS_KEY,
+    queryFn: () => fetchBlobOptions(),
+    enabled: changesLeft > 0,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const left = options.data?.left ?? changesLeft;
+
+  // "Three more": a new offer replaces the one shown, and any pick from the old one goes.
+  const spin = useSharedValue(0);
+  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
+  const refresh = useMutation({
+    mutationFn: () => {
+      if (!reduced) spin.set(withTiming(spin.get() + 360, { duration: 500, easing: Easing.out(Easing.cubic) }));
+      return fetchBlobOptions(true);
+    },
+    onError: (error) => reportError(error, { where: 'BlobSheet.refresh' }),
+    onSuccess: (next) => {
+      void Haptics.selectionAsync();
+      setPicked(null);
+      setNotice(null);
+      queryClient.setQueryData(BLOB_OPTIONS_KEY, next);
+    },
+  });
+
+  const choose = useMutation({
+    mutationFn: (next: string) => chooseBlob(next),
+    onError: (error) => {
+      // The offer moved on under us (another phone, or an old copy): show the current one.
+      if ((error as { message?: string }).message === 'not on offer') {
+        setPicked(null);
+        setNotice('Those had changed. Here are your current three.');
+        void options.refetch();
+        return;
+      }
+      reportError(error, { where: 'BlobSheet.choose' });
+    },
+    onSuccess: (result) => {
+      if (result.taken) {
+        // Nothing was spent; the offer is gone, so fetch three more.
+        setPicked(null);
+        setNotice('Someone just got that one. Here are three more.');
+        void options.refetch();
+        return;
+      }
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onChanged();
+      onClose();
+    },
+  });
+
+  const shown = picked ?? handle;
+  const offers = options.data?.offers ?? [];
+  const refreshesLeft = options.data?.refreshes ?? 0;
+
+  let line: string;
+  if (left <= 0) line = 'You’ve used both changes. This one’s yours for good.';
+  else if (left === 1) line = 'Tap one to try it on. This is your last change.';
+  else line = 'Tap one to try it on.';
+  const changesLabel = left <= 0 ? 'No changes left' : `${left} ${left === 1 ? 'change' : 'changes'} left`;
+
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+      <Animated.View entering={FadeIn.duration(160)} style={StyleSheet.absoluteFill}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      </Animated.View>
+
+      <View style={styles.lift} pointerEvents="box-none">
+        <Animated.View
+          entering={SlideInDown.duration(260)}
+          style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <View style={styles.grabber} />
+
+          <View style={styles.head}>
+            <Text style={styles.title} accessibilityRole="header">
+              Your blob
+            </Text>
+            <View style={[styles.changes, left <= 0 ? styles.changesOut : null]}>
+              <Text style={[styles.changesLabel, left <= 0 ? styles.changesLabelOut : null]}>{changesLabel}</Text>
+            </View>
+          </View>
+
+          <View style={styles.stage}>
+            {/* Keyed on the handle, so picking another one pops it in rather than morphing. */}
+            <Animated.View key={shown} entering={reduced ? undefined : ZoomIn.springify().damping(14)} style={styles.big}>
+              <AnimatedBlobatar name={shown || 'careerdeck'} size={BIG * 0.86} animate={!reduced} />
+            </Animated.View>
+            <Text style={styles.stageLabel}>{picked ? 'New' : 'Yours now'}</Text>
+          </View>
+
+          <Text style={styles.line}>{line}</Text>
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+          {left > 0 ? (
+            options.isLoading || options.isRefetching || refresh.isPending ? (
+              <View style={styles.optionsLoading}>
+                <Spinner size={22} />
+              </View>
+            ) : options.isError ? (
+              <Pressable onPress={() => void options.refetch()} accessibilityRole="button" style={styles.optionsLoading}>
+                <Text style={styles.notice}>Couldn’t load new blobs. Tap to try again.</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.options}>
+                {offers.map((offer) => {
+                  const selected = offer === picked;
+                  return (
+                    <Pressable
+                      key={offer}
+                      onPress={() => {
+                        void Haptics.selectionAsync();
+                        setPicked(selected ? null : offer);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={selected ? 'New blob, picked' : 'New blob'}
+                      style={({ pressed }) => [styles.option, selected ? styles.optionPicked : null, pressed ? styles.pressed : null]}>
+                      <AnimatedBlobatar name={offer} size={OPTION * 0.78} animate={false} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )
+          ) : null}
+
+          {left > 0 && options.data ? (
+            <View style={styles.refreshRow}>
+              <Pressable
+                onPress={() => refresh.mutate()}
+                disabled={refreshesLeft === 0 || refresh.isPending}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={refreshesLeft === 0 ? 'No refreshes left until your next change' : `Refresh, ${refreshesLeft} left`}
+                accessibilityState={{ disabled: refreshesLeft === 0 }}
+                style={({ pressed }) => [styles.refresh, refreshesLeft === 0 ? styles.refreshOff : null, pressed ? styles.pressed : null]}>
+                <Animated.View style={spinStyle}>
+                  <Ionicons name="refresh" size={20} color={refreshesLeft === 0 ? colors.textTertiary : colors.text} />
+                </Animated.View>
+                <View style={[styles.refreshBadge, refreshesLeft === 0 ? styles.refreshBadgeOff : null]}>
+                  <Text style={styles.refreshBadgeText}>{refreshesLeft}</Text>
+                </View>
+              </Pressable>
+            </View>
+          ) : null}
+          {refresh.isError ? <Text style={styles.notice}>Couldn’t get more. Try again.</Text> : null}
+
+          {choose.isError && !notice ? <Text style={styles.notice}>That didn’t go through. Try again.</Text> : null}
+
+          {left > 0 ? (
+            <>
+              <PrimaryButton
+                label="Use this one"
+                onPress={() => picked && choose.mutate(picked)}
+                disabled={!picked}
+                loading={choose.isPending}
+              />
+              <PrimaryButton label="Keep mine" variant="ghost" onPress={onClose} />
+            </>
+          ) : (
+            <PrimaryButton label="Done" onPress={onClose} />
+          )}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+const useStyles = makeStyles((colors) => ({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  lift: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    gap: spacing.md,
+    paddingHorizontal: screenPadding,
+    paddingTop: spacing.sm,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    backgroundColor: colors.surface,
+  },
+  grabber: {
+    alignSelf: 'center',
+    width: 38,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.borderStrong,
+    marginBottom: spacing.xs,
+  },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  changes: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+  },
+  changesOut: { backgroundColor: colors.backgroundMuted },
+  changesLabel: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.accentText,
+    fontVariant: ['tabular-nums'],
+  },
+  changesLabelOut: { color: colors.textTertiary },
+  title: {
+    fontSize: fontSize.heading,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.4,
+  },
+  stage: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  big: {
+    width: BIG,
+    height: BIG,
+    borderRadius: BIG / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+  },
+  stageLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.textTertiary,
+  },
+  line: {
+    fontSize: fontSize.body,
+    lineHeight: 21,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  notice: {
+    fontSize: fontSize.small,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  options: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  optionsLoading: {
+    height: OPTION + spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  option: {
+    width: OPTION,
+    height: OPTION,
+    borderRadius: OPTION / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  optionPicked: {
+    borderColor: colors.text,
+  },
+  refreshRow: { alignItems: 'center' },
+  refresh: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.backgroundMuted,
+  },
+  refreshOff: { opacity: 0.6 },
+  // How many refreshes are left, on the button's corner.
+  refreshBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  refreshBadgeOff: { backgroundColor: colors.textTertiary },
+  refreshBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.accentText,
+    fontVariant: ['tabular-nums'],
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+}));

@@ -29,3 +29,6 @@ export const FREE_RESUME_LIMIT = 3;
  * the one that is enforced; this copy is for words on screen before the server has answered.
  */
 export const FREE_MATCH_LOOKS = 3;
+
+/** Times an account can swap its blob, ever. Mirrors `blob_change_limit()` (20261034000000). */
+export const BLOB_CHANGE_LIMIT = 2;

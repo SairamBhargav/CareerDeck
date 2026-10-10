@@ -288,6 +288,7 @@ export default function TourScreen() {
                     onComment={() => {
                       if (isNvidia && step === 3) setSheet('comments');
                     }}
+                    onShare={() => undefined}
                     onMore={() => undefined}
                     onAutoApply={() => {
                       if (isNvidia && step === 5) setSheet('apply');
