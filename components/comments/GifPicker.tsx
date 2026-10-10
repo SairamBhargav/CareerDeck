@@ -1,18 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { GestureDetector, type NativeGesture } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  type SharedValue,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -58,6 +54,16 @@ interface GifPickerProps {
    * task at that point, so the grid gets the room and the thread waits underneath.
    */
   fill?: boolean;
+  /**
+   * Where the grid is scrolled to, published for the parent.
+   *
+   * The sheet's drag-to-dismiss may only engage while the grid is at its top; below that a
+   * downward drag is somebody scrolling back up through GIFs. Same contract the comment thread
+   * has with the same gesture.
+   */
+  scrollY?: SharedValue<number>;
+  /** The parent's `Gesture.Native()` stand-in, so its pan and this scroll recognise together. */
+  listGesture?: NativeGesture;
 }
 
 /**
@@ -66,12 +72,38 @@ interface GifPickerProps {
  * With no KLIPY key on the build it is the eight bundled reactions, as it was before. The two are
  * never shown together, because KLIPY's terms keep their results in a grid of their own.
  */
-export function GifPicker({ onPick, fill = false }: GifPickerProps) {
+export function GifPicker({ onPick, fill = false, scrollY, listGesture }: GifPickerProps) {
   return isKlipyConfigured ? (
-    <KlipyPicker onPick={onPick} fill={fill} />
+    <KlipyPicker onPick={onPick} fill={fill} scrollY={scrollY} listGesture={listGesture} />
   ) : (
-    <BundledPicker onPick={onPick} fill={fill} />
+    <BundledPicker onPick={onPick} fill={fill} scrollY={scrollY} listGesture={listGesture} />
   );
+}
+
+/**
+ * The grid's scroller: an `Animated.ScrollView`, handed to the parent's native gesture when there
+ * is one so its pan and this scroll recognise simultaneously instead of cancelling each other.
+ */
+function Scroller({
+  listGesture,
+  onScroll,
+  children,
+}: {
+  listGesture?: NativeGesture;
+  onScroll?: ReturnType<typeof useAnimatedScrollHandler>;
+  children: React.ReactNode;
+}) {
+  const view = (
+    <Animated.ScrollView
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}>
+      {children}
+    </Animated.ScrollView>
+  );
+
+  return listGesture ? <GestureDetector gesture={listGesture}>{view}</GestureDetector> : view;
 }
 
 /**
@@ -127,7 +159,7 @@ function toColumns(gifs: KlipyGif[], columns: number): KlipyGif[][] {
   return out;
 }
 
-function KlipyPicker({ onPick, fill = false }: GifPickerProps) {
+function KlipyPicker({ onPick, fill = false, scrollY, listGesture }: GifPickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const queryClient = useQueryClient();
@@ -137,17 +169,37 @@ function KlipyPicker({ onPick, fill = false }: GifPickerProps) {
 
   const tileWidth = useTileWidth(KLIPY_COLUMNS);
 
+  const requestMore = () => {
+    if (hasMore && !isLoadingMore) loadMore();
+  };
+
   /*
    * A masonry cannot be a FlatList: `numColumns` lays out in rows, and a row is as tall as its
    * tallest cell, which is the square-tile problem again with extra gaps. So the scrolling is ours,
    * and so is noticing the end of it.
+   *
+   * On the UI thread, because the offset it publishes is read by a gesture that also runs there —
+   * a JS-thread handler would have the pan deciding "is the grid at its top" from a frame-old
+   * answer, which is wrong exactly when somebody flicks up and immediately drags down.
    */
-  const onScroll = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!hasMore || isLoadingMore) return;
-    const { contentOffset, contentSize, layoutMeasurement } = nativeEvent;
-    const remaining = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    if (remaining < LOAD_MORE_SLACK) loadMore();
-  };
+  const asked = useSharedValue(false);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    'worklet';
+    if (scrollY) scrollY.set(event.contentOffset.y);
+
+    const remaining =
+      event.contentSize.height - (event.contentOffset.y + event.layoutMeasurement.height);
+    // Latched, so nearing the end asks once rather than on every frame of the glide. It clears
+    // itself as soon as the content grows or the reader scrolls back up.
+    if (remaining < LOAD_MORE_SLACK) {
+      if (!asked.value) {
+        asked.value = true;
+        runOnJS(requestMore)();
+      }
+    } else {
+      asked.value = false;
+    }
+  });
 
   let body: React.ReactNode;
   if (isLoading) {
@@ -172,11 +224,7 @@ function KlipyPicker({ onPick, fill = false }: GifPickerProps) {
     );
   } else {
     body = (
-      <ScrollView
-        onScroll={onScroll}
-        scrollEventThrottle={64}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+      <Scroller listGesture={listGesture} onScroll={onScroll}>
         <View style={styles.masonry}>
           {toColumns(gifs, KLIPY_COLUMNS).map((column, index) => (
             // The key is the column slot, not its contents — there are exactly `columns` of them
@@ -207,7 +255,7 @@ function KlipyPicker({ onPick, fill = false }: GifPickerProps) {
         </View>
 
         {isLoadingMore ? <ActivityIndicator style={styles.footer} color={colors.textTertiary} /> : null}
-      </ScrollView>
+      </Scroller>
     );
   }
 
@@ -251,13 +299,18 @@ function KlipyPicker({ onPick, fill = false }: GifPickerProps) {
  * on screen without scrolling. It gets the same panel height as the search grid so that opening the
  * picker moves the composer by the same amount either way.
  */
-function BundledPicker({ onPick, fill = false }: GifPickerProps) {
+function BundledPicker({ onPick, fill = false, scrollY, listGesture }: GifPickerProps) {
   const styles = useStyles();
   const tileWidth = useTileWidth(BUNDLED_COLUMNS);
 
+  const onScroll = useAnimatedScrollHandler((event) => {
+    'worklet';
+    if (scrollY) scrollY.set(event.contentOffset.y);
+  });
+
   return (
     <View style={fill ? styles.panelFill : styles.panel}>
-      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <Scroller listGesture={listGesture} onScroll={onScroll}>
         <View style={styles.bundled}>
           {reactionGifs.map((gif) => (
             <Pressable
@@ -275,7 +328,7 @@ function BundledPicker({ onPick, fill = false }: GifPickerProps) {
             </Pressable>
           ))}
         </View>
-      </ScrollView>
+      </Scroller>
     </View>
   );
 }

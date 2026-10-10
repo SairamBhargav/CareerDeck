@@ -176,6 +176,57 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     scrollY.set(event.contentOffset.y);
   });
 
+  /*
+   * The GIF overlay drags down to go back, the same way the sheet itself drags down to close.
+   *
+   * Its own offset and its own scroll tracking, because the two gestures have to be able to
+   * disagree: dragging the overlay away should not also be dragging the sheet shut, and the grid
+   * underneath has a scroll position of its own that decides when the drag is allowed to start.
+   */
+  const gifTranslateY = useSharedValue(0);
+  const gifScrollY = useSharedValue(0);
+
+  const gifListGesture = Gesture.Native();
+
+  const closeGif = () => {
+    gifTranslateY.set(withTiming(sheetHeight, CLOSE, (finished) => {
+      'worklet';
+      if (finished) runOnJS(setGifOpen)(false);
+    }));
+  };
+
+  const openGif = () => {
+    // Parked off the bottom first, so it does not appear already dragged away. The rise starts a
+    // frame later, once the overlay is actually mounted — starting it here would animate through
+    // frames that are not on screen yet.
+    gifTranslateY.set(sheetHeight);
+    setGifOpen(true);
+    requestAnimationFrame(() => gifTranslateY.set(withTiming(0, OPEN)));
+  };
+
+  // Mirrors the sheet's pan: downward only, and only from the top of the grid, so dragging
+  // through a scrolled grid scrolls it instead of throwing the picker away.
+  const gifPan = Gesture.Pan()
+    .activeOffsetY(10)
+    .failOffsetY(-10)
+    .simultaneousWithExternalGesture(gifListGesture)
+    .onUpdate((event) => {
+      'worklet';
+      if (gifScrollY.value <= 0) gifTranslateY.set(Math.max(0, event.translationY));
+    })
+    .onEnd((event) => {
+      'worklet';
+      if (gifTranslateY.value > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY) {
+        runOnJS(closeGif)();
+      } else {
+        gifTranslateY.set(withTiming(0, OPEN));
+      }
+    });
+
+  const gifOverlayStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: gifTranslateY.value }],
+  }));
+
   // Stands in for the list's own native pan so the two recognise simultaneously rather
   // than cancelling each other out.
   const listGesture = Gesture.Native();
@@ -341,8 +392,9 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const handlePickGif = (gifId: string, slug?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPendingGif(slug === undefined ? { id: gifId } : { id: gifId, slug });
-    // Back to the thread, with the GIF waiting in the composer. The grid has done its job.
-    setGifOpen(false);
+    // Back to the thread, with the GIF waiting in the composer. The grid has done its job, and it
+    // leaves the way a drag would so the two exits look like the same door.
+    closeGif();
     inputRef.current?.focus();
   };
 
@@ -621,7 +673,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
               />
 
               <Pressable
-                onPress={() => setGifOpen((open) => !open)}
+                onPress={gifOpen ? closeGif : openGif}
                 disabled={gateReason !== null}
                 hitSlop={6}
                 accessibilityRole="button"
@@ -669,33 +721,36 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
             * button in the header.
             */}
           {gifOpen ? (
-            <View style={styles.gifOverlay}>
-              {/* No grabber here. The drag gesture is deliberately outside this overlay, so a
-                  grabber would be an affordance for something that cannot happen; the spacer keeps
-                  the header off the sheet's top edge without promising a drag. */}
-              <View style={styles.gifTopSpacer} />
+            <GestureDetector gesture={gifPan}>
+              <Animated.View style={[styles.gifOverlay, gifOverlayStyle]}>
+                {/* The same grabber the sheet has, and now it means the same thing: this overlay
+                    drags down to go back. */}
+                <View style={styles.grabberZone}>
+                  <View style={styles.grabber} />
+                </View>
 
-              <View style={styles.header}>
-                <Text style={styles.title} accessibilityRole="header">
-                  Add a GIF
-                </Text>
-                <IconButton
-                  name="close"
-                  size={18}
-                  accessibilityLabel="Close GIFs"
-                  onPress={() => setGifOpen(false)}
-                />
-              </View>
+                <View style={styles.header}>
+                  <Text style={styles.title} accessibilityRole="header">
+                    Add a GIF
+                  </Text>
+                  <IconButton name="close" size={18} accessibilityLabel="Close GIFs" onPress={closeGif} />
+                </View>
 
-              {/*
-                * Exactly `screenPadding` each side, because that is what the picker assumes when
-                * it works out a tile width from the window. The header brings its own padding, so
-                * this cannot live on the overlay without doubling it.
-                */}
-              <View style={[styles.gifBody, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-                <GifPicker fill onPick={handlePickGif} />
-              </View>
-            </View>
+                {/*
+                  * Exactly `screenPadding` each side, because that is what the picker assumes when
+                  * it works out a tile width from the window. The header brings its own padding, so
+                  * this cannot live on the overlay without doubling it.
+                  */}
+                <View style={[styles.gifBody, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+                  <GifPicker
+                    fill
+                    onPick={handlePickGif}
+                    scrollY={gifScrollY}
+                    listGesture={gifListGesture}
+                  />
+                </View>
+              </Animated.View>
+            </GestureDetector>
           ) : null}
         </Animated.View>
       </View>
@@ -981,10 +1036,6 @@ const useStyles = makeStyles((colors) => ({
     right: 0,
     bottom: 0,
     backgroundColor: colors.surface,
-  },
-  // Stands in for grabberZone's height, so the header lands where the thread's header does.
-  gifTopSpacer: {
-    height: spacing.md + spacing.xs + 4,
   },
   gifBody: {
     flex: 1,
