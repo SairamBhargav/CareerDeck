@@ -17,7 +17,7 @@ import Animated, {
 import { Circle, Svg } from 'react-native-svg';
 
 import { MATCH_COLOR_STOPS } from '@/components/reels/ResumeMatchRing';
-import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import {
   capLine,
@@ -516,10 +516,6 @@ const useStyles = makeStyles((colors) => ({
     height: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.borderStrong,
-  },
-  content: {
-    paddingHorizontal: screenPadding,
-    gap: spacing.md,
   },
   pressed: { opacity: 0.75 },
 

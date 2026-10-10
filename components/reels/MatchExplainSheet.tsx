@@ -206,7 +206,7 @@ export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade, onOp
               scrollEventThrottle={16}
               bounces={false}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}>
+              contentContainerStyle={[styles.content, open ? styles.contentOpen : null, { paddingBottom: insets.bottom + spacing.xl }]}>
               {open ? (
                 // Open (Pro, or a free look spent): the full breakdown exactly as it was.
                 <>
@@ -744,6 +744,9 @@ const useStyles = makeStyles((colors) => ({
   content: {
     paddingHorizontal: screenPadding,
   },
+  // The open view is a stack of separate cards (MatchBreakdownFull); the locked view divides its
+  // sections with hairlines and needs no gap.
+  contentOpen: { gap: spacing.md },
   pressed: { opacity: 0.6 },
 
   // Hero: ring on the left, what it means on the right.
