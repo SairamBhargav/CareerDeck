@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Circle, Svg } from 'react-native-svg';
+import { Circle, Defs, LinearGradient, Rect, Stop, Svg } from 'react-native-svg';
 
 import { FullDetails, FullHero } from '@/components/reels/MatchBreakdownFull';
 import { MATCH_COLOR_STOPS } from '@/components/reels/ResumeMatchRing';
@@ -69,8 +69,8 @@ const RING_STROKE = 9;
 const RING_RADIUS = (RING - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-/** How much of the locked details shows through the blur: enough to see what is there, not read it. */
-const LOCKED_PEEK = 220;
+/** How far down the blurred details the offer starts: enough of them shows above it to see what is there. */
+const OFFER_TOP = 96;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -96,7 +96,7 @@ const lookKey = (jobId: string, week: string) => ['match-look', jobId, week] as 
  * breakdown in MatchBreakdownFull.tsx, unchanged.
  *
  * Locked (a free reader who hasn't): the score and how it adds up, readable; the rest blurred
- * beneath, with the offer below it (20261025000000_match_free_looks.sql). This locked view is
+ * beneath, with the offer laid over the blur (20261025000000_match_free_looks.sql). This locked view is
  * kept plain on purpose: sections divided by hairlines rather than boxed, no icons on headings,
  * and nothing animates in except the ring drawing to its number.
  *
@@ -228,17 +228,17 @@ export function MatchExplainSheet({ job, match, resume, onClose, onUpgrade, onOp
                 <>
                   <Hero job={job} score={match.score} reduced={reduced} warning={blocking} />
                   <AddsUp parts={parts} jobFamily={match.components.jobFamily} />
-                  <Locked>
-                    <Details job={job} match={match} resume={resume} onOpenProfile={() => undefined} />
+                  <Locked details={<Details job={job} match={match} resume={resume} onOpenProfile={() => undefined} />}>
+                    <Unlock
+                      score={match.score}
+                      look={look.data}
+                      failed={look.isError}
+                      claiming={claim.isPending}
+                      claimFailed={claim.isError}
+                      onUseLook={() => claim.mutate()}
+                      onUpgrade={() => leave(onUpgrade)}
+                    />
                   </Locked>
-                  <Unlock
-                    look={look.data}
-                    failed={look.isError}
-                    claiming={claim.isPending}
-                    claimFailed={claim.isError}
-                    onUseLook={() => claim.mutate()}
-                    onUpgrade={() => leave(onUpgrade)}
-                  />
                 </>
               )}
 
@@ -524,28 +524,46 @@ function Details({
 // ── free readers ─────────────────────────────────────────────────────────────────
 
 /**
- * The details, cut to a peek and blurred: enough to see that there are skills, roles and a list of
- * changes, not enough to read them. Hidden from screen readers, which would read through the blur.
+ * The details blurred, with the offer (`children`) laid over them. The blur thickens into the sheet
+ * towards the bottom, so the top shows that there are skills, roles and a list of changes, and the
+ * offer stays readable below. The zone is as tall as the offer; the details are clipped to it.
+ * Hidden from screen readers, which would read through the blur.
  */
-function Locked({ children }: { children: ReactNode }) {
+function Locked({ details, children }: { details: ReactNode; children: ReactNode }) {
   const styles = useStyles();
-  const { scheme } = useTheme();
+  const { colors, scheme } = useTheme();
   return (
     <View style={styles.locked}>
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
-        {children}
-      </View>
-      <BlurView
-        intensity={scheme === 'dark' ? 45 : 32}
-        tint={scheme === 'dark' ? 'dark' : 'light'}
-        blurMethod="dimezisBlurViewSdk31Plus"
+      <View
         style={StyleSheet.absoluteFill}
-      />
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none">
+        {details}
+        <BlurView
+          intensity={scheme === 'dark' ? 50 : 40}
+          tint={scheme === 'dark' ? 'dark' : 'light'}
+          blurMethod="dimezisBlurViewSdk31Plus"
+          style={StyleSheet.absoluteFill}
+        />
+        <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+          <Defs>
+            <LinearGradient id="locked-fade" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={colors.surface} stopOpacity={0} />
+              <Stop offset="0.35" stopColor={colors.surface} stopOpacity={0.55} />
+              <Stop offset="0.85" stopColor={colors.surface} stopOpacity={1} />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#locked-fade)" />
+        </Svg>
+      </View>
+      {children}
     </View>
   );
 }
 
 function Unlock({
+  score,
   look,
   failed,
   claiming,
@@ -553,6 +571,7 @@ function Unlock({
   onUseLook,
   onUpgrade,
 }: {
+  score: number;
   look: MatchLook | undefined;
   failed: boolean;
   claiming: boolean;
@@ -565,23 +584,28 @@ function Unlock({
   const left = look ? Math.max(0, limit - look.used) : null;
   const outOfLooks = left === 0;
 
-  let title: string;
+  let title = `See what’s holding this at ${score}`;
   let line: string;
   if (failed || left === null) {
-    title = 'Skills, experience and what would raise this';
     line = failed ? 'We couldn’t check your free looks just now.' : `Free accounts can open ${limit} a week.`;
   } else if (outOfLooks) {
     title = 'No free looks left this week';
     line = `You get ${limit} more on Monday. Pro opens every posting.`;
   } else {
-    title = `${left} free ${left === 1 ? 'look' : 'looks'} left this week`;
-    line = 'Open the skills you’re missing, your relevant experience and what would raise this score.';
+    line = `Missing skills, the roles that counted and what would raise it. ${left} free ${left === 1 ? 'look' : 'looks'} left this week.`;
   }
 
   return (
     <View style={styles.unlock}>
+      {left !== null ? (
+        <View style={styles.looks} accessible accessibilityLabel={`${left} of ${limit} free looks left this week`}>
+          {Array.from({ length: limit }, (_, i) => (
+            <View key={i} style={[styles.lookDot, i >= left ? styles.lookDotUsed : null]} />
+          ))}
+        </View>
+      ) : null}
       <Text style={styles.unlockTitle}>{title}</Text>
-      <Text style={styles.small}>{line}</Text>
+      <Text style={[styles.small, styles.centered]}>{line}</Text>
       {claimFailed ? <Text style={styles.error}>That didn’t go through. Try again.</Text> : null}
 
       {left !== null && !outOfLooks ? (
@@ -937,25 +961,48 @@ const useStyles = makeStyles((colors) => ({
   },
 
   locked: {
-    height: LOCKED_PEEK,
     overflow: 'hidden',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
+  // The offer, centred on the blur: buttons stretch, text centres.
   unlock: {
-    paddingTop: spacing.lg,
+    paddingTop: OFFER_TOP,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
     gap: spacing.sm,
+    alignItems: 'center',
+  },
+  looks: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
+  lookDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.text,
+  },
+  lookDotUsed: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
   },
   unlockTitle: {
     fontSize: fontSize.title,
     fontWeight: '700',
     color: colors.text,
+    textAlign: 'center',
   },
+  centered: { textAlign: 'center' },
   error: {
     fontSize: fontSize.small,
     color: colors.danger,
+    textAlign: 'center',
   },
   primaryButton: {
+    alignSelf: 'stretch',
     marginTop: spacing.sm,
     paddingVertical: 14,
     borderRadius: radius.pill,
@@ -968,6 +1015,7 @@ const useStyles = makeStyles((colors) => ({
     color: colors.accentText,
   },
   textButton: {
+    alignSelf: 'stretch',
     paddingVertical: 12,
     alignItems: 'center',
   },
