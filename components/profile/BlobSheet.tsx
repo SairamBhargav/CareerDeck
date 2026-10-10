@@ -1,5 +1,6 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { AnimatedBlobatar } from '@blobatar/react-native/animated';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -9,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { Spinner } from '@/components/common/Spinner';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
-import { makeStyles } from '@/context/ThemeContext';
+import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { chooseBlob, fetchBlobOptions } from '@/lib/api';
 
 const BIG = 112;
@@ -29,25 +30,38 @@ interface BlobSheetProps {
  * Swapping your blob, twice in a lifetime (20261034000000).
  *
  * Three new ones are on offer; tapping one shows it full size in place of yours, and "Use this
- * one" spends a change. "Keep mine" costs nothing, and the same three are there next time, so
- * opening this is never a gamble. With no changes left it just says so.
+ * one" spends a change. "Show me three more" swaps the offer, three times per change. "Keep mine"
+ * costs nothing, and the same three are there next time. With no changes left it just says so.
  *
  * Mounted only while open, like the other Profile sheets.
  */
 export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheetProps) {
   const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const [picked, setPicked] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
   const options = useQuery({
     queryKey: ['blobOptions'],
-    queryFn: fetchBlobOptions,
+    queryFn: () => fetchBlobOptions(),
     enabled: changesLeft > 0,
     staleTime: Infinity,
   });
   const left = options.data?.left ?? changesLeft;
+
+  // "Three more": a new offer replaces the one shown, and any pick from the old one goes.
+  const refresh = useMutation({
+    mutationFn: () => fetchBlobOptions(true),
+    onSuccess: (next) => {
+      void Haptics.selectionAsync();
+      setPicked(null);
+      setNotice(null);
+      queryClient.setQueryData(['blobOptions'], next);
+    },
+  });
 
   const choose = useMutation({
     mutationFn: (next: string) => chooseBlob(next),
@@ -67,6 +81,7 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
 
   const shown = picked ?? handle;
   const offers = options.data?.offers ?? [];
+  const refreshesLeft = options.data?.refreshes ?? 0;
 
   let line: string;
   if (left <= 0) line = 'You’ve used both changes. This one’s yours for good.';
@@ -101,7 +116,7 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
           {left > 0 ? (
-            options.isLoading || options.isRefetching ? (
+            options.isLoading || options.isRefetching || refresh.isPending ? (
               <View style={styles.optionsLoading}>
                 <Spinner size={22} />
               </View>
@@ -131,6 +146,23 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
               </View>
             )
           ) : null}
+
+          {left > 0 && options.data ? (
+            <Pressable
+              onPress={() => refresh.mutate()}
+              disabled={refreshesLeft === 0 || refresh.isPending}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: refreshesLeft === 0 }}
+              style={({ pressed }) => [styles.refresh, pressed ? styles.pressed : null]}>
+              <Ionicons name="shuffle" size={15} color={refreshesLeft === 0 ? colors.textTertiary : colors.text} />
+              <Text style={[styles.refreshLabel, refreshesLeft === 0 ? styles.refreshLabelOff : null]}>
+                {refreshesLeft === 0
+                  ? 'No more until your next change'
+                  : `Show me three more · ${refreshesLeft} left`}
+              </Text>
+            </Pressable>
+          ) : null}
+          {refresh.isError ? <Text style={styles.notice}>Couldn’t get more. Try again.</Text> : null}
 
           {choose.isError ? <Text style={styles.notice}>That didn’t go through. Try again.</Text> : null}
 
@@ -239,6 +271,22 @@ const useStyles = makeStyles((colors) => ({
   optionPicked: {
     borderColor: colors.text,
   },
+  refresh: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.backgroundMuted,
+  },
+  refreshLabel: {
+    fontSize: fontSize.small,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  refreshLabelOff: { color: colors.textTertiary },
   pressed: {
     opacity: 0.7,
   },

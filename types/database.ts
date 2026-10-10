@@ -1932,6 +1932,7 @@ export type Database = {
           avatar_color: string
           blob_changes: number
           blob_offers: string[] | null
+          blob_refreshes: number
           comment_badge: string | null
           content_policy_accepted_at: string | null
           content_policy_version: string | null
@@ -1957,6 +1958,7 @@ export type Database = {
           avatar_color?: string
           blob_changes?: number
           blob_offers?: string[] | null
+          blob_refreshes?: number
           comment_badge?: string | null
           content_policy_accepted_at?: string | null
           content_policy_version?: string | null
@@ -1982,6 +1984,7 @@ export type Database = {
           avatar_color?: string
           blob_changes?: number
           blob_offers?: string[] | null
+          blob_refreshes?: number
           comment_badge?: string | null
           content_policy_accepted_at?: string | null
           content_policy_version?: string | null
@@ -3159,7 +3162,7 @@ export type Database = {
       // Hand-added with 20261025000000_match_free_looks.sql.
       match_look_state: { Args: { p_job_id: string; p_week: string }; Returns: Json }
       claim_match_look: { Args: { p_job_id: string; p_week: string }; Returns: Json }
-      blob_options: { Args: never; Returns: Json }
+      blob_options: { Args: { p_refresh?: boolean }; Returns: Json }
       choose_blob: { Args: { p_handle: string }; Returns: Json }
       is_moderator: { Args: { p_user_id: string }; Returns: boolean }
       job_comments: {

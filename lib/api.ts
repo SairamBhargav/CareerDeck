@@ -1371,14 +1371,19 @@ export interface BlobOptions {
   left: number;
   /** Three generated handles, each drawing a different blob. Empty when none are left. */
   offers: string[];
+  /** "Three more" left before the next change. */
+  refreshes: number;
 }
 
-/** The three blobs on offer. The same three until one is picked (20261034000000). */
-export async function fetchBlobOptions(): Promise<BlobOptions> {
-  const { data, error } = await supabase.rpc('blob_options');
+/**
+ * The three blobs on offer: the same three until one is picked, or until `refresh` asks for three
+ * more and one is left (20261034000000).
+ */
+export async function fetchBlobOptions(refresh = false): Promise<BlobOptions> {
+  const { data, error } = await supabase.rpc('blob_options', { p_refresh: refresh });
   if (error) throw error;
-  const row = (data ?? {}) as { left?: number; offers?: string[] };
-  return { left: row.left ?? 0, offers: row.offers ?? [] };
+  const row = (data ?? {}) as { left?: number; offers?: string[]; refreshes?: number };
+  return { left: row.left ?? 0, offers: row.offers ?? [], refreshes: row.refreshes ?? 0 };
 }
 
 /**
