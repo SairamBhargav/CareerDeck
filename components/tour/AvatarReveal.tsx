@@ -16,7 +16,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { usePaywallColors } from '@/components/paywall/palette';
 import { fontSize, radius, spacing } from '@/constants/theme';
@@ -37,18 +37,23 @@ const MOTES: [number, number, 'violet' | 'magenta' | 'gold', number][] = [
 ];
 
 interface AvatarRevealProps {
-  handle: string;
+  /** Draws the blob — the account's generated handle, never shown as text. */
+  seed: string;
+  /** What other people see beside the blob: "Computer Science @ Purdue '27". */
+  credential: string;
   onDone: () => void;
 }
 
 /**
- * "This is you." The reader meets the pseudonym every comment of theirs will carry: the same
- * creature `UserAvatar` draws beside them, seeded from the same handle, at full size and alive.
+ * "This is you." The reader meets what every comment of theirs will carry: the same creature
+ * `UserAvatar` draws beside them, at full size and alive, and their major, school and year.
+ * There are no names, real or generated (2026-10-10) — the blob is the only personal touch.
  *
- * It pops in, keeps bobbing and blinking (the animated Blobatar blinks on its own), the handle
- * types itself out, and the explanation arrives after it. Reduce Motion gets the still version.
+ * It pops in, keeps bobbing and blinking (the animated Blobatar blinks on its own), the
+ * credential types itself out, and the explanation arrives after it. Reduce Motion gets the
+ * still version.
  */
-export function AvatarReveal({ handle, onDone }: AvatarRevealProps) {
+export function AvatarReveal({ seed, credential, onDone }: AvatarRevealProps) {
   const { colors, scheme } = useTheme();
   const pro = usePaywallColors();
   const styles = useStyles();
@@ -56,14 +61,14 @@ export function AvatarReveal({ handle, onDone }: AvatarRevealProps) {
   const { width } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
 
-  const [typed, setTyped] = useState(reduceMotion ? handle.length : 0);
+  const [typed, setTyped] = useState(reduceMotion ? credential.length : 0);
   useEffect(() => {
     if (reduceMotion) return;
     let interval: ReturnType<typeof setInterval> | undefined;
     const start = setTimeout(() => {
       interval = setInterval(() => {
         setTyped((n) => {
-          if (n >= handle.length) {
+          if (n >= credential.length) {
             if (interval) clearInterval(interval);
             return n;
           }
@@ -75,7 +80,7 @@ export function AvatarReveal({ handle, onDone }: AvatarRevealProps) {
       clearTimeout(start);
       if (interval) clearInterval(interval);
     };
-  }, [handle, reduceMotion]);
+  }, [credential, reduceMotion]);
 
   const bob = useSharedValue(0);
   useEffect(() => {
@@ -99,12 +104,15 @@ export function AvatarReveal({ handle, onDone }: AvatarRevealProps) {
 
   return (
     <Animated.View entering={FadeIn.duration(250)} style={[styles.screen, { paddingTop: insets.top }]}>
-      <Svg style={[StyleSheet.absoluteFill, { top: insets.top + 40, height: width * 1.2 }]} pointerEvents="none">
+      {/* The glow rises from the bottom edge and fades out as it climbs, so the purple is a
+          light from below rather than a halo parked behind the blob. */}
+      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
         <Defs>
-          <RadialGradient id="meGlow" cx="50%" cy="40%" r="50%">
+          <LinearGradient id="meGlow" x1="0" y1="1" x2="0" y2="0">
             <Stop offset="0" stopColor={pro.violet} stopOpacity={glow} />
-            <Stop offset="1" stopColor={pro.violet} stopOpacity={0} />
-          </RadialGradient>
+            <Stop offset="0.35" stopColor={pro.violet} stopOpacity={glow * 0.45} />
+            <Stop offset="0.7" stopColor={pro.violet} stopOpacity={0} />
+          </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#meGlow)" />
       </Svg>
@@ -118,25 +126,25 @@ export function AvatarReveal({ handle, onDone }: AvatarRevealProps) {
       <View style={styles.stage}>
         <Animated.View entering={reduceMotion ? undefined : ZoomIn.springify().damping(11).stiffness(140)}>
           <Animated.View style={bobStyle}>
-            <AnimatedBlobatar name={handle || 'careerdeck'} size={AVATAR} animate={!reduceMotion} />
+            <AnimatedBlobatar name={seed || 'careerdeck'} size={AVATAR} animate={!reduceMotion} />
           </Animated.View>
         </Animated.View>
 
         <Animated.Text entering={FadeInDown.delay(400).duration(400)} style={styles.kicker}>
           THIS IS YOU
         </Animated.Text>
-        <Text style={styles.handle} accessibilityLabel={handle}>
-          {handle.slice(0, typed)}
-          <Text style={styles.caret}>{typed < handle.length ? '▍' : ''}</Text>
+        <Text style={styles.credential} accessibilityLabel={credential}>
+          {credential.slice(0, typed)}
+          <Text style={styles.caret}>{typed < credential.length ? '▍' : ''}</Text>
         </Text>
 
         <Animated.Text entering={FadeInDown.delay(1500).duration(450)} style={styles.lead}>
-          Next to every comment, people see this creature and name. Never your real name or email.
+          Next to every comment, people see this creature and your major, school and year. Never a name or email.
         </Animated.Text>
 
         <Animated.View entering={FadeInDown.delay(1800).duration(450)} style={styles.badgeHint}>
           <Ionicons name="shield-checkmark-outline" size={16} color={colors.textSecondary} />
-          <Text style={styles.badgeText}>Verify your .edu to add a badge like CS @ Purdue &apos;27</Text>
+          <Text style={styles.badgeText}>Verify your .edu to comment. Only your verified school is shown.</Text>
         </Animated.View>
       </View>
 
@@ -192,7 +200,7 @@ const useStyles = makeStyles((colors) => ({
     letterSpacing: 1.2,
     color: colors.textTertiary,
   },
-  handle: {
+  credential: {
     marginTop: 6,
     fontSize: fontSize.display,
     fontWeight: '800',

@@ -21,6 +21,16 @@ export async function completeTour(): Promise<number> {
 
 export const TOUR_BONUS = 3;
 
+/**
+ * Development only: open the tour on every launch, finished or not.
+ *
+ * Set `EXPO_PUBLIC_ALWAYS_TOUR=1` in .env.local while working on the tour. Finishing it still
+ * lets you into the app for that launch (see tourJustFinished); the next cold start opens it
+ * again. `complete_tour()` pays its bonus once per account, so repeat runs pay nothing. Release
+ * builds ignore it.
+ */
+export const ALWAYS_TOUR = __DEV__ && process.env.EXPO_PUBLIC_ALWAYS_TOUR === '1';
+
 /*
  * Set when the tour hands over to the app, read once by the tabs layout: it opens on the Deck
  * (the tour ends on "Start swiping") and holds back the welcome paywall for this launch, which
@@ -187,16 +197,35 @@ export const PRACTICE_STORY_ROW: StoryGroup[] = [
 ];
 
 export interface PracticeComment {
+  /** Draws the blob only — handles are never shown as text. */
   handle: string;
+  /** The commenter's name on screen: major, school and year. */
   badge: string;
   body: string;
+  likes: number;
+  /** How long ago it was posted, so the thread reads as a live one. */
+  minutesAgo: number;
+  /** A bundled reaction GIF (data/mockGifs.ts), shown like a real GIF comment. */
+  gifId?: string;
 }
 
+/** The practice thread under the NVIDIA card: eleven comments, newest first, like the real sheet. */
 export const PRACTICE_COMMENTS: PracticeComment[] = [
-  { handle: 'quiet-otter-4821', badge: "CS @ Purdue '27", body: '108k to start?? nvidia please notice me' },
-  { handle: 'amber-heron-1180', badge: "Data Science @ UIUC '28", body: 'applying before i talk myself out of it' },
-  { handle: 'tidal-granite-7739', badge: "Stats @ UW '27", body: 'do they want cuda experience going in or can you learn it' },
+  { handle: 'quiet-otter-4821', badge: "CS @ Purdue '27", body: '108k to start?? nvidia please notice me', likes: 42, minutesAgo: 12 },
+  { handle: 'amber-heron-1180', badge: "Data Science @ UIUC '28", body: 'applying before i talk myself out of it', likes: 17, minutesAgo: 35, gifId: 'lfg' },
+  { handle: 'tidal-granite-7739', badge: "Stats @ UW '27", body: 'do they want cuda experience going in or can you learn it', likes: 23, minutesAgo: 58 },
+  { handle: 'cedar-lynx-3302', badge: "CE @ Georgia Tech '27", body: 'had the team match call last year. mostly projects + one coding round, nothing crazy', likes: 31, minutesAgo: 95 },
+  { handle: 'pale-finch-6620', badge: "EE @ Michigan '28", body: 'is this hybrid or fully in santa clara?', likes: 6, minutesAgo: 140 },
+  { handle: 'brisk-mole-2214', badge: "CS @ UT Austin '27", body: 'applied tuesday, still waiting. anyone heard back?', likes: 12, minutesAgo: 210 },
+  { handle: 'north-wren-5087', badge: "Math @ Berkeley '28", body: 'the recruiter replied in like 4 days for me. good luck everyone', likes: 19, minutesAgo: 330 },
+  { handle: 'loud-tapir-9941', badge: "CS @ UCLA '27", body: 'do they sponsor for summer interns?', likes: 4, minutesAgo: 480 },
+  { handle: 'soft-ember-1456', badge: "ECE @ Cornell '27", body: 'their deep learning team is the dream ngl', likes: 27, minutesAgo: 720 },
+  { handle: 'mossy-ibis-7718', badge: "CS @ Waterloo '28", body: 'pro tip: mention a gpu project in the first two lines of your resume', likes: 38, minutesAgo: 1080 },
+  { handle: 'wild-quail-3390', badge: "Physics @ MIT '27", body: 'the free lunch alone 😭', likes: 9, minutesAgo: 1500 },
 ];
+
+/** What the comments step types and sends on its own, to show how posting works. */
+export const PRACTICE_QUESTION = 'Does anyone know if the interview is LeetCode or more systems design?';
 
 export function practiceApplication(status: 'applied' | 'interview'): TrackedApplication {
   const now = new Date().toISOString();

@@ -28,12 +28,10 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 
-import { ActivityHeader } from '@/components/activity/ActivityHeader';
-import { ActivityTabs } from '@/components/activity/ActivityTabs';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
-import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
+import { StageTiles } from '@/components/activity/StageTiles';
+import { WeekStrip } from '@/components/activity/WeekStrip';
 import { SectionHeader } from '@/components/common/SectionHeader';
-import { StatStrip } from '@/components/common/StatStrip';
 import { FeedSortBar } from '@/components/home/FeedSortBar';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { JobFeedCard } from '@/components/home/JobFeedCard';
@@ -46,7 +44,8 @@ import { ThemeSwitch } from '@/components/settings/ThemeSwitch';
 import { StoryPage } from '@/components/stories/StoryPage';
 import { AvatarReveal } from '@/components/tour/AvatarReveal';
 import { CoachBubble } from '@/components/tour/CoachBubble';
-import { PracticeAutoApply, PracticeComments } from '@/components/tour/PracticeSheets';
+import { PracticeCommentSheet } from '@/components/tour/PracticeCommentSheet';
+import { PracticeAutoApply } from '@/components/tour/PracticeSheets';
 import { PulseRing, type WindowRect } from '@/components/tour/PulseRing';
 import { Spotlight } from '@/components/tour/Spotlight';
 import { TourReward } from '@/components/tour/TourReward';
@@ -71,7 +70,7 @@ import {
   practiceGoal,
 } from '@/lib/tour';
 import { reportError } from '@/lib/observability';
-import { greetingNameOf } from '@/utils/profile';
+import { credentialOf, greetingNameOf } from '@/utils/profile';
 
 /*
  * The first-run tour.
@@ -95,7 +94,7 @@ const REWARD = 14;
 
 const COACH: Record<number, [string, string, string]> = {
   1: ['DECK · 1 OF 5', 'Swipe up for the next job', 'Every card is a posting picked for you. Try it now.'],
-  2: ['DECK · 2 OF 5', 'Like it? Tap the heart.', 'Or double-tap the card. Likes save the job and teach your deck what you want.'],
+  2: ['DECK · 2 OF 5', 'Like it? Tap the heart.', 'Or double-tap the card. A like saves the job and teaches your deck what you want.'],
   3: ['DECK · 3 OF 5', 'Peek at the comments', 'Students talk about every posting: questions, reactions, GIFs.'],
   4: ['DECK · 4 OF 5', 'Follow companies you like', 'Tap the + next to NVIDIA. Their new jobs show up first.'],
   5: ['DECK · 5 OF 5', 'Now Auto Apply', 'Tap the bolt. We draft the application from your resume, and you review it before anything is sent.'],
@@ -135,7 +134,7 @@ const STEP_TARGET: Record<number, { id: string; radius?: number | 'pill' }> = {
   9: { id: 'avatar', radius: 'pill' },
   11: { id: 'tab-activity', radius: 'pill' },
   12: { id: 'advance', radius: 'pill' },
-  13: { id: 'goal', radius: radius.lg + 2 },
+  13: { id: 'goal', radius: radius.lg },
 };
 
 export default function TourScreen() {
@@ -380,33 +379,13 @@ export default function TourScreen() {
           {onActivity ? (
             <Animated.View entering={FadeIn.duration(220)} style={StyleSheet.absoluteFill}>
               <ScrollView scrollEnabled={false} contentContainerStyle={[styles.activity, { paddingTop: insets.top + 40 }]}>
-                <ActivityHeader
-                  counts={{
-                    applied: stage === 'applied' ? 1 : 0,
-                    interview: stage === 'interview' ? 1 : 0,
-                    offer: 0,
-                    closed: 0,
-                    active: 1,
-                    total: 1,
-                  }}
-                />
-                <StatStrip
-                  items={[
-                    { key: 'streak', value: 0, label: 'week streak' },
-                    { key: 'applications', value: 1, label: 'application' },
-                    { key: 'auto', value: 1, label: 'auto apply' },
-                    { key: 'following', value: 1, label: 'following' },
-                  ]}
-                />
+                <Text style={styles.activityTitle} accessibilityRole="header">
+                  Activity
+                </Text>
                 <TourAnchor id="goal">
-                  <WeeklyGoalCard goal={goal} onEditGoal={() => undefined} />
+                  <WeekStrip goal={goal} onEditGoal={() => undefined} />
                 </TourAnchor>
-                <ActivityTabs
-                  tab="applications"
-                  counts={{ applications: 1, liked: 1, comments: 0 }}
-                  unreadComments={0}
-                  onChange={() => undefined}
-                />
+                <StageTiles applications={[practiceApplication(stage)]} selected={null} onSelect={() => undefined} />
                 <View>
                   <ApplicationCard
                     entry={practiceApplication(stage)}
@@ -424,7 +403,7 @@ export default function TourScreen() {
           ) : null}
 
           {step >= 1 && step <= STEPS && sheet !== 'story' && sheet !== 'me' ? (
-            <TourTopBar step={step} total={STEPS} top={insets.top + 8} deckReady={deckReady} />
+            <TourTopBar top={insets.top + 8} deckReady={deckReady} />
           ) : null}
 
           {tabsVisible ? (
@@ -473,7 +452,9 @@ export default function TourScreen() {
           ) : null}
 
           {sheet === 'comments' ? (
-            <PracticeComments
+            <PracticeCommentSheet
+              seed={user?.handle || 'careerdeck'}
+              credential={credentialOf(user)}
               onDone={() => {
                 setSheet(null);
                 advance(4);
@@ -505,7 +486,8 @@ export default function TourScreen() {
 
           {sheet === 'me' ? (
             <AvatarReveal
-              handle={user?.handle || 'careerdeck'}
+              seed={user?.handle || 'careerdeck'}
+              credential={credentialOf(user)}
               onDone={() => {
                 setSheet(null);
                 advance(10);
@@ -649,7 +631,15 @@ const useStyles = makeStyles((colors) => ({
   },
   activity: {
     paddingHorizontal: screenPadding,
-    gap: spacing.xl,
+    gap: spacing.lg + 4,
+  },
+  // Activity's own title, at Home's greeting size.
+  activityTitle: {
+    fontSize: fontSize.display,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.7,
+    lineHeight: 36,
   },
   swipeHint: {
     position: 'absolute',

@@ -1,15 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { UserAvatar } from '@/components/common/UserAvatar';
 import { usePaywallColors } from '@/components/paywall/palette';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
-import { PRACTICE_COMMENTS } from '@/lib/tour';
 
 /** A bottom sheet over a scrim, the shape every sheet in the app takes. */
 function PracticeSheet({ children }: { children: ReactNode }) {
@@ -19,36 +17,14 @@ function PracticeSheet({ children }: { children: ReactNode }) {
     <>
       <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.scrim} />
       <Animated.View
-        entering={SlideInDown.springify().damping(20).stiffness(180)}
+        // A plain slide, like the app's own sheets; it used to spring up, which read as a pop.
+        entering={SlideInDown.duration(260).easing(Easing.out(Easing.cubic))}
         exiting={SlideOutDown.duration(200)}
         style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
         <View style={styles.grabber} />
         {children}
       </Animated.View>
     </>
-  );
-}
-
-export function PracticeComments({ onDone }: { onDone: () => void }) {
-  const styles = useStyles();
-  return (
-    <PracticeSheet>
-      <Text style={styles.sheetTitle}>11 comments</Text>
-      <View style={styles.comments}>
-        {PRACTICE_COMMENTS.map((comment) => (
-          <View key={comment.handle} style={styles.comment}>
-            <UserAvatar handle={comment.handle} size={36} />
-            <View style={styles.commentText}>
-              <Text style={styles.commentMeta}>
-                <Text style={styles.commentHandle}>{comment.handle}</Text> · {comment.badge}
-              </Text>
-              <Text style={styles.commentBody}>{comment.body}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-      <PrimaryAction label="Got it" onPress={onDone} />
-    </PracticeSheet>
   );
 }
 
@@ -108,18 +84,6 @@ export function PracticeAutoApply({ companyName, onDone }: { companyName: string
   );
 }
 
-function PrimaryAction({ label, onPress }: { label: string; onPress: () => void }) {
-  const styles = useStyles();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.primary, pressed ? styles.pressed : null]}>
-      <Text style={styles.primaryLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const useStyles = makeStyles((colors) => ({
   scrim: {
     ...StyleSheet.absoluteFill,
@@ -143,36 +107,6 @@ const useStyles = makeStyles((colors) => ({
     height: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.borderStrong,
-  },
-  sheetTitle: {
-    fontSize: fontSize.body + 2,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: colors.text,
-  },
-  comments: {
-    gap: spacing.lg,
-  },
-  comment: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  commentText: {
-    flex: 1,
-    gap: 2,
-  },
-  commentMeta: {
-    fontSize: fontSize.small,
-    color: colors.textTertiary,
-  },
-  commentHandle: {
-    fontWeight: '700',
-    color: colors.text,
-  },
-  commentBody: {
-    fontSize: fontSize.body,
-    lineHeight: 21,
-    color: colors.text,
   },
   applyHead: {
     flexDirection: 'row',
@@ -223,13 +157,6 @@ const useStyles = makeStyles((colors) => ({
   noteText: {
     fontSize: fontSize.small,
     lineHeight: 18,
-  },
-  primary: {
-    height: 52,
-    borderRadius: radius.md + 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.text,
   },
   gradientButton: {
     height: 54,

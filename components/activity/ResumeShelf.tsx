@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 
-import { SectionHeader } from '@/components/common/SectionHeader';
 import { Skeleton } from '@/components/common/Skeleton';
 import { RESUME_BUBBLE_WIDTH, ResumeBubble } from '@/components/activity/ResumeBubble';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
@@ -11,7 +10,8 @@ import { useResumePreviewUrls } from '@/hooks/useResumes';
 import type { Resume } from '@/types';
 
 const SKELETON_COUNT = 3;
-const BUBBLE_HEIGHT = 208;
+/** A bubble's rendered height, so the skeletons and the add tile line up with real ones. */
+const BUBBLE_HEIGHT = 214;
 
 interface ResumeShelfProps {
   resumes: Resume[];
@@ -27,7 +27,7 @@ interface ResumeShelfProps {
 }
 
 /**
- * The stored resumes as a row of page-1 thumbnails, at the top of Activity — they're
+ * The stored resumes as a row of page-1 thumbnails, on Activity under the check-in — they're
  * part of the record of what the user has built, which is what this tab is for, rather
  * than something to scroll past on the way to a feed.
  *
@@ -60,16 +60,22 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
   return (
     <View>
       <View style={styles.header}>
-        <SectionHeader title="Your Resumes" />
-        {/*
-          Shown only once there is something to count, so a first-run shelf is not an
-          announcement about a limit the user has nowhere near reached.
-        */}
-        {resumes.length > 0 ? (
-          <Text style={[styles.count, full ? styles.countFull : null]}>
-            {resumes.length} of {limit}
-          </Text>
-        ) : null}
+        <Text style={styles.title} accessibilityRole="header">
+          Resumes
+          {/*
+            Shown only once there is something to count, so a first-run shelf is not an
+            announcement about a limit the user has nowhere near reached.
+          */}
+          {resumes.length > 0 ? (
+            <Text style={[styles.count, full ? styles.countFull : null]}>
+              {'  '}
+              {resumes.length} of {limit}
+            </Text>
+          ) : null}
+        </Text>
+        {/* What "default" is for, said once where the choice is made: the match scores on
+            every card are read against that resume's profile. */}
+        {resumes.length > 1 ? <Text style={styles.hint}>Default is used for matching</Text> : null}
       </View>
 
       {loading ? (
@@ -79,7 +85,7 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
               key={index}
               width={RESUME_BUBBLE_WIDTH}
               height={BUBBLE_HEIGHT}
-              borderRadius={radius.xl}
+              borderRadius={radius.xl - 4}
             />
           ))}
         </View>
@@ -121,15 +127,22 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
               {busy ? (
                 <ActivityIndicator color={colors.textTertiary} />
               ) : (
-                <Ionicons
-                  name={full ? 'lock-closed-outline' : 'add'}
-                  size={full ? 22 : 28}
-                  color={colors.textSecondary}
-                />
+                <View style={[styles.addIcon, full ? styles.addIconFull : null]}>
+                  <Ionicons
+                    name={full ? 'lock-closed' : 'add'}
+                    size={full ? 18 : 24}
+                    color={full ? colors.textSecondary : colors.accentText}
+                  />
+                </View>
               )}
               <Text style={styles.addLabel}>
-                {busy ? 'Working…' : full ? 'Shelf full' : 'Add resume'}
+                {busy ? 'Working…' : full ? 'Shelf full' : 'Add a PDF'}
               </Text>
+              {!full && !busy && resumes.length > 0 ? (
+                <Text style={styles.addHint}>
+                  {limit - resumes.length} {limit - resumes.length === 1 ? 'slot' : 'slots'} left
+                </Text>
+              ) : null}
               {/*
                 The way out, on the tile itself. "Shelf full" on its own is a dead end; the
                 next action is deleting one, and this is where the user is looking.
@@ -144,23 +157,31 @@ export function ResumeShelf({ resumes, loading, onView, onAdd, busy }: ResumeShe
 }
 
 const useStyles = makeStyles((colors) => ({
-  /*
-   * SectionHeader carries its own bottom margin, so the row pulls the count up onto the
-   * same baseline rather than adding a second line of vertical rhythm.
-   */
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  title: {
+    fontSize: fontSize.title,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
   },
   count: {
-    fontSize: fontSize.small,
-    fontWeight: '600',
+    fontSize: fontSize.title,
+    fontWeight: '700',
     color: colors.textTertiary,
-    paddingTop: 2,
   },
   countFull: {
+    color: colors.textSecondary,
+  },
+  hint: {
+    flexShrink: 1,
+    fontSize: fontSize.small,
+    fontWeight: '600',
     color: colors.textSecondary,
   },
   // Cancels Activity's screen padding so bubbles can run off both edges, then the
@@ -184,13 +205,24 @@ const useStyles = makeStyles((colors) => ({
   add: {
     width: RESUME_BUBBLE_WIDTH,
     height: BUBBLE_HEIGHT,
-    borderRadius: radius.xl,
+    borderRadius: radius.xl - 4,
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  addIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addIconFull: {
+    backgroundColor: colors.backgroundMuted,
   },
   addPressed: {
     opacity: 0.6,
@@ -199,9 +231,9 @@ const useStyles = makeStyles((colors) => ({
     opacity: 0.5,
   },
   addLabel: {
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    fontSize: fontSize.small + 1,
+    fontWeight: '800',
+    color: colors.text,
   },
   addHint: {
     fontSize: fontSize.caption,

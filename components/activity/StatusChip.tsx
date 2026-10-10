@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
-import { hexToRgba } from '@/utils/color';
+import { hexToRgba, legibleOn } from '@/utils/color';
 import type { ApplicationStatus } from '@/types';
 
 /**
@@ -34,6 +34,16 @@ const STATUS_ICON: Record<ApplicationStatus, React.ComponentProps<typeof Ionicon
 };
 
 export { STATUS_COLOR, STATUS_LABEL, STATUS_ICON };
+
+/**
+ * A stage's colour for text, pulled toward ink until it reads on `surface`.
+ *
+ * The stage colours are fills first. As 11pt text on white, amber and blue sit well under
+ * 4.5:1, so labels use this and marks (dots, icons, rails) keep the colour as it is.
+ */
+export function statusInk(status: ApplicationStatus, surface: string): string {
+  return legibleOn(STATUS_COLOR[status], surface, 4.5);
+}
 
 interface StatusChipProps {
   status: ApplicationStatus;

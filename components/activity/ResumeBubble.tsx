@@ -8,7 +8,10 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Resume } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
-export const RESUME_BUBBLE_WIDTH = 128;
+export const RESUME_BUBBLE_WIDTH = 148;
+/** The card's inset around the page, so the page reads as a sheet laid on the card. */
+const INSET = 8;
+const PREVIEW_WIDTH = RESUME_BUBBLE_WIDTH - INSET * 2;
 const PREVIEW_HEIGHT = 150;
 
 /*
@@ -20,7 +23,7 @@ const PREVIEW_HEIGHT = 150;
  * proportions of an actual document, which is what makes it recognisable at this size.
  */
 const RENDER_WIDTH = 420;
-const PREVIEW_SCALE = RESUME_BUBBLE_WIDTH / RENDER_WIDTH;
+const PREVIEW_SCALE = PREVIEW_WIDTH / RENDER_WIDTH;
 
 interface ResumeBubbleProps {
   resume: Resume;
@@ -67,16 +70,13 @@ export function ResumeBubble({ resume, isDefault, previewUri, onPress }: ResumeB
 
   const state = describe(resume);
   const showPreview = previewUri !== undefined && resume.parseStatus !== 'parsing';
+  const dot = state.tone === 'bad' ? colors.danger : state.tone === 'good' ? colors.goalMet : colors.textTertiary;
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={[
-        `Open ${resume.name}`,
-        isDefault ? 'default resume' : null,
-        state.label,
-      ]
+      accessibilityLabel={[`Open ${resume.name}`, isDefault ? 'default resume' : null, state.label]
         .filter(Boolean)
         .join(', ')}
       style={({ pressed }) => [
@@ -107,30 +107,17 @@ export function ResumeBubble({ resume, isDefault, previewUri, onPress }: ResumeB
         ) : (
           <Ionicons
             name={state.icon}
-            size={44}
+            size={40}
             color={state.tone === 'bad' ? colors.danger : colors.textTertiary}
           />
         )}
 
-        {/*
-          Only when there is something to say. A parsed resume showing its own first page needs
-          no caption — the page is the evidence — so the strip is reserved for the states the
-          document cannot report about itself: still reading, could not be read, not read yet.
-        */}
-        {state.label !== null ? (
-          <Text
-            style={[
-              showPreview ? styles.stateOverlay : styles.state,
-              state.tone === 'bad' ? { color: colors.danger } : null,
-            ]}
-            numberOfLines={1}>
-            {state.label}
-          </Text>
-        ) : null}
-
+        {/* Named rather than a bare checkmark: "default" is what matching reads, and a tick
+            on a document reads as "approved". */}
         {isDefault ? (
           <View style={styles.badge}>
-            <Ionicons name="checkmark" size={12} color={colors.accentText} />
+            <Ionicons name="checkmark" size={10} color={colors.accentText} />
+            <Text style={styles.badgeText}>Default</Text>
           </View>
         ) : null}
       </View>
@@ -138,12 +125,15 @@ export function ResumeBubble({ resume, isDefault, previewUri, onPress }: ResumeB
       <View style={styles.text}>
         {/*
           One line that scrolls itself. A resume's file name is long and the useful part is
-          often at the end ("… v2 final"), which two squashed lines ending in an ellipsis threw
-          away. The tile is 128pt wide, so nothing was ever going to fit; travelling is how the
-          whole name becomes readable without making the tile taller.
+          often at the end ("… v2 final"), which an ellipsis would throw away.
         */}
         <MarqueeText style={styles.name}>{resume.name}</MarqueeText>
-        <Text style={styles.meta}>{formatPostedAt(resume.updatedAt)}</Text>
+        <View style={styles.stateRow}>
+          <View style={[styles.stateDot, { backgroundColor: dot }]} />
+          <Text style={[styles.state, state.tone === 'bad' ? { color: colors.danger } : null]} numberOfLines={1}>
+            {state.label} · {formatPostedAt(resume.updatedAt)}
+          </Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -152,23 +142,22 @@ export function ResumeBubble({ resume, isDefault, previewUri, onPress }: ResumeB
 /**
  * The four parse states, in the words the shelf uses.
  *
- * `parsed` has **no** label. It used to report the skill count — "24 skills" — on the theory
- * that the number was evidence the parse had worked. With the page itself on the tile that
- * evidence is right there and the count was just a number sitting on top of a document,
- * competing with the one thing the tile is for. A null label means the strip is not rendered
- * at all; the count still has a home on the review screen, where it can be acted on.
+ * Every state gets a word now, under the name with a coloured dot (2026-10-09), where it used to
+ * be a strip laid over the page for the bad states only. The skill count stays off the tile:
+ * it used to sit here, and it was a number competing with the page itself. Its home is the
+ * review screen, where it can be acted on.
  */
 function describe(resume: Resume): {
   icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string | null;
-  tone: 'normal' | 'bad';
+  label: string;
+  tone: 'good' | 'normal' | 'bad';
 } {
   switch (resume.parseStatus) {
     case 'parsed':
       return {
         icon: resume.profile.confirmedAt ? 'checkmark-circle-outline' : 'document-text-outline',
-        label: null,
-        tone: 'normal',
+        label: 'Read',
+        tone: 'good',
       };
     case 'parsing':
       return { icon: 'document-text-outline', label: 'Reading…', tone: 'normal' };
@@ -182,25 +171,29 @@ function describe(resume: Resume): {
 const useStyles = makeStyles((colors) => ({
   card: {
     width: RESUME_BUBBLE_WIDTH,
-    borderRadius: radius.xl,
+    padding: INSET,
+    gap: spacing.sm + 2,
+    borderRadius: radius.xl - 4,
     backgroundColor: colors.surface,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    overflow: 'hidden',
-    ...colors.shadowSoft,
   },
   cardSelected: {
+    borderWidth: 2,
     borderColor: colors.text,
+    // The selected card is inset by the thicker border; pull the padding in to match.
+    padding: INSET - 1.5,
+    ...colors.shadowSoft,
   },
   pressed: {
     opacity: 0.85,
   },
   preview: {
     height: PREVIEW_HEIGHT,
+    borderRadius: radius.md + 2,
     backgroundColor: colors.backgroundMuted,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
     overflow: 'hidden',
   },
   /*
@@ -225,57 +218,48 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     backgroundColor: colors.backgroundMuted,
   },
-  state: {
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-    color: colors.textTertiary,
-    paddingHorizontal: spacing.xs,
-  },
-  /*
-   * A legibility strip rather than a floating label. Over a white page, tertiary grey text on
-   * nothing is unreadable, and the page's own content changes behind it per resume — so the
-   * strip is what guarantees the state is always readable.
-   */
-  stateOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    fontSize: fontSize.caption,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingVertical: 3,
-    backgroundColor: colors.backgroundMuted,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    overflow: 'hidden',
-  },
   badge: {
     position: 'absolute',
-    right: spacing.xs,
-    bottom: spacing.xs,
-    width: 20,
-    height: 20,
+    top: spacing.sm,
+    left: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 22,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.pill,
     backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.surface,
+  },
+  badgeText: {
+    fontSize: fontSize.caption - 1,
+    fontWeight: '800',
+    color: colors.accentText,
   },
   text: {
-    padding: spacing.sm,
-    gap: 1,
+    paddingHorizontal: 2,
+    paddingBottom: 2,
+    gap: 3,
   },
   name: {
-    fontSize: fontSize.caption + 1,
-    fontWeight: '700',
+    fontSize: fontSize.small + 1,
+    fontWeight: '800',
     color: colors.text,
-    lineHeight: 15,
+    lineHeight: 18,
   },
-  meta: {
+  stateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  stateDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  state: {
+    flex: 1,
     fontSize: fontSize.caption,
-    color: colors.textTertiary,
+    fontWeight: '700',
+    color: colors.textSecondary,
   },
 }));

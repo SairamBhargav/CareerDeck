@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { initObservability, withObservability } from '@/lib/observability';
 import { onNotificationTap, refreshPushRegistration } from '@/lib/push';
 import { queryClient } from '@/lib/query-client';
+import { ALWAYS_TOUR, tourJustFinished } from '@/lib/tour';
 
 // Both before first paint: the splash has to already be held when the tree mounts, or
 // there is a frame of empty app while the stored session is read off disk.
@@ -66,7 +67,8 @@ function RootNavigator() {
    * own screens are behind the guard below until `tutorial_completed_at` is set. Accounts from
    * before the tour existed were stamped by its migration, so they never see it.
    */
-  const needsTour = isSignedIn && user !== null && user.tourCompletedAt === null;
+  const needsTour =
+    isSignedIn && user !== null && (user.tourCompletedAt === null || (ALWAYS_TOUR && !tourJustFinished()));
   // Signed out, there is nothing left to wait for. Signed in, the profile is what every
   // screen above reads from, so showing the app before it lands is showing a blank one.
   const isReady = isResolved && (!isSignedIn || !isInitialLoading);
@@ -128,6 +130,7 @@ function RootNavigator() {
             options={{ presentation: 'modal', headerShown: false }}
           />
           <Stack.Screen name="collection/[type]" options={{ headerShown: false }} />
+          <Stack.Screen name="inbox" options={{ headerShown: false }} />
           {/*
             * Full-screen so it covers the floating tab bar, which is what the native Modal
             * this replaced was really for. Being a route rather than a Modal is what lets

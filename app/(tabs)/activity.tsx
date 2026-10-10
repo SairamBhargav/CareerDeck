@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 /*
  * The explicit legacy entry point, not the bare `expo-file-system` import.
@@ -10,38 +11,37 @@ import * as DocumentPicker from 'expo-document-picker';
  */
 import * as FileSystem from 'expo-file-system/legacy';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, Text } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ActivityHeader } from '@/components/activity/ActivityHeader';
-import { ActivityTabs, type ActivityTab } from '@/components/activity/ActivityTabs';
+import { ActivityDoors } from '@/components/activity/ActivityDoors';
 import { ApplicationCard } from '@/components/activity/ApplicationCard';
-import { MyCommentCard } from '@/components/activity/MyCommentCard';
-import { NotificationCard } from '@/components/activity/NotificationCard';
+import { CheckInStack } from '@/components/activity/CheckInStack';
 import { ProCard } from '@/components/activity/ProCard';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
 import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
+import { StageTiles } from '@/components/activity/StageTiles';
+import { STATUS_LABEL } from '@/components/activity/StatusChip';
 import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
-import { WeeklyGoalCard } from '@/components/activity/WeeklyGoalCard';
+import { WeekStrip } from '@/components/activity/WeekStrip';
 import { EmptyState } from '@/components/common/EmptyState';
 import { GoalPickerSheet } from '@/components/common/GoalPickerSheet';
-import { StatStrip } from '@/components/common/StatStrip';
-import { JobFeedCard } from '@/components/home/JobFeedCard';
-import { fontSize, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useCareerDeck } from '@/context/CareerDeckContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useGuardedRouter } from '@/hooks/useGuardedRouter';
-import { usePipelineCounts, useTrackedApplications } from '@/hooks/useApplications';
+import { useTrackedApplications } from '@/hooks/useApplications';
+import { daysQuiet, isQuiet, useCheckIns } from '@/hooks/useCheckIns';
 import { useMyComments } from '@/hooks/useComments';
 import { useResumes } from '@/hooks/useResumes';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { useHideTabBarOnScroll } from '@/hooks/useHideTabBarOnScroll';
-import { useJobsByIds } from '@/hooks/useJobFeeds';
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import type { ApplicationStatus, Job } from '@/types';
+import { formatWeekLabel, parseLocalDate } from '@/utils/week';
 
 /** Per-row stagger on a list's entrance, capped so a long list's tail isn't left waiting. */
 const STAGGER_MS = 45;
@@ -49,12 +49,18 @@ const MAX_STAGGER_INDEX = 7;
 
 /**
  * Activity is the record of a recruiting season: the applications being tracked, the
- * postings set aside to come back to, and what people said in reply to the user.
+ * resumes they went out with, and the lists the reader keeps around them.
  *
  * The tracker is self-reported on purpose. CareerDeck hands users off to Greenhouse,
  * Workday and the rest to actually apply — it has no way to read a submission back out
  * of an employer's system — so stages are whatever the user says they are, and the UI
  * says so rather than implying a live integration that doesn't exist.
+ *
+ * The 2026-10-09 layout leans into that. The quick check-in asks about applications that
+ * have gone quiet, so the tracker stays true without the reader having to remember to tend
+ * it. Below it sit the resumes, then the season as four stage tiles that filter the list.
+ * Liked, comments and following moved out of a tab bar into doors at the foot of the page,
+ * and the reply inbox moved behind the bell, where its unread badge can be seen.
  */
 export default function ActivityScreen() {
   const router = useGuardedRouter();
@@ -64,16 +70,11 @@ export default function ActivityScreen() {
     isInitialLoading,
     likedJobIds,
     user,
-    notifications,
     unreadNotificationCount,
-    toggleLike,
     setApplicationStatus,
-    markNotificationRead,
-    markAllNotificationsRead,
     weeklyGoal,
     setWeeklyGoal,
     credits,
-    autoApplyCredits,
     followedCompanySlugs,
   } = useCareerDeck();
 
@@ -89,13 +90,13 @@ export default function ActivityScreen() {
   } = useResumes(user?.id ?? null);
 
   const applications = useTrackedApplications();
-  const counts = usePipelineCounts();
+  const checkIns = useCheckIns(applications);
   const goal = useWeeklyGoal();
   const tabBarHeight = useTabBarHeight();
   const openCompany = useOpenCompany();
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
-  const [tab, setTab] = useState<ActivityTab>('applications');
+  const [stage, setStage] = useState<ApplicationStatus | null>(null);
   const [viewingResumeId, setViewingResumeId] = useState<string | null>(null);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
@@ -171,61 +172,36 @@ export default function ActivityScreen() {
   }, [upload, parse, canParse, router]);
   const pickerEntry = applications.find((entry) => entry.application.id === pickerFor) ?? null;
 
-  /*
-   * Liked postings are resolved by id rather than filtered out of a loaded feed.
-   *
-   * The old version searched `jobs` — the whole corpus, in memory. With a paginated
-   * feed that array is one page, so a job liked yesterday and scrolled past would
-   * silently vanish from this tab. Phase 2 replaces the id set with a read of
-   * `job_interactions`; the shape of this call does not change.
-   */
-  const { jobs: likedJobs } = useJobsByIds(likedJobIds);
-
-  /*
-   * The postings the inbox points at.
-   *
-   * Through phase 2 this reused the liked-jobs list, because comment activity was a fixture
-   * pointing at mock ids that no longer existed (PHASE1.md §8.6) and there was nothing to resolve.
-   * Real notifications carry a real `jobId`, so they are resolved by id — the same
-   * `useJobsByIds` the liked tab uses, which is already a batched read.
-   */
-  const notificationJobIds = useMemo(
-    () => [...new Set(notifications.map((entry) => entry.jobId).filter((id): id is string => id !== null))],
-    [notifications],
-  );
-  const { jobs: notificationJobs } = useJobsByIds(notificationJobIds);
-  const jobById = useMemo(
-    () => new Map([...likedJobs, ...notificationJobs].map((job) => [job.id, job])),
-    [likedJobs, notificationJobs],
-  );
-
-  // The unread badge clears a beat after the list is opened, rather than the instant the tab is
-  // pressed — long enough that the user sees which rows were new. `markAllNotificationsRead` is a
-  // no-op when nothing is unread, so this settles after one pass instead of re-triggering itself.
-  useEffect(() => {
-    if (tab !== 'comments') return;
-    const timer = setTimeout(markAllNotificationsRead, 1200);
-    return () => clearTimeout(timer);
-  }, [tab, notifications, markAllNotificationsRead]);
-
-  // Fetched as soon as the screen mounts, so the tab's count is right before anybody opens it.
+  // Fetched on mount for the Comments door's count; the inbox screen shares the cache.
   const myComments = useMyComments(true);
 
-  const tabCounts: Record<ActivityTab, number> = {
-    applications: applications.length,
-    liked: likedJobs.length,
-    comments: myComments.comments.length,
-  };
+  const shown = useMemo(
+    () => (stage === null ? applications : applications.filter((entry) => entry.application.status === stage)),
+    [applications, stage],
+  );
+
+  // "24 applications since Aug 12": the season's size, and when it started.
+  const since = useMemo(() => {
+    let oldest: Date | null = null;
+    for (const entry of applications) {
+      const applied = parseLocalDate(entry.application.appliedAt);
+      if (applied && (!oldest || applied < oldest)) oldest = applied;
+    }
+    return oldest;
+  }, [applications]);
 
   const handlePressJob = (job: Job) => router.push({ pathname: '/job/[id]', params: { id: job.id } });
-  // Straight into the thread: from a comment, the comments are what you came back for.
-  const openThread = (jobId: string) =>
-    router.push({ pathname: '/job/[id]', params: { id: jobId, comments: '1' } });
 
   const handleSelectStatus = (status: ApplicationStatus) => {
     if (pickerEntry) setApplicationStatus(pickerEntry.application.id, status);
     setPickerFor(null);
   };
+
+  const applicationsLine =
+    applications.length === 0
+      ? 'Apply from the Deck and your season shows up here.'
+      : `${applications.length} ${applications.length === 1 ? 'application' : 'applications'}` +
+        (since ? ` since ${formatWeekLabel(since)}` : '');
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -234,49 +210,41 @@ export default function ActivityScreen() {
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
-        <ActivityHeader counts={counts} />
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            {/* Home's greeting size, so the two tabs open at the same size and weight. */}
+            <Text style={styles.title} accessibilityRole="header">
+              Activity
+            </Text>
+            <Text style={styles.subtitle}>{applicationsLine}</Text>
+          </View>
 
-        {/*
-          * The figures that used to sit under the name on the profile.
-          *
-          * They were never about who the reader is, which is what that screen is for —
-          * they are about how a season is going, which is this one. Following is the
-          * exception and comes along anyway: it is the only one that opens something, and
-          * splitting four numbers across two screens to honour a category boundary helps
-          * nobody.
-          */}
-        <StatStrip
-          items={[
-            {
-              key: 'streak',
-              value: goal.streakWeeks,
-              label: goal.streakWeeks === 1 ? 'week streak' : 'weeks streak',
-              tint: goal.streakWeeks > 0 ? colors.goalMet : undefined,
-            },
-            { key: 'applications', value: applications.length, label: 'applications' },
-            {
-              key: 'credits',
-              value: autoApplyCredits,
-              label: 'auto applies',
-              tint: colors.autoApply,
-            },
-            {
-              key: 'following',
-              value: followedCompanySlugs.length,
-              label: 'following',
-              onPress: () =>
-                router.push({ pathname: '/collection/[type]', params: { type: 'following' } }),
-              accessibilityLabel: `${followedCompanySlugs.length} companies followed. Opens the list.`,
-            },
-          ]}
+          <Pressable
+            onPress={() => router.push({ pathname: '/inbox', params: { show: 'updates' } })}
+            accessibilityRole="button"
+            accessibilityLabel={
+              unreadNotificationCount > 0 ? `Updates, ${unreadNotificationCount} unread` : 'Updates'
+            }
+            style={({ pressed }) => [styles.bell, pressed ? styles.bellPressed : null]}>
+            <Ionicons name="notifications-outline" size={20} color={colors.text} />
+            {unreadNotificationCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
+
+        <WeekStrip goal={goal} onEditGoal={() => setEditingGoal(true)} />
+
+        <CheckInStack
+          queue={checkIns.queue}
+          onSetStatus={setApplicationStatus}
+          onSnooze={checkIns.snooze}
+          onOpen={(entry) => handlePressJob(entry.job)}
         />
-
-        <WeeklyGoalCard goal={goal} onEditGoal={() => setEditingGoal(true)} />
-
-        {/* Pro's standing place in the app. Gone once they subscribe. */}
-        {credits.isPro ? null : (
-          <ProCard onPress={() => router.push({ pathname: '/paywall', params: { from: 'activity' } })} />
-        )}
 
         <ResumeShelf
           resumes={resumes}
@@ -286,121 +254,90 @@ export default function ActivityScreen() {
           busy={resumesBusy}
         />
 
-        <ActivityTabs
-          tab={tab}
-          counts={tabCounts}
-          unreadComments={unreadNotificationCount}
-          onChange={setTab}
+        <StageTiles applications={applications} selected={stage} onSelect={setStage} />
+
+        <View style={styles.listHeader}>
+          <Text style={styles.listTitle} accessibilityRole="header">
+            {stage === null ? 'All applications' : STATUS_LABEL[stage]}
+            <Text style={styles.listCount}>{`  ${shown.length}`}</Text>
+          </Text>
+          {stage !== null ? (
+            <Pressable onPress={() => setStage(null)} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.listAction}>Show all</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {/* Keyed on the filter so each list runs its own entrance, rather than swapping
+            rows out underneath a container that never changes. */}
+        <Animated.View key={stage ?? 'all'} entering={FadeIn.duration(220)} style={styles.list}>
+          {shown.length > 0 ? (
+            shown.map((entry, index) => (
+              <Animated.View
+                key={entry.application.id}
+                entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
+                <ApplicationCard
+                  entry={entry}
+                  quietDays={isQuiet(entry) ? daysQuiet(entry) : undefined}
+                  onPress={() => handlePressJob(entry.job)}
+                  onAdvance={(status) => setApplicationStatus(entry.application.id, status)}
+                  onOpenStatusPicker={() => setPickerFor(entry.application.id)}
+                  onCompanyPress={() => openCompany(entry.job.companySlug)}
+                />
+              </Animated.View>
+            ))
+          ) : stage === null ? (
+            <EmptyState
+              icon="paper-plane-outline"
+              title="No applications yet"
+              message="Apply to a posting and mark it here to start tracking your season."
+            />
+          ) : (
+            <EmptyState
+              icon={stage === 'offer' ? 'trophy-outline' : 'file-tray-outline'}
+              title={`Nothing in ${STATUS_LABEL[stage]}`}
+              message="Applications land here as you move them along."
+            />
+          )}
+        </Animated.View>
+
+        <ActivityDoors
+          doors={[
+            {
+              key: 'liked',
+              icon: 'heart',
+              tint: colors.like,
+              title: `${likedJobIds.length} liked`,
+              detail: 'Saved from the Deck',
+              onPress: () => router.push({ pathname: '/collection/[type]', params: { type: 'liked' } }),
+              accessibilityLabel: `${likedJobIds.length} liked jobs. Opens the list.`,
+            },
+            {
+              key: 'comments',
+              icon: 'chatbubble-outline',
+              title: 'Comments',
+              detail: myComments.isLoading
+                ? 'Your threads'
+                : `${myComments.comments.length}${myComments.hasMore ? '+' : ''} posted`,
+              onPress: () => router.push({ pathname: '/inbox', params: { show: 'comments' } }),
+              accessibilityLabel: 'Your comments. Opens the list.',
+            },
+            {
+              key: 'following',
+              icon: 'business-outline',
+              title: `${followedCompanySlugs.length} following`,
+              detail: 'Companies',
+              onPress: () =>
+                router.push({ pathname: '/collection/[type]', params: { type: 'following' } }),
+              accessibilityLabel: `${followedCompanySlugs.length} companies followed. Opens the list.`,
+            },
+          ]}
         />
 
-        {/* Keyed on the tab so each list runs its own entrance, rather than swapping
-            rows out underneath a container that never changes. */}
-        <Animated.View key={tab} entering={FadeIn.duration(220)} style={styles.list}>
-          {tab === 'applications' ? (
-            applications.length > 0 ? (
-              applications.map((entry, index) => (
-                <Animated.View
-                  key={entry.application.id}
-                  entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                  <ApplicationCard
-                    entry={entry}
-                    onPress={() => handlePressJob(entry.job)}
-                    onAdvance={(status) => setApplicationStatus(entry.application.id, status)}
-                    onOpenStatusPicker={() => setPickerFor(entry.application.id)}
-                    onCompanyPress={() => openCompany(entry.job.companySlug)}
-                  />
-                </Animated.View>
-              ))
-            ) : (
-              <EmptyState
-                icon="paper-plane-outline"
-                title="No applications yet"
-                message="Apply to a posting and mark it here to start tracking your season."
-              />
-            )
-          ) : null}
-
-          {tab === 'liked' ? (
-            likedJobs.length > 0 ? (
-              likedJobs.map((job, index) => (
-                <Animated.View
-                  key={job.id}
-                  entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                  <JobFeedCard
-                    job={job}
-                    logoColor={job.companyLogoColor ?? undefined}
-                    logoUrl={job.companyLogoUrl ?? undefined}
-                    onPress={() => handlePressJob(job)}
-                    onToggleLike={() => toggleLike(job.id)}
-                    onCompanyPress={() => openCompany(job.companySlug)}
-                  />
-                </Animated.View>
-              ))
-            ) : (
-              <EmptyState
-                icon="heart-outline"
-                title="Nothing liked yet"
-                message="Double-tap a card in Deck and it'll be waiting here."
-              />
-            )
-          ) : null}
-
-          {tab === 'comments' ? (
-            notifications.length === 0 && myComments.comments.length === 0 ? (
-              <EmptyState
-                icon="chatbubbles-outline"
-                title={myComments.isLoading ? 'Loading…' : 'No comments yet'}
-                message="Ask about the interview, the team, the timeline. Your comments, and the replies they get, land here."
-              />
-            ) : (
-              <>
-                {notifications.length > 0 ? (
-                  <Text style={styles.section} accessibilityRole="header">
-                    Updates
-                  </Text>
-                ) : null}
-                {notifications.map((entry, index) => {
-                  const job = entry.jobId === null ? undefined : jobById.get(entry.jobId);
-                  return (
-                    <Animated.View
-                      key={entry.id}
-                      entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                      <NotificationCard
-                        entry={entry}
-                        // A posting that has since closed and been swept is a real case, not an
-                        // error: the notification still reads, it just cannot be opened.
-                        jobTitle={job?.title ?? 'A posting'}
-                        companyName={job?.companyName ?? ''}
-                        onPress={() => {
-                          markNotificationRead(entry.id);
-                          if (entry.jobId !== null) openThread(entry.jobId);
-                        }}
-                      />
-                    </Animated.View>
-                  );
-                })}
-
-                {myComments.comments.length > 0 ? (
-                  <Text style={styles.section} accessibilityRole="header">
-                    Your comments
-                  </Text>
-                ) : null}
-                {myComments.comments.map((comment, index) => (
-                  <Animated.View
-                    key={comment.id}
-                    entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
-                    <MyCommentCard comment={comment} onPress={() => openThread(comment.jobId)} />
-                  </Animated.View>
-                ))}
-                {myComments.hasMore ? (
-                  <Pressable onPress={myComments.loadMore} accessibilityRole="button" style={styles.more}>
-                    <Text style={styles.moreText}>Show older comments</Text>
-                  </Pressable>
-                ) : null}
-              </>
-            )
-          ) : null}
-        </Animated.View>
+        {/* Pro's standing place in the app. Gone once they subscribe. */}
+        {credits.isPro ? null : (
+          <ProCard onPress={() => router.push({ pathname: '/paywall', params: { from: 'activity' } })} />
+        )}
       </Animated.ScrollView>
 
       <StatusPickerSheet
@@ -445,31 +382,91 @@ export default function ActivityScreen() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  // The Deck's muted canvas, so the cards on it read as cards without heavy borders.
   screen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.canvasMuted,
   },
   content: {
     paddingHorizontal: screenPadding,
-    gap: spacing.xl,
+    gap: spacing.lg + 4,
   },
-  list: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.md,
+    paddingTop: spacing.sm,
   },
-  section: {
-    marginTop: spacing.xs,
+  headerText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  title: {
+    fontSize: fontSize.display,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.7,
+    lineHeight: 36,
+  },
+  subtitle: {
+    fontSize: fontSize.small,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  bell: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bellPressed: {
+    backgroundColor: colors.backgroundMuted,
+  },
+  badge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.like,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: colors.textOnBrand,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: -spacing.sm,
+  },
+  listTitle: {
+    fontSize: fontSize.title,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  listCount: {
+    color: colors.textTertiary,
+    fontWeight: '700',
+  },
+  listAction: {
     fontSize: fontSize.small,
     fontWeight: '700',
     color: colors.textSecondary,
   },
-  more: {
-    alignSelf: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  moreText: {
-    fontSize: fontSize.small,
-    fontWeight: '600',
-    color: colors.textSecondary,
+  list: {
+    gap: spacing.sm + 2,
   },
 }));
