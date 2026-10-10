@@ -1,9 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation,
   Easing,
   FadeInDown,
   interpolateColor,
@@ -13,13 +12,12 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
-  withSequence,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
+import { MarqueeText } from '@/components/common/MarqueeText';
 import { MATCH_COLOR_STOPS } from '@/components/reels/ResumeMatchRing';
 import { fontSize, radius, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -246,13 +244,10 @@ export function FullDetails({
                   <View key={role.index} style={styles.role}>
                     <Mark kind={role.relevance >= 0.99 ? 'ok' : 'related'} />
                     <View style={styles.roleText}>
-                      <Marquee reduced={reduced}>
-                        <Text style={styles.roleTitle}>
-                          {entry?.title ?? 'A past role'}
-                          {entry?.company ? <Text style={styles.roleCompany}> · {entry.company}</Text> : null}
-                        </Text>
-                      </Marquee>
+                      {/* The title alone travels when it doesn't fit; the company moves to the line under it. */}
+                      <MarqueeText style={styles.roleTitle}>{entry?.title ?? 'A past role'}</MarqueeText>
                       <Text style={styles.small}>
+                        {entry?.company ? `${entry.company} · ` : ''}
                         {role.relevance >= 0.99 ? 'Same field' : `Related: ${FAMILY_LABELS[role.family] ?? role.family}`}
                         {role.months ? ` · ${role.months} mo` : ''}
                       </Text>
@@ -486,48 +481,6 @@ function Mark({ kind }: { kind: MarkKind }) {
   return (
     <View style={styles.mark}>
       <Ionicons name={MARK_ICONS[kind]} size={14} color={color} />
-    </View>
-  );
-}
-
-/** Pause at each end, then glide: slow enough to read, at the same speed for any length. */
-const MARQUEE_PAUSE = 1400;
-const MARQUEE_MS_PER_PT = 28;
-
-/**
- * One line that slides when it does not fit: it rests at the start, glides to show the end, rests,
- * and glides back. A line that fits never moves. With reduced motion it wraps instead.
- */
-function Marquee({ reduced, children }: { reduced: boolean; children: ReactNode }) {
-  const styles = useStyles();
-  const [box, setBox] = useState(0);
-  const [content, setContent] = useState(0);
-  const x = useSharedValue(0);
-  const overflow = box > 0 ? Math.max(0, Math.ceil(content - box)) : 0;
-
-  useEffect(() => {
-    cancelAnimation(x);
-    x.set(0);
-    if (reduced || overflow < 2) return;
-    const glide = { duration: 400 + overflow * MARQUEE_MS_PER_PT, easing: Easing.inOut(Easing.quad) };
-    x.set(
-      withRepeat(
-        withSequence(withDelay(MARQUEE_PAUSE, withTiming(-overflow, glide)), withDelay(MARQUEE_PAUSE, withTiming(0, glide))),
-        -1,
-      ),
-    );
-    return () => cancelAnimation(x);
-  }, [overflow, reduced, x]);
-
-  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
-
-  if (reduced) return <>{children}</>;
-  return (
-    <View style={styles.marquee} onLayout={(e: LayoutChangeEvent) => setBox(e.nativeEvent.layout.width)}>
-      {/* Wider than any title, so the text inside lays out at its natural width and is measured there. */}
-      <Animated.View style={[styles.marqueeTrack, slide]}>
-        <View onLayout={(e: LayoutChangeEvent) => setContent(e.nativeEvent.layout.width)}>{children}</View>
-      </Animated.View>
     </View>
   );
 }
@@ -912,20 +865,11 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: 'center',
     backgroundColor: colors.surface,
   },
-  marquee: { overflow: 'hidden' },
-  marqueeTrack: {
-    flexDirection: 'row',
-    width: 2000,
-  },
   roleText: { flex: 1, gap: 2 },
   roleTitle: {
     fontSize: fontSize.body,
     fontWeight: '700',
     color: colors.text,
-  },
-  roleCompany: {
-    fontWeight: '500',
-    color: colors.textSecondary,
   },
   verdict: {
     flexDirection: 'row',
