@@ -6,7 +6,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
-import { SectionHeader } from '@/components/common/SectionHeader';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
@@ -14,22 +13,28 @@ import { useVerification } from '@/hooks/useVerification';
 import { ServiceError, ServiceUnavailable } from '@/lib/service';
 
 /**
- * Verification — README §3.2's two-path ladder, as one screen.
+ * Verification — the school-email path, as one screen.
  *
- * The single most important thing about this screen is that **both paths are offered at once**. §3.2:
- * *"`edu` and `identity` are siblings, not a hierarchy — both grant comment-write. They differ only
- * in the badge. This matters for the bootcamp grad, the career switcher, and the student whose
- * university uses a `.ac.uk`-style domain: they get in via the ID path."*
+ * What this screen does *not* say is "verify to unlock CareerDeck". Verification unlocks
+ * commenting and nothing else — the feed, search, liking, applying and the tracker all work on a
+ * plain email account (§3.2's tier table) — and implying otherwise would be a dark pattern in
+ * service of collecting school addresses.
  *
- * The obvious design — ask for a school email, and offer the ID check only when that fails — would
- * quietly exclude exactly those people, because somebody without a `.edu` address has no reason to
- * try one and will read the screen as "this is for students" and leave. So the second path is a peer
- * on the page, not a fallback behind an error.
+ * ── The government ID path is not offered at the moment ───────────────────────
  *
- * What it does *not* say is "verify to unlock CareerDeck". Verification unlocks commenting and
- * nothing else — the feed, search, saving, applying and the tracker all work on a plain email
- * account (§3.2's tier table) — and implying otherwise would be a dark pattern in service of
- * collecting government IDs.
+ * §3.2 makes `edu` and `identity` siblings rather than a hierarchy: both grant comment-write and
+ * they differ only in the badge. This screen used to offer both at once, as peers, for a specific
+ * reason — the bootcamp grad, the career switcher, and the student whose university uses a
+ * `.ac.uk`-style domain have no `.edu` address to give, and the ID check was how they got in.
+ *
+ * Offering it is on hold, which means those people cannot comment yet. Worth naming rather than
+ * leaving to be discovered: somebody whose school is not on our domain list now reaches a dead end
+ * here, and the `domain_not_recognised` copy can only tell them to check back.
+ *
+ * Nothing underneath was removed. `startIdentity` (useVerification), `startIdentityVerification`
+ * (lib/api) and the server route are intact, so restoring the path is UI work; and the comment gate
+ * still honours the `identity` tier, so an account already verified that way keeps its badge and
+ * its access — that tier is simply no longer reachable from this screen.
  */
 export default function VerifyScreen() {
   const router = useRouter();
@@ -44,8 +49,6 @@ export default function VerifyScreen() {
   const [sentTo, setSentTo] = useState<{ email: string; school: string; devCode?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Set when the domain is not a registered school — the moment to point at the other path. */
-  const [suggestIdPath, setSuggestIdPath] = useState(false);
 
   const explain = (cause: unknown): string => {
     if (cause instanceof ServiceUnavailable) {
@@ -54,7 +57,7 @@ export default function VerifyScreen() {
     if (cause instanceof ServiceError) {
       switch (cause.code) {
         case 'domain_not_recognised':
-          return 'We do not have that school on file yet. You can verify with a government ID instead — it works exactly the same.';
+          return 'We do not have that school on file yet. We are still adding schools — check back soon.';
         case 'address_in_use':
           return 'That address has already verified another account.';
         case 'credential_blocked':
@@ -75,7 +78,6 @@ export default function VerifyScreen() {
   const send = async () => {
     setBusy(true);
     setError(null);
-    setSuggestIdPath(false);
     try {
       const challenge = await verification.startEdu(email.trim());
       setSentTo({
@@ -85,9 +87,6 @@ export default function VerifyScreen() {
       });
     } catch (cause) {
       setError(explain(cause));
-      if (cause instanceof ServiceError && cause.code === 'domain_not_recognised') {
-        setSuggestIdPath(true);
-      }
     } finally {
       setBusy(false);
     }
@@ -101,18 +100,6 @@ export default function VerifyScreen() {
       // Straight back to wherever they came from. The badge is now on their profile and the
       // composer is open; a success screen would be a screen to dismiss.
       router.back();
-    } catch (cause) {
-      setError(explain(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openIdCheck = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await verification.startIdentity();
     } catch (cause) {
       setError(explain(cause));
     } finally {
@@ -158,8 +145,8 @@ export default function VerifyScreen() {
               // than arriving as a surprise notification in two years.
               <Text style={styles.cardNote}>
                 School addresses need re-confirming around{' '}
-                {new Date(verification.eduExpiresAt).toLocaleDateString()}. We will remind you, and
-                you can switch to a government ID instead.
+                {new Date(verification.eduExpiresAt).toLocaleDateString()}. We will remind you before
+                then.
               </Text>
             ) : null}
           </View>
@@ -179,102 +166,76 @@ export default function VerifyScreen() {
         ) : null}
 
         {!verified && verification.isConfigured ? (
-          <>
-            <SectionHeader title="With a school email" />
-            <View style={styles.card}>
-              {sentTo === null ? (
-                <>
-                  <Text style={styles.cardBody}>
-                    Use your university address. We send a code, and your comments then show your
-                    major, school and year — never your name or the address itself.
-                  </Text>
-                  <TextInput
-                    value={email}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (error !== null) setError(null);
-                    }}
-                    placeholder="you@university.edu"
-                    placeholderTextColor={colors.textTertiary}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                    style={styles.input}
-                    accessibilityLabel="Your school email address"
-                  />
-                  <PrimaryButton
-                    label="Send me a code"
-                    onPress={() => void send()}
-                    disabled={email.trim().length < 5 || busy}
-                    loading={busy}
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.cardBody}>
-                    We sent a six-digit code to {sentTo.email}. It is good for 30 minutes.
-                  </Text>
-                  {/* Only a development server with no mail provider returns the code. Shown here so
-                      the flow is usable on a fresh clone; a production server refuses that path. */}
-                  {sentTo.devCode ? (
-                    <Text style={styles.devCode}>Development server — your code is {sentTo.devCode}</Text>
-                  ) : null}
-                  <TextInput
-                    value={code}
-                    onChangeText={(text) => {
-                      setCode(text.replace(/\D/g, '').slice(0, 6));
-                      if (error !== null) setError(null);
-                    }}
-                    placeholder="000000"
-                    placeholderTextColor={colors.textTertiary}
-                    keyboardType="number-pad"
-                    textContentType="oneTimeCode"
-                    style={[styles.input, styles.codeInput]}
-                    accessibilityLabel="The six-digit code we emailed you"
-                  />
-                  <PrimaryButton
-                    label={`Confirm ${sentTo.school}`}
-                    onPress={() => void confirm()}
-                    disabled={code.length !== 6 || busy}
-                    loading={busy}
-                  />
-                  <PrimaryButton
-                    label="Use a different address"
-                    variant="ghost"
-                    onPress={() => {
-                      setSentTo(null);
-                      setCode('');
-                      setError(null);
-                    }}
-                  />
-                </>
-              )}
-            </View>
-
-            {/*
-              Not "or", and not smaller. §3.2 makes these siblings, and the layout has to agree:
-              somebody with no .edu address should read this as the route meant for them, not as
-              the consolation prize under the real one.
-            */}
-            <SectionHeader title="Or with a government ID" />
-            <View style={[styles.card, suggestIdPath ? styles.cardHighlighted : null]}>
-              <Text style={styles.cardBody}>
-                For bootcamp grads, career switchers, and anyone whose university is not on our list.
-                A verification partner checks that you are a real person — CareerDeck never sees or
-                stores the document, only whether the check passed.
-              </Text>
-              <Text style={styles.cardNote}>
-                Your comments then show a Verified badge and nothing about where you studied.
-              </Text>
-              <PrimaryButton
-                label="Verify with an ID"
-                variant="secondary"
-                onPress={() => void openIdCheck()}
-                disabled={busy}
-              />
-            </View>
-          </>
+          <View style={styles.card}>
+            {sentTo === null ? (
+              <>
+                <Text style={styles.cardBody}>
+                  Use your university address. We send a code, and your comments then show your
+                  major, school and year — never your name or the address itself.
+                </Text>
+                <TextInput
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (error !== null) setError(null);
+                  }}
+                  placeholder="you@university.edu"
+                  placeholderTextColor={colors.textTertiary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  style={styles.input}
+                  accessibilityLabel="Your school email address"
+                />
+                <PrimaryButton
+                  label="Send me a code"
+                  onPress={() => void send()}
+                  disabled={email.trim().length < 5 || busy}
+                  loading={busy}
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardBody}>
+                  We sent a six-digit code to {sentTo.email}. It is good for 30 minutes.
+                </Text>
+                {/* Only a development server with no mail provider returns the code. Shown here so
+                    the flow is usable on a fresh clone; a production server refuses that path. */}
+                {sentTo.devCode ? (
+                  <Text style={styles.devCode}>Development server — your code is {sentTo.devCode}</Text>
+                ) : null}
+                <TextInput
+                  value={code}
+                  onChangeText={(text) => {
+                    setCode(text.replace(/\D/g, '').slice(0, 6));
+                    if (error !== null) setError(null);
+                  }}
+                  placeholder="000000"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  style={[styles.input, styles.codeInput]}
+                  accessibilityLabel="The six-digit code we emailed you"
+                />
+                <PrimaryButton
+                  label={`Confirm ${sentTo.school}`}
+                  onPress={() => void confirm()}
+                  disabled={code.length !== 6 || busy}
+                  loading={busy}
+                />
+                <PrimaryButton
+                  label="Use a different address"
+                  variant="ghost"
+                  onPress={() => {
+                    setSentTo(null);
+                    setCode('');
+                    setError(null);
+                  }}
+                />
+              </>
+            )}
+          </View>
         ) : null}
 
         {error ? (
@@ -299,6 +260,11 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.background,
   },
   topBar: {
+    // A row, like every other top bar in the app. Without it this View stretches its one
+    // child, and IconButton centres its glyph inside whatever width it is given — so the
+    // back arrow sat in the middle of the screen.
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: screenPadding,
     paddingTop: spacing.sm,
   },
@@ -329,12 +295,6 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-  },
-  // Only when the .edu attempt was refused for an unknown domain — the one moment this path is
-  // genuinely the answer rather than merely the alternative.
-  cardHighlighted: {
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.backgroundMuted,
   },
   cardHead: {
     flexDirection: 'row',
