@@ -1,8 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { useMemo } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CompanyLogo } from '@/components/common/CompanyLogo';
+import { FollowButton } from '@/components/common/FollowButton';
 import { ScrollPane } from '@/components/common/ScrollPane';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { PER_FIELD, companiesForSectors } from '@/constants/industries';
@@ -12,6 +14,7 @@ import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { useCompanyDirectory } from '@/hooks/useCompanies';
 import type { Company } from '@/types';
+import { companyAudience } from '@/utils/format';
 
 /**
  * The ceiling, however many fields somebody picks.
@@ -34,8 +37,12 @@ const MAX_SUGGESTIONS = 60;
  */
 const MIN_SUGGESTIONS = 5;
 
+/** Per-row stagger, capped so a long list's tail isn't left waiting. Matches the Following list. */
+const STAGGER_MS = 45;
+const MAX_STAGGER_INDEX = 7;
+
 /**
- * Step three: follow a few companies.
+ * Step four: follow a few companies.
  *
  * The only genuinely skippable step, and the most valuable one that isn't required. A
  * user who follows nothing gets an empty Following tab on their first launch, which is
@@ -107,7 +114,7 @@ export default function CompaniesStep() {
 
   return (
     <OnboardingStep
-      step={3}
+      step={4}
       title={'Follow a few\nto start.'}
       subtitle="Their new roles land at the top of your Deck."
       canContinue
@@ -123,41 +130,48 @@ export default function CompaniesStep() {
         <ScrollPane
           data={suggestions}
           keyExtractor={(company) => company.id}
-          renderItem={(company) => {
+          renderItem={(company, index) => {
             const following = followedCompanySlugs.includes(company.slug);
+            const toggle = () => toggleCompany(company.slug);
             return (
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  toggleCompany(company.slug);
-                }}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: following }}
-                accessibilityLabel={`${following ? 'Unfollow' : 'Follow'} ${company.name}`}
-                style={styles.row}>
-                <CompanyLogo
-                  logo={company.logo}
-                  name={company.name}
-                  color={company.logoColor}
-                  size="sm"
-                />
+              <Animated.View
+                entering={FadeInDown.duration(260).delay(Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS)}>
+                {/* The same row as the Following list in the app, so the first companies
+                    somebody follows look exactly like where they will find them again. The
+                    row toggles too: here there is no company page to open, and a whole row
+                    is an easier target than the button. */}
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    toggle();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${following ? 'Unfollow' : 'Follow'} ${company.name}`}
+                  style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
+                  <CompanyLogo
+                    logo={company.logo}
+                    name={company.name}
+                    color={company.logoColor}
+                    size="md"
+                  />
 
-                <View style={styles.text}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {company.name}
-                  </Text>
-                  <Text style={styles.meta} numberOfLines={1}>
-                    {company.industry}
-                    {company.openJobCount > 0 ? ` · ${company.openJobCount} open` : ''}
-                  </Text>
-                </View>
+                  <View style={styles.text}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {company.name}
+                    </Text>
+                    <Text style={styles.meta} numberOfLines={1}>
+                      {companyAudience(company)}
+                    </Text>
+                  </View>
 
-                <View style={[styles.pill, following ? styles.pillOn : null]}>
-                  <Text style={[styles.pillLabel, following ? styles.pillLabelOn : null]}>
-                    {following ? 'Following' : 'Follow'}
-                  </Text>
-                </View>
-              </Pressable>
+                  <FollowButton
+                    isFollowing={following}
+                    companyName={company.name}
+                    onToggle={toggle}
+                    size="sm"
+                  />
+                </Pressable>
+              </Animated.View>
             );
           }}
         />
@@ -179,43 +193,29 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    padding: spacing.md + 2,
+    padding: spacing.md,
     borderRadius: radius.lg,
-    borderWidth: 1,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    backgroundColor: colors.background,
+  },
+  // A background change rather than opacity, as in the Following list: a logo that dims
+  // reads as an image failing to load.
+  pressed: {
+    backgroundColor: colors.backgroundMuted,
   },
   text: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   name: {
     fontSize: fontSize.body,
     fontWeight: '600',
     color: colors.text,
+    letterSpacing: -0.2,
   },
   meta: {
     fontSize: fontSize.small,
     color: colors.textTertiary,
-  },
-  pill: {
-    paddingVertical: spacing.sm + 1,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.background,
-  },
-  pillOn: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  pillLabel: {
-    fontSize: fontSize.small,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  pillLabelOn: {
-    color: colors.accentText,
   },
 }));

@@ -122,7 +122,7 @@ export const SECTORS: Sector[] = [
     key: 'engineering',
     label: 'Engineering',
     companies: [
-      'amd', 'texas-instruments', 'qualcomm', 'intel', 'micron-technology', 'marvell', 'analog-devices', 'l3harris-technologies', 'rtx', 'spacex', 'blue-origin', 'boeing', 'northrop-grumman', 'tesla', 'waymo',
+      'amd', 'texas-instruments', 'qualcomm', 'intel', 'micron-technology', 'marvell', 'analog-devices', 'l3harris-technologies', 'rtx', 'spacex', 'blueorigin', 'boeing', 'northrop-grumman', 'tesla', 'waymo',
       'nvidia',
       'anduril', 'relativity-space', 'astranis', 'epirus', 'saronic', 'waymo', 'wayve', 'axon',
       'samsara', 'motive',
@@ -470,6 +470,135 @@ export const SECTORS: Sector[] = [
       'toyota-research-institute', 'sdsu-research-foundation', 'foundation', 'foundation-finance', 'institute-of-foundation-models',
     ],
   },
+
+  // ── Onboarding v2 (20261038000000) ───────────────────────────────────────────
+  // Finer fields for the three areas the corpus actually covers. Each has a row in
+  // `sector_families`; the slugs were checked against hosted `companies` on 2026-10-10.
+  {
+    key: 'cloud-infrastructure',
+    label: 'Cloud & Infrastructure',
+    companies: [
+      'cloudflare', 'datadog', 'coreweave', 'vercel', 'gitlab', 'grafana', 'snowflake', 'supabase',
+      'amazon', 'google', 'microsoft',
+    ],
+  },
+  {
+    key: 'electrical-engineering',
+    label: 'Electrical Engineering',
+    companies: [
+      'texas-instruments', 'analog-devices', 'qualcomm', 'marvell', 'keysight-technologies', 'tesla',
+      'emerson-electric', 'applied-materials', 'kla', 'honeywell',
+    ],
+  },
+  {
+    key: 'computer-hardware',
+    label: 'Computer Hardware',
+    companies: [
+      'nvidia', 'amd', 'intel', 'micron-technology', 'marvell', 'qualcomm', 'applied-materials', 'kla',
+    ],
+  },
+  {
+    key: 'mechanical-engineering',
+    label: 'Mechanical Engineering',
+    companies: [
+      'tesla', 'rivian', 'general-motors', 'caterpillar', 'anduril', 'saronic', 'spacex', 'relativity-space',
+      'boeing', 'honeywell', '3m',
+    ],
+  },
+  {
+    key: 'aerospace-engineering',
+    label: 'Aerospace Engineering',
+    companies: [
+      'spacex', 'relativity-space', 'astranis', 'blueorigin', 'boeing', 'ge-aerospace', 'rtx',
+      'northrop-grumman', 'lockheed', 'l3harris-technologies', 'anduril', 'skydio', 'shield-ai',
+    ],
+  },
+  {
+    key: 'robotics',
+    label: 'Robotics',
+    companies: ['tesla', 'waymo', 'zoox', 'anduril', 'skydio', 'saronic', 'wayve', 'intuitive-surgical', 'shield-ai'],
+  },
+  {
+    // A stretch: the corpus has no civil firm yet. These hire civil engineers for plants,
+    // sites and heavy equipment, which is honest enough to follow.
+    key: 'civil-engineering',
+    label: 'Civil Engineering',
+    companies: ['caterpillar', 'honeywell', '3m', 'tesla'],
+  },
+  {
+    // Also a stretch: fabs and materials are where chemical engineers land in this corpus.
+    key: 'chemical-engineering',
+    label: 'Chemical Engineering',
+    companies: ['3m', 'applied-materials', 'micron-technology', 'intel', 'tesla'],
+  },
+  {
+    key: 'industrial-engineering',
+    label: 'Industrial Engineering',
+    companies: [
+      'tesla', 'general-motors', 'caterpillar', 'emerson-electric', 'honeywell', 'flexport', 'samsara',
+      'motive', 'oshkosh',
+    ],
+  },
+  {
+    key: 'quant-trading',
+    label: 'Quant & Trading',
+    companies: [
+      'jane-street', 'citadel-securities', 'drw', 'optiver', 'jump-trading', 'imc',
+      'susquehanna-international-group-sig',
+    ],
+  },
+  {
+    key: 'fintech',
+    label: 'Fintech',
+    companies: [
+      'stripe', 'ramp', 'robinhood', 'coinbase', 'affirm', 'sofi', 'chime', 'brex', 'paypal', 'mercury',
+      'wise', 'ripple',
+    ],
+  },
+  {
+    key: 'consulting',
+    label: 'Consulting',
+    companies: ['deloitte', 'accenture', 'booz-allen'],
+  },
+  {
+    key: 'product-management',
+    label: 'Product Management',
+    companies: ['linear', 'asana', 'figma', 'salesforce', 'workday', 'google', 'microsoft', 'stripe', 'ramp'],
+  },
+];
+
+/**
+ * What the onboarding interests step offers, in the order its bubbles float.
+ *
+ * Twenty-one of the sectors above, with labels short enough for a bubble. The rest of
+ * SECTORS stays: everyone who onboarded on the old forty-field grid has those keys stored,
+ * and `companiesForSectors` and `sector_families` still have to read them.
+ *
+ * Shuffled across the three areas on purpose. Grouped, the screen reads as a form with
+ * three sections; mixed, it reads as one cloud to pick from.
+ */
+export const INTERESTS: { key: string; label: string }[] = [
+  { key: 'software-development', label: 'Software Engineering' },
+  { key: 'finance', label: 'Finance' },
+  { key: 'aerospace-engineering', label: 'Aerospace' },
+  { key: 'artificial-intelligence', label: 'AI & ML' },
+  { key: 'quant-trading', label: 'Quant & Trading' },
+  { key: 'mechanical-engineering', label: 'Mechanical' },
+  { key: 'data-science', label: 'Data Science' },
+  { key: 'electrical-engineering', label: 'Electrical' },
+  { key: 'fintech', label: 'Fintech' },
+  { key: 'cybersecurity', label: 'Cybersecurity' },
+  { key: 'consulting', label: 'Consulting' },
+  { key: 'robotics', label: 'Robotics' },
+  { key: 'banking', label: 'Banking' },
+  { key: 'cloud-infrastructure', label: 'Cloud & Infra' },
+  { key: 'computer-hardware', label: 'Computer Hardware' },
+  { key: 'product-management', label: 'Product' },
+  { key: 'civil-engineering', label: 'Civil' },
+  { key: 'accounting', label: 'Accounting' },
+  { key: 'industrial-engineering', label: 'Industrial' },
+  { key: 'business-operations', label: 'Operations' },
+  { key: 'chemical-engineering', label: 'Chemical' },
 ];
 
 /**

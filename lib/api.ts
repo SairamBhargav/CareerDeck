@@ -25,6 +25,7 @@
 
 import * as Crypto from 'expo-crypto';
 
+import { MAX_WEEKLY_GOAL, MIN_WEEKLY_GOAL } from '@/constants/goal';
 import { FREE_MATCH_LOOKS } from '@/constants/limits';
 import { reportError } from '@/lib/observability';
 import { supabase } from '@/lib/supabase';
@@ -2213,6 +2214,8 @@ export interface OnboardingFlush {
   /** Onboarding step 1, which the deck reads to pick levels — docs/PHASE8.md §3.2. */
   careerStage: 'student_intern' | 'graduating' | 'recent_grad' | 'early_career' | null;
   followedCompanySlugs: string[];
+  /** Onboarding's goal step. Null leaves the column's own default in place. */
+  weeklyGoal: number | null;
 }
 
 /**
@@ -2270,6 +2273,10 @@ export async function flushOnboarding(userId: string, draft: OnboardingFlush): P
       preferred_industries: draft.industries,
       preferred_employment_types: draft.employmentTypes,
       ...(draft.careerStage ? { career_stage: draft.careerStage } : {}),
+      // Clamped to the column's check (3–30): one bad value would fail the whole update.
+      ...(draft.weeklyGoal !== null
+        ? { weekly_goal: Math.min(MAX_WEEKLY_GOAL, Math.max(MIN_WEEKLY_GOAL, Math.round(draft.weeklyGoal))) }
+        : {}),
     })
     .eq('user_id', userId);
   if (preferencesError) reportError(preferencesError, { where: 'flushOnboarding.preferences' });

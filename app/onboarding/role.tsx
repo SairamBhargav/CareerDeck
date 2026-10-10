@@ -39,7 +39,7 @@ export default function RoleStep() {
       title={'Which sounds\nlike you?'}
       subtitle="It sets what your feed leads with. You can change it later."
       canContinue={role !== null}
-      onContinue={() => router.push('/onboarding/industries')}>
+      onContinue={() => router.push('/onboarding/interests')}>
       <View style={styles.list}>
         {ROLE_OPTIONS.map((option) => {
           const selected = role === option.key;
