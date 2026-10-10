@@ -38,6 +38,7 @@ import { useFollowingFeed, useJobFeed, type ReelFeed } from '@/hooks/useJobFeeds
 import { useOpenCompany } from '@/hooks/useOpenCompany';
 import { useTabBarHeight } from '@/hooks/useTabBarHeight';
 import { flushImpressions } from '@/lib/impressions';
+import { shareJob } from '@/lib/shareJob';
 import type { Job } from '@/types';
 
 const TOGGLE_HEIGHT = 44;
@@ -421,6 +422,7 @@ export default function ReelsScreen() {
                   likeCount={likeCounts.get(item.id) ?? 0}
                   onLike={() => toggleLike(item.id)}
                   onComment={() => setCommentsJob(item)}
+                  onShare={() => void shareJob(item)}
                   onMore={() => setDetailsJob(item)}
                   onAutoApply={() => handleAutoApply(item)}
                   onCompanyPress={() => openCompany(item.companySlug)}

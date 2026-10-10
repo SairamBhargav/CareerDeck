@@ -66,6 +66,7 @@ interface JobReelCardProps {
   likeCount: number;
   onLike: () => void;
   onComment: () => void;
+  onShare: () => void;
   onMore: () => void;
   onAutoApply: () => void;
   /** Tapping the logo or company name. */
@@ -86,6 +87,7 @@ export function JobReelCard({
   likeCount,
   onLike,
   onComment,
+  onShare,
   onMore,
   onAutoApply,
   onCompanyPress,
@@ -334,6 +336,7 @@ export function JobReelCard({
           likeCount={likeCount}
           onLike={handleLike}
           onComment={onComment}
+          onShare={onShare}
           onMore={onMore}
           onAutoApply={onAutoApply}
           jobTitle={job.title}
