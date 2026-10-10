@@ -66,8 +66,8 @@ export function AccountGate({ message, onRetry, onSignOut }: AccountGateProps) {
         <Text style={styles.title} accessibilityRole="header">Your account is scheduled for deletion</Text>
         <Text style={styles.detail}>
           Everything will be permanently deleted on {date}. Until then you can change your mind and
-          get it all back. Comments you posted stay up, with your pseudonym replaced, so the threads
-          still make sense.
+          get it all back. Comments you posted stay up, with nothing that identifies you, so the
+          threads still make sense.
         </Text>
         <View style={styles.actions}>
           <PrimaryButton label="Keep my account" onPress={() => void restore()} loading={busy} />

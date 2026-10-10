@@ -150,8 +150,8 @@ export default function VerifyScreen() {
             </View>
             <Text style={styles.cardBody}>
               {verification.badge
-                ? `Your comments show "${verification.badge}" and the name ${verification.handle ?? ''}.`
-                : `Your comments show a Verified badge and the name ${verification.handle ?? ''}. Nothing else about you is shown.`}
+                ? `Your comments show your blob and "${verification.badge}". Nothing else about you is shown.`
+                : 'Your comments show your blob and "Verified member". Nothing else about you is shown.'}
             </Text>
             {verification.eduExpiresAt ? (
               // §3.2: school addresses die after graduation, so this is stated up front rather

@@ -66,7 +66,8 @@ export function messageFor(job: Pick<PushJob, 'kind' | 'payload' | 'notification
       return {
         ...base,
         priority: 'high',
-        title: `${str(p, 'actor_handle') ?? 'Someone'} replied to you`,
+        // No names on screen (2026-10-10), so none in a push either.
+        title: 'Someone replied to you',
         body: clip(str(p, 'reply_body') ?? 'Open the thread to read it.', 140),
         data: { url: jobRoute, notificationId: job.notification_id },
       };

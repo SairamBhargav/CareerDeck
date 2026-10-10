@@ -29,8 +29,6 @@ import type { ReportReason } from '@/types';
 
 interface ReportSheetProps {
   visible: boolean;
-  /** The pseudonym, so the sheet can say who is being blocked without naming a person. */
-  authorHandle: string;
   busy?: boolean;
   onSubmit: (reason: ReportReason, detail: string | undefined, blockToo: boolean) => void;
   onClose: () => void;
@@ -87,7 +85,7 @@ const REASONS: ReasonOption[] = [
   },
 ];
 
-export function ReportSheet({ visible, authorHandle, busy = false, onSubmit, onClose }: ReportSheetProps) {
+export function ReportSheet({ visible, busy = false, onSubmit, onClose }: ReportSheetProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -169,7 +167,7 @@ export function ReportSheet({ visible, authorHandle, busy = false, onSubmit, onC
                 onPress={() => setBlockToo((current) => !current)}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: blockToo }}
-                accessibilityLabel={`Also block ${authorHandle}`}
+                accessibilityLabel="Also block this person"
                 style={({ pressed }) => [styles.checkRow, pressed ? styles.pressed : null]}>
                 <Ionicons
                   name={blockToo ? 'checkbox' : 'square-outline'}
@@ -177,7 +175,7 @@ export function ReportSheet({ visible, authorHandle, busy = false, onSubmit, onC
                   color={blockToo ? colors.text : colors.textTertiary}
                 />
                 <View style={styles.optionText}>
-                  <Text style={styles.optionLabel}>Also block {authorHandle}</Text>
+                  <Text style={styles.optionLabel}>Also block this person</Text>
                   {/* Says what a block does, because "block" means different things on different
                       apps and here it is symmetrical — neither of you sees the other again. */}
                   <Text style={styles.optionHint}>

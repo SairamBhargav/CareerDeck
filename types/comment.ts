@@ -24,7 +24,10 @@ export interface JobComment {
   jobId: string;
   /** Null on a top-level comment; the comment this one answers otherwise. */
   parentId: string | null;
-  /** The generated pseudonym — `quiet-otter-4821`. Never chosen by the user, never a real name. */
+  /**
+   * The generated pseudonym — `quiet-otter-4821`. Never shown as text (2026-10-10: people are
+   * known only by their blob and their credential); it is the seed that draws their blob.
+   */
   authorHandle: string;
   /**
    * `CS @ Purdue '27`, composed by the database from the school the account actually verified.
@@ -116,4 +119,15 @@ export interface MyComment {
   jobTitle: string;
   companyName: string;
   companyLogoUrl: string | null;
+}
+
+/**
+ * How a commenter is named: their credential, `CS @ Purdue '27`.
+ *
+ * There are no names, real or generated (2026-10-10) — a person is their blob and this line.
+ * Posting needs a verified account, so every commenter has one; an account verified by
+ * government ID claims personhood but no school, which is what "Verified member" says.
+ */
+export function authorLabel(badge: string | null | undefined): string {
+  return badge?.trim() ? badge : 'Verified member';
 }

@@ -23,6 +23,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentPolicySheet } from '@/components/comments/CommentPolicySheet';
+import { authorLabel } from '@/types/comment';
 import { CommentRow } from '@/components/comments/CommentRow';
 import { GifPicker } from '@/components/comments/GifPicker';
 import { ReportSheet } from '@/components/comments/ReportSheet';
@@ -76,8 +77,8 @@ interface CommentSheetProps {
 interface ReplyTarget {
   id: string;
   /**
-   * What the banner calls them — a pseudonym, or "your comment". Not a name: there is no name to
-   * hold here, which is the whole of README §3.8's contract.
+   * What the banner calls them — their credential, or "your comment". Not a name: there is no
+   * name to hold here, which is the whole of README §3.8's contract.
    */
   authorLabel: string;
 }
@@ -138,7 +139,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const [postError, setPostError] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [acceptingPolicy, setAcceptingPolicy] = useState(false);
-  const [reporting, setReporting] = useState<{ id: string; handle: string } | null>(null);
+  const [reporting, setReporting] = useState<{ id: string } | null>(null);
   const [isReporting, setIsReporting] = useState(false);
 
   const translateY = useSharedValue(sheetHeight);
@@ -218,11 +219,13 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     else openThread(commentId);
   };
 
-  const handleReplyTo = (parentId: string, handle: string, isYou: boolean, isNested: boolean) => {
-    setReplyTo({ id: parentId, authorLabel: isYou ? 'your comment' : handle });
-    // Answering someone inside a thread names them, the way a reply chain does — the
-    // parent row is no longer directly above what you're writing.
-    if (isNested && !isYou) setDraft((current) => (current.length > 0 ? current : `@${handle} `));
+  /*
+   * `label` is the credential being answered ("CS @ Purdue '27"). Replies inside a thread used to
+   * pre-fill "@handle"; with no handles on screen (2026-10-10) there is nobody to @, and the
+   * "Replying to" line above the composer already says who.
+   */
+  const handleReplyTo = (parentId: string, label: string, isYou: boolean) => {
+    setReplyTo({ id: parentId, authorLabel: isYou ? 'your comment' : label });
     openThread(parentId);
     setGifOpen(false);
     inputRef.current?.focus();
@@ -436,11 +439,11 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                             onReport={
                               comment.isYou
                                 ? undefined
-                                : () => setReporting({ id: comment.id, handle: comment.authorHandle })
+                                : () => setReporting({ id: comment.id })
                             }
                             onToggleLike={() => handleToggleLike(comment.id)}
                             onReply={() =>
-                              handleReplyTo(comment.id, comment.authorHandle, comment.isYou, false)
+                              handleReplyTo(comment.id, authorLabel(comment.authorBadge), comment.isYou)
                             }
                           />
 
@@ -481,13 +484,13 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
                                   onReport={
                                     reply.isYou
                                       ? undefined
-                                      : () => setReporting({ id: reply.id, handle: reply.authorHandle })
+                                      : () => setReporting({ id: reply.id })
                                   }
                                   onToggleLike={() => handleToggleLike(reply.id)}
                                   // Attaches to the same parent rather than nesting a level
                                   // deeper — see JobComment.
                                   onReply={() =>
-                                    handleReplyTo(comment.id, reply.authorHandle, reply.isYou, true)
+                                    handleReplyTo(comment.id, authorLabel(reply.authorBadge), reply.isYou)
                                   }
                                 />
                               ))
@@ -622,7 +625,6 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
       <ReportSheet
         visible={reporting !== null}
-        authorHandle={reporting?.handle ?? ''}
         busy={isReporting}
         onSubmit={(reason, detail, blockToo) => void handleReport(reason, detail, blockToo)}
         onClose={() => setReporting(null)}

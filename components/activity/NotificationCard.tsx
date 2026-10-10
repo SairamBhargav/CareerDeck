@@ -41,13 +41,15 @@ export function NotificationCard({ entry, jobTitle, companyName, onPress }: Noti
   const isLike = entry.kind === 'comment_like';
   const isSystem = !isReply && !isLike;
 
+  // Nobody is named (2026-10-10): people are their blob and credential, and the notification
+  // payload carries neither credential nor name — `actorHandle` only draws the blob.
   const headline = isSystem
     ? (entry.headline ?? 'Something happened on your account')
     : isReply
-      ? `${entry.actorHandle ?? 'Someone'} replied to you`
+      ? 'Someone replied to you'
       : entry.aggregateCount > 1
-        ? `${entry.actorHandle ?? 'Someone'} and ${entry.aggregateCount - 1} others liked your comment`
-        : `${entry.actorHandle ?? 'Someone'} liked your comment`;
+        ? `${entry.aggregateCount} people liked your comment`
+        : 'Someone liked your comment';
 
   const context = isSystem
     ? entry.detail

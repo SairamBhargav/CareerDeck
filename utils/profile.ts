@@ -30,3 +30,16 @@ export function studyLineOf(user: Pick<User, 'major' | 'graduationYear'>): strin
   if (user.graduationYear > 0) parts.push(`Class of ${user.graduationYear}`);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
+
+/**
+ * The credential as the reader entered it — "Computer Science @ Purdue '27" — for showing a
+ * person their own line before it is verified. On comments the database composes it from the
+ * *verified* school instead (`comment_badge`), so nobody can post under a school they typed.
+ */
+export function credentialOf(user: Pick<User, 'major' | 'school' | 'graduationYear'> | null): string {
+  const major = user?.major.trim() ?? '';
+  const school = user?.school.trim() ?? '';
+  let line = [major, school].filter((part) => part.length > 0).join(' @ ');
+  if (user && user.graduationYear > 0) line = `${line} '${String(user.graduationYear % 100).padStart(2, '0')}`.trim();
+  return line.length > 0 ? line : 'Student';
+}

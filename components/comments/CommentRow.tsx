@@ -17,6 +17,7 @@ import { useKlipyGif } from '@/hooks/useGifs';
 import { klipySlugOf } from '@/lib/klipy';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { JobComment } from '@/types';
+import { authorLabel } from '@/types/comment';
 import { formatPostedAt } from '@/utils/format';
 
 const AVATAR = 34;
@@ -64,13 +65,13 @@ interface CommentRowProps {
  * -- Who wrote it, in phase 3 -------------------------------------------------
  *
  * There is no name here and there cannot be one. README §3.8's contract is that users are
- * anonymous to each other, so the row shows a generated pseudonym and, beside it, the badge the
- * database composed from the school the account actually verified. That badge is the useful half
- * of an identity for this product: it says whether the person answering knows what they are
- * talking about, without saying who they are.
+ * anonymous to each other. Since 2026-10-10 that means no generated name either: the row shows
+ * the blob and the credential the database composed from the school the account actually
+ * verified ("CS @ Purdue '27"). That is the useful half of an identity for this product: it says
+ * whether the person answering knows what they are talking about, without saying who they are.
  *
- * The avatar is therefore a blobatar seeded from the pseudonym rather than a face or a name, which
- * is also why it reads as a shape rather than as a person.
+ * The blob is seeded from the account's handle, which is never shown as text — it only keeps
+ * the same person the same creature everywhere.
  */
 export function CommentRow({
   comment,
@@ -131,7 +132,8 @@ export function CommentRow({
       offsetX.set(open ? -DELETE_WIDTH : 0);
     });
 
-  const replyTargetLabel = comment.isYou ? 'your comment' : comment.authorHandle;
+  const credential = authorLabel(comment.authorBadge);
+  const replyTargetLabel = comment.isYou ? 'your comment' : credential;
 
   return (
     <View style={styles.wrapper}>
@@ -159,12 +161,12 @@ export function CommentRow({
 
           <View style={styles.body}>
             <View style={styles.meta}>
+              {/* The credential is the name: there are no handles on screen. Your own comments
+                  say "You" and keep the credential beside it, so you see what others see. */}
               <Text style={styles.author} numberOfLines={1}>
-                {comment.isYou ? 'You' : comment.authorHandle}
+                {comment.isYou ? 'You' : credential}
               </Text>
-              {/* The badge is the credential, so it gets its own text rather than being appended
-                  to the handle and truncated away on a narrow screen. */}
-              {comment.authorBadge ? (
+              {comment.isYou && comment.authorBadge ? (
                 <Text style={styles.badge} numberOfLines={1}>
                   {comment.authorBadge}
                 </Text>
