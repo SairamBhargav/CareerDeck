@@ -189,6 +189,44 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
   const gifListGesture = Gesture.Native();
 
+  /*
+   * Whether the composer was focused when the picker opened, so leaving it can put things back.
+   *
+   * A ref and not state: nothing renders differently for it, and it is read inside the animation's
+   * completion callback, where a stale closure over a state value would answer for whenever that
+   * callback was built rather than for now.
+   */
+  const keyboardWasUp = useRef(false);
+
+  /** Tracks the open→closed edge, so the effect below does not fire on mount. */
+  const gifWasOpen = useRef(false);
+
+  /*
+   * Put the keyboard back the way it was, whichever way the picker was left.
+   *
+   * An effect on `gifOpen` rather than something `closeGif` does, because `closeGif` is reached
+   * from inside the dismiss gesture's worklet — and a worklet built during render that transitively
+   * reads a ref is what `react-hooks/refs` rejects, correctly. Closing is a state change; this is
+   * a consequence of it, so it belongs here and covers the drag, the tap and the pick at once.
+   */
+  useEffect(() => {
+    if (gifOpen) {
+      gifWasOpen.current = true;
+      return;
+    }
+    if (!gifWasOpen.current) return;
+    gifWasOpen.current = false;
+
+    if (keyboardWasUp.current) {
+      // They were mid-sentence when they went looking for a GIF. Put the keys back.
+      inputRef.current?.focus();
+    } else {
+      // They were not typing — but the picker's own search box may have raised the keyboard, and
+      // that one belongs to the screen they are leaving.
+      Keyboard.dismiss();
+    }
+  }, [gifOpen]);
+
   const closeGif = () => {
     gifTranslateY.set(withTiming(sheetHeight, CLOSE, (finished) => {
       'worklet';
@@ -206,7 +244,9 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
      * of holding a keyboard-shaped gap behind a full-screen grid.
      *
      * Tapping a Pressable does not blur a focused TextInput on its own, so this has to be said.
+     * Noted first, because `finishCloseGif` restores whatever was true here.
      */
+    keyboardWasUp.current = inputRef.current?.isFocused() ?? false;
     Keyboard.dismiss();
 
     // Parked off the bottom first, so it does not appear already dragged away. The rise starts a
@@ -405,10 +445,14 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const handlePickGif = (gifId: string, slug?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPendingGif(slug === undefined ? { id: gifId } : { id: gifId, slug });
-    // Back to the thread, with the GIF waiting in the composer. The grid has done its job, and it
-    // leaves the way a drag would so the two exits look like the same door.
+    /*
+     * Back to the thread, with the GIF waiting in the composer.
+     *
+     * Out through the same door a drag uses, which also means the same keyboard rule: it comes
+     * back for somebody who was typing before they went looking, and stays down for somebody who
+     * was not. Attaching a GIF is not by itself a request to type.
+     */
     closeGif();
-    inputRef.current?.focus();
   };
 
   const handleDelete = (commentId: string) => {
