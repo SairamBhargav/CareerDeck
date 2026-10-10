@@ -19,9 +19,13 @@ import type { EduChallenge, VerificationState } from '@/types';
  * Two things this hook is deliberately shaped around:
  *
  * **The two paths are siblings, not a fallback chain.** `edu` and `identity` both open the composer
- * and differ only in the badge. So both are offered at once, and `startIdentity` is not hidden
- * behind a failed `startEdu` — the bootcamp grad, the career switcher and the student at a `.ac.uk`
- * school would never reach it if it were.
+ * and differ only in the badge, so `startIdentity` is not shaped as something you reach by failing
+ * `startEdu` — the bootcamp grad, the career switcher and the student at a `.ac.uk` school would
+ * never get to it if it were.
+ *
+ * `startIdentity` currently has no caller: app/verify.tsx stopped offering the ID path, and its
+ * header explains that. It is kept, rather than deleted, because the server route and `canComment`'s
+ * handling of the `identity` tier are both still live, so putting the path back is UI work.
  *
  * **Verification can be unavailable.** Both paths run through `server/`, because one needs an email
  * provider and the other a vendor's signing secret. On a build with no `EXPO_PUBLIC_API_URL` the

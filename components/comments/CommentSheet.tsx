@@ -34,6 +34,7 @@ import { CONTENT_POLICY_VERSION } from '@/constants/policy';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useCareerDeck } from '@/context/CareerDeckContext';
+import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCommentActions, useCommentGate, useJobComments } from '@/hooks/useComments';
 import { reportGifShared } from '@/lib/klipy';
@@ -116,6 +117,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   const { userId } = useAuth();
   const { threads, total, isLoading, hasMore, loadMore, openThread, openThreadIds, closeThread } =
     useJobComments(job?.id);
+  const router = useGuardedRouter();
   const { gate, acceptPolicy } = useCommentGate();
   const { post, remove, report } = useCommentActions(job?.id);
 
@@ -365,6 +367,24 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
    * muted, or banned.
    */
   const gateReason = reasonFor(gate);
+
+  /*
+   * Push, then close.
+   *
+   * This sheet is a native transparent Modal, so it draws above the navigator and a pushed
+   * screen cannot appear over it. Closing first would drop the reader onto the Deck for a
+   * beat before verification arrived; pushing first commits the route behind a sheet that
+   * is still covering everything, and the slide-down reveals it.
+   *
+   * The story viewer hit the same wall and took the other way out — it became a route
+   * (app/story.tsx) so the company sheet could rise over it without closing anything.
+   * That is the better fix when the thing underneath should survive the trip, and the
+   * wrong one here: somebody leaving to verify is done with this thread for now.
+   */
+  const openVerification = () => {
+    router.push('/verify');
+    requestAnimationFrame(dismiss);
+  };
   // Not blocked while an earlier comment is still in flight: it is already on screen, and each
   // comment carries its own idempotency key (useCommentActions), so two sends stay two comments.
   const canPost = draft.trim().length > 0;
@@ -521,12 +541,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
             {/* Why you cannot write, when you cannot. Above the composer rather than replacing
                 it, so the thread stays readable — reading is most of what this sheet is for, and
                 an unverified reader is still a reader. */}
-            {gateReason ? (
-              <View style={styles.gateBanner}>
-                <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
-                <Text style={styles.gateText}>{gateReason}</Text>
-              </View>
-            ) : null}
+            {gateReason ? <GateBanner reason={gateReason} onVerify={openVerification} /> : null}
 
             {postError ? (
               <View style={styles.errorBanner}>
@@ -641,18 +656,78 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
  * date, and a rate-limited one needs to know it is temporary. An unread policy is deliberately not
  * in here: that one is one tap away and the send button handles it.
  */
-function reasonFor(gate: CommentGate): string | null {
-  if (gate.banned) return 'This account can no longer comment.';
+/**
+ * Why this account cannot write, and whether there is anything it can do about it.
+ *
+ * Only one of these is actionable. Being banned, muted or over the hourly limit is a
+ * matter of waiting or of a decision already made elsewhere, and a button on those would
+ * promise a way out that does not exist. Being unverified is a thing a reader can fix in
+ * about a minute, so that one gets a door.
+ */
+function reasonFor(gate: CommentGate): { text: string; verify: boolean } | null {
+  if (gate.banned) return { text: 'This account can no longer comment.', verify: false };
   if (gate.mutedUntil !== null) {
     const until = new Date(gate.mutedUntil);
-    return `You cannot comment until ${until.toLocaleDateString()}.`;
+    return { text: `You cannot comment until ${until.toLocaleDateString()}.`, verify: false };
   }
   if (gate.tier !== 'edu' && gate.tier !== 'identity') {
-    return 'Verify your account from your profile to join the conversation.';
+    // No longer "from your profile": it is from here now. No full stop either — this one
+    // is the label of a button, not a sentence about the state of things.
+    return { text: 'Verify your account to comment', verify: true };
   }
-  if (gate.remainingHour <= 0) return 'You have posted a lot in the last hour. Try again later.';
-  if (gate.remainingDay <= 0) return 'You have posted a lot today. Try again tomorrow.';
+  if (gate.remainingHour <= 0) {
+    return { text: 'You have posted a lot in the last hour. Try again later.', verify: false };
+  }
+  if (gate.remainingDay <= 0) {
+    return { text: 'You have posted a lot today. Try again tomorrow.', verify: false };
+  }
   return null;
+}
+
+interface GateBannerProps {
+  reason: NonNullable<ReturnType<typeof reasonFor>>;
+  onVerify: () => void;
+}
+
+/**
+ * Why the composer is locked, as one row.
+ *
+ * This used to be a slab of text with the word "Verify" pinned to its right edge, which
+ * read as two unrelated things sharing a grey rectangle — and the text wraps, so the word
+ * ended up floating against the middle of two lines.
+ *
+ * So the whole row is the button now: lock, line, chevron. One target, one affordance, and
+ * the copy is short enough to stay on one line at default type. When the reason is not
+ * actionable the same row renders inert and loses the chevron, so nothing offers a tap that
+ * would go nowhere.
+ */
+function GateBanner({ reason, onVerify }: GateBannerProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
+  const body = (
+    <Fragment>
+      <Ionicons name="lock-closed" size={12} color={colors.textTertiary} />
+      <Text style={styles.gateText}>{reason.text}</Text>
+      {reason.verify ? (
+        <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+      ) : null}
+    </Fragment>
+  );
+
+  if (!reason.verify) {
+    return <View style={styles.gateBanner}>{body}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onVerify}
+      accessibilityRole="button"
+      accessibilityLabel={reason.text}
+      style={({ pressed }) => [styles.gateBanner, pressed ? styles.gateBannerPressed : null]}>
+      {body}
+    </Pressable>
+  );
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -670,8 +745,14 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    // A deliberate row rather than one that hugs its text, and the floor a tappable one
+    // needs anyway. Both variants take it, so the gate is the same height either way.
+    minHeight: minTapTarget,
     borderRadius: radius.md,
     backgroundColor: colors.backgroundMuted,
+  },
+  gateBannerPressed: {
+    opacity: 0.6,
   },
   gateText: {
     flex: 1,
