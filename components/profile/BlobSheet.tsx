@@ -4,7 +4,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, SlideInDown, useReducedMotion, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  SlideInDown,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+  ZoomIn,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
@@ -12,6 +21,7 @@ import { Spinner } from '@/components/common/Spinner';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { chooseBlob, fetchBlobOptions } from '@/lib/api';
+import { reportError } from '@/lib/observability';
 
 const BIG = 112;
 const OPTION = 76;
@@ -30,8 +40,9 @@ interface BlobSheetProps {
  * Swapping your blob, twice in a lifetime (20261034000000).
  *
  * Three new ones are on offer; tapping one shows it full size in place of yours, and "Use this
- * one" spends a change. "Show me three more" swaps the offer, three times per change. "Keep mine"
- * costs nothing, and the same three are there next time. With no changes left it just says so.
+ * one" spends a change. The refresh button swaps in three more, five times per change. "Keep
+ * mine" costs nothing, and the same three are there next time. The changes left sit beside the
+ * title throughout. With no changes left it just says so.
  *
  * Mounted only while open, like the other Profile sheets.
  */
@@ -53,8 +64,14 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
   const left = options.data?.left ?? changesLeft;
 
   // "Three more": a new offer replaces the one shown, and any pick from the old one goes.
+  const spin = useSharedValue(0);
+  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
   const refresh = useMutation({
-    mutationFn: () => fetchBlobOptions(true),
+    mutationFn: () => {
+      if (!reduced) spin.set(withTiming(spin.get() + 360, { duration: 500, easing: Easing.out(Easing.cubic) }));
+      return fetchBlobOptions(true);
+    },
+    onError: (error) => reportError(error, { where: 'BlobSheet.refresh' }),
     onSuccess: (next) => {
       void Haptics.selectionAsync();
       setPicked(null);
@@ -65,6 +82,7 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
 
   const choose = useMutation({
     mutationFn: (next: string) => chooseBlob(next),
+    onError: (error) => reportError(error, { where: 'BlobSheet.choose' }),
     onSuccess: (result) => {
       if (result.taken) {
         // Nothing was spent; the offer is gone, so fetch three more.
@@ -85,8 +103,9 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
 
   let line: string;
   if (left <= 0) line = 'You’ve used both changes. This one’s yours for good.';
-  else if (left === 1) line = 'Pick a new one. This is your last change, ever.';
-  else line = `Pick a new one. You can change it ${left} times, ever.`;
+  else if (left === 1) line = 'Tap one to try it on. This is your last change.';
+  else line = 'Tap one to try it on.';
+  const changesLabel = left <= 0 ? 'No changes left' : `${left} ${left === 1 ? 'change' : 'changes'} left`;
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
@@ -100,9 +119,14 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
           style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.grabber} />
 
-          <Text style={styles.title} accessibilityRole="header">
-            Your blob
-          </Text>
+          <View style={styles.head}>
+            <Text style={styles.title} accessibilityRole="header">
+              Your blob
+            </Text>
+            <View style={[styles.changes, left <= 0 ? styles.changesOut : null]}>
+              <Text style={[styles.changesLabel, left <= 0 ? styles.changesLabelOut : null]}>{changesLabel}</Text>
+            </View>
+          </View>
 
           <View style={styles.stage}>
             {/* Keyed on the handle, so picking another one pops it in rather than morphing. */}
@@ -148,19 +172,23 @@ export function BlobSheet({ handle, changesLeft, onChanged, onClose }: BlobSheet
           ) : null}
 
           {left > 0 && options.data ? (
-            <Pressable
-              onPress={() => refresh.mutate()}
-              disabled={refreshesLeft === 0 || refresh.isPending}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: refreshesLeft === 0 }}
-              style={({ pressed }) => [styles.refresh, pressed ? styles.pressed : null]}>
-              <Ionicons name="shuffle" size={15} color={refreshesLeft === 0 ? colors.textTertiary : colors.text} />
-              <Text style={[styles.refreshLabel, refreshesLeft === 0 ? styles.refreshLabelOff : null]}>
-                {refreshesLeft === 0
-                  ? 'No more until your next change'
-                  : `Show me three more · ${refreshesLeft} left`}
-              </Text>
-            </Pressable>
+            <View style={styles.refreshRow}>
+              <Pressable
+                onPress={() => refresh.mutate()}
+                disabled={refreshesLeft === 0 || refresh.isPending}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={refreshesLeft === 0 ? 'No refreshes left until your next change' : `Refresh, ${refreshesLeft} left`}
+                accessibilityState={{ disabled: refreshesLeft === 0 }}
+                style={({ pressed }) => [styles.refresh, refreshesLeft === 0 ? styles.refreshOff : null, pressed ? styles.pressed : null]}>
+                <Animated.View style={spinStyle}>
+                  <Ionicons name="refresh" size={20} color={refreshesLeft === 0 ? colors.textTertiary : colors.text} />
+                </Animated.View>
+                <View style={[styles.refreshBadge, refreshesLeft === 0 ? styles.refreshBadgeOff : null]}>
+                  <Text style={styles.refreshBadgeText}>{refreshesLeft}</Text>
+                </View>
+              </Pressable>
+            </View>
           ) : null}
           {refresh.isError ? <Text style={styles.notice}>Couldn’t get more. Try again.</Text> : null}
 
@@ -210,6 +238,26 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.borderStrong,
     marginBottom: spacing.xs,
   },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  changes: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+  },
+  changesOut: { backgroundColor: colors.backgroundMuted },
+  changesLabel: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.accentText,
+    fontVariant: ['tabular-nums'],
+  },
+  changesLabelOut: { color: colors.textTertiary },
   title: {
     fontSize: fontSize.heading,
     fontWeight: '700',
@@ -271,22 +319,36 @@ const useStyles = makeStyles((colors) => ({
   optionPicked: {
     borderColor: colors.text,
   },
+  refreshRow: { alignItems: 'center' },
   refresh: {
-    flexDirection: 'row',
-    alignSelf: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
+    justifyContent: 'center',
     backgroundColor: colors.backgroundMuted,
   },
-  refreshLabel: {
-    fontSize: fontSize.small,
-    fontWeight: '600',
-    color: colors.text,
+  refreshOff: { opacity: 0.6 },
+  // How many refreshes are left, on the button's corner.
+  refreshBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
   },
-  refreshLabelOff: { color: colors.textTertiary },
+  refreshBadgeOff: { backgroundColor: colors.textTertiary },
+  refreshBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.accentText,
+    fontVariant: ['tabular-nums'],
+  },
   pressed: {
     opacity: 0.7,
   },
