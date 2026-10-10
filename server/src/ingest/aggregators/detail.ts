@@ -19,8 +19,8 @@
 
 import { politeFetch } from '../http.ts';
 import { classifyFamily, type JobFamily } from '../normalize/family.ts';
-import { decodeEntities, extractRequirements, htmlToText } from '../normalize/html.ts';
-import { parseSalary } from '../normalize/salary.ts';
+import { decodeEntities, extractRequirements, htmlToText, postingText } from '../normalize/html.ts';
+import { asInternshipPay, parseSalary } from '../normalize/salary.ts';
 import { extractSkills, type SkillDictionary } from '../normalize/skills.ts';
 import { ashby, greenhouse, lever, workday } from '../sources/index.ts';
 import { asRecord, str, type ParsedPosting, type StructuredSalary } from '../sources/types.ts';
@@ -474,9 +474,7 @@ export function describePosting(
   detail: PostingDetail | null,
   dictionary: SkillDictionary,
 ): DescribedPosting {
-  const text = detail
-    ? (detail.descriptionText?.trim() ? detail.descriptionText.trim() : htmlToText(detail.descriptionHtml))
-    : '';
+  const text = detail ? postingText(detail.descriptionText, detail.descriptionHtml) : '';
 
   if (text.length < MIN_REAL_DESCRIPTION) {
     const requirements = listing.degrees.length > 0 ? [`Open to ${listing.degrees.join(', ')} students`] : [];
@@ -494,13 +492,14 @@ export function describePosting(
 
   const requirements = extractRequirements(text);
   const skills = extractSkills(dictionary, listing.title, requirements, text);
-  // USD only, for the reason normalize() in ../pipeline.ts gives: the card prints `$`.
+  // USD only, for the reason normalize() in ../pipeline.ts gives: the card prints `$`. The feed
+  // lists internships only, so pay is shown by the hour like every other internship's.
   const parsed = parseSalary(detail?.salary ?? null, text);
   return {
     description_text: text,
     requirements,
     skills,
-    salary: parsed?.currency === 'USD' ? parsed : null,
+    salary: asInternshipPay(parsed?.currency === 'USD' ? parsed : null),
     job_family: classifyFamily(listing.title, skills),
     hasFullDescription: true,
     hasStructuredSalary: detail?.salary != null,

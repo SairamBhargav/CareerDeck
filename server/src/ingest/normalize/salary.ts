@@ -128,7 +128,12 @@ interface Amount {
   hadSuffix: boolean;
   hadSymbol: boolean;
   hadSeparator: boolean;
+  /** A currency code right after the figure — "20 USD". Counts as a symbol for `looksLikePay`. */
+  hadCode: boolean;
 }
+
+/** "20 USD - 56 USD": the code that may follow a figure, before a range's separator. */
+const TRAILING_CODE = new RegExp(String.raw`^\s*` + CURRENCY_CODE.source);
 
 function readAmounts(text: string): Amount[] {
   const found: Amount[] = [];
@@ -151,6 +156,7 @@ function readAmounts(text: string): Amount[] {
       hadSuffix: suffix !== undefined,
       hadSymbol: symbol !== undefined,
       hadSeparator: digits.includes(',') || DOT_GROUPED.test(digits),
+      hadCode: TRAILING_CODE.test(text.slice(match.index + whole.length)),
     });
   }
 
@@ -177,7 +183,7 @@ function looksLikePay(text: string, amount: Amount): boolean {
     return false;
   }
 
-  if (amount.hadSymbol || amount.hadSuffix || amount.hadSeparator) return true;
+  if (amount.hadSymbol || amount.hadSuffix || amount.hadSeparator || amount.hadCode) return true;
 
   const context = text.slice(Math.max(0, amount.index - 30), Math.min(text.length, amount.end + 30));
   if (/\b(hours?|hrs?|weeks?|months?|years? of|days?|%|percent|employees|people|gpa|credits?)\b/i.test(context)) {
@@ -268,7 +274,9 @@ function parseWindow(rawWindow: string): ParsedSalary | null {
     const right = amounts[index + 1];
     if (!left || !right) continue;
 
-    const between = window.slice(left.end, right.index);
+    // The left half's own currency code may sit before the dash: NVIDIA writes "20 USD - 56 USD",
+    // which read as two lone figures and stored every NVIDIA internship at a flat $20 an hour.
+    const between = window.slice(left.end, right.index).replace(TRAILING_CODE, '');
     if (!/^\s*(-|–|—|to|and|up to)\s*$/i.test(between)) continue;
 
     // "120k - 150k" often writes the symbol once; the suffix likewise. Inherit the left
@@ -345,4 +353,43 @@ export function parseSalary(structured: StructuredSalary | null, description: st
   // recognisable cue phrase. Scanning the whole body would match funding rounds,
   // revenue figures and customer counts in the company blurb at the top.
   return parseWindow(description.slice(-1200));
+}
+
+/**
+ * Hours in a working year — 40 a week, 52 weeks. The figure employers use in reverse when they
+ * annualize an hourly intern rate for a pay-transparency paragraph, so dividing by it recovers
+ * the rate they started from.
+ */
+const HOURS_PER_YEAR = 2_080;
+
+/**
+ * Above this an "internship" rate is not one: the best-paid internships (trading firms) top out
+ * near $150 an hour. A figure past it is a full-time range on a mislabelled posting or a number
+ * that was never pay, and showing nothing beats showing $385 an hour.
+ */
+const INTERN_HOURLY_MAX = 175;
+
+/**
+ * An internship's pay, as an hourly rate.
+ *
+ * Interns compare offers by the hour, and an internship lasts ten or twelve weeks, so "$90k/yr"
+ * on a summer role is an annualization nobody is paid. Many employers write it that way anyway
+ * (Pinterest, Intel, IMC and most of Workday) because their pay-transparency template is
+ * annual. Converting here keeps every internship on the card in the same unit. The employer's
+ * own figure is still in `raw_postings`, and `isEstimated` stays false: this is their number,
+ * restated, not a guess.
+ */
+export function asInternshipPay(salary: ParsedSalary | null): ParsedSalary | null {
+  if (!salary) return null;
+
+  const hourly = (value: number | null) => {
+    if (value === null) return null;
+    const rate = salary.period === 'year' ? Math.round(value / HOURS_PER_YEAR) : value;
+    return rate >= HOURLY_MIN && rate <= INTERN_HOURLY_MAX ? rate : null;
+  };
+
+  const min = hourly(salary.min);
+  const max = hourly(salary.max);
+  if (min === null && max === null) return null;
+  return { ...salary, period: 'hour', min: min ?? max, max: max ?? min };
 }

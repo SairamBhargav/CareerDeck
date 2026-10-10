@@ -22,13 +22,14 @@ import {
   recordSourceOutcome,
   startRun,
   touchSeen,
+  TOUCH_EVERY_MS,
   type RunTotals,
   type SourceRow,
 } from './db.ts';
 import { HttpError, politeFetch, RobotsDisallowedError } from './http.ts';
-import { extractRequirements, htmlToText } from './normalize/html.ts';
+import { extractRequirements, postingText } from './normalize/html.ts';
 import { parseLocations, type ParsedLocation } from './normalize/location.ts';
-import { parseSalary } from './normalize/salary.ts';
+import { asInternshipPay, parseSalary } from './normalize/salary.ts';
 import {
   extractEmploymentType,
   extractSeniority,
@@ -181,8 +182,9 @@ export const EXCLUDED_SENIORITY = new Set(['senior', 'staff_plus']);
 
 function descriptionText(posting: Pick<ParsedPosting, 'descriptionText' | 'descriptionHtml'>): string {
   // The adapter's plain text is preferred where the vendor supplies one — it is their own
-  // rendering, and it keeps list structure that a generic HTML strip would flatten.
-  return posting.descriptionText?.trim() ? posting.descriptionText.trim() : htmlToText(posting.descriptionHtml);
+  // rendering, and it keeps list structure that a generic HTML strip would flatten. See
+  // postingText for why "plain" still gets cleaned.
+  return postingText(posting.descriptionText, posting.descriptionHtml);
 }
 
 /**
@@ -240,7 +242,9 @@ export function normalize(posting: ParsedPosting, context: NormalizeContext): No
    * `npm run ingest -- --replay` restores every one from `raw_postings`.
    */
   const parsedSalary = parseSalary(posting.salary, text);
-  const salary = parsedSalary?.currency === 'USD' ? parsedSalary : null;
+  const usd = parsedSalary?.currency === 'USD' ? parsedSalary : null;
+  // Internships are shown by the hour, whatever unit the employer's template used.
+  const salary = employmentType === 'Internship' ? asInternshipPay(usd) : usd;
 
   const quality = scoreQuality({
     title: posting.title,
@@ -701,6 +705,81 @@ export async function markRawProcessed(
 export interface ReplayOptions {
   dictionary: SkillDictionary;
   log?: (message: string) => void;
+  /**
+   * Postings with an open job a crawl actually saw — the default — or every raw row.
+   *
+   * Every raw row is how the replay used to work, and on 2026-10-10 it re-created 295 jobs:
+   * raw_postings outlives the jobs it fed, so postings that had left their boards (closed, or
+   * deleted by a prune) came back as new open rows "seen" that minute. A replay is for
+   * re-reading what is live, so `live` is what it does unless asked otherwise.
+   */
+  scope?: 'live' | 'all';
+}
+
+/**
+ * Writes a crawl makes just after it records its run as finished (Workday's touch lands a few
+ * seconds late), so a run's window is stretched by this much when matching rows to it.
+ */
+const RUN_WINDOW_SLACK_MS = 10 * 60 * 1000;
+
+/**
+ * External ids with an open job on this source that a crawl put there and still sees.
+ *
+ * Two tests, both needed:
+ *
+ *  - **Still seen.** `last_seen_at` within TOUCH_EVERY_MS before the source's last successful
+ *    crawl started. A crawl that gets a 200 touches every posting the board lists, but skips
+ *    rows touched in the last 12 hours, so "at or after the crawl started" would miss most of
+ *    them. A 304 touches nothing and means nothing moved, so the last 200 still describes the
+ *    board.
+ *  - **Put there by a crawl.** `first_seen_at` inside one of the source's crawl runs. Without
+ *    this, the 295 rows the 2026-10-10 full replay re-created — marked seen that night, so
+ *    they pass the first test — would be refreshed again and never close. `run_id` cannot say
+ *    the same thing: every replay writes it as null on the rows it updates.
+ *
+ * Null when the source has never had a successful crawl, which leaves nothing to call live.
+ */
+async function liveExternalIds(client: SupabaseClient, sourceId: string): Promise<Set<string> | null> {
+  const { data: runs, error: runError } = await client
+    .from('crawl_runs')
+    .select('started_at, finished_at, status')
+    .eq('source_id', sourceId)
+    .not('finished_at', 'is', null)
+    .order('started_at', { ascending: false })
+    .limit(500);
+  if (runError) throw runError;
+
+  const lastSuccess = (runs ?? []).find((run) => run.status === 'success');
+  if (!lastSuccess) return null;
+
+  const windows = (runs ?? []).map((run) => [
+    Date.parse(run.started_at as string),
+    Date.parse(run.finished_at as string) + RUN_WINDOW_SLACK_MS,
+  ]);
+  const fromACrawl = (firstSeen: string) => {
+    const at = Date.parse(firstSeen);
+    return windows.some(([start, end]) => at >= start! && at <= end!);
+  };
+
+  const seenSince = new Date(Date.parse(lastSuccess.started_at as string) - TOUCH_EVERY_MS).toISOString();
+  const ids = new Set<string>();
+  const PAGE = 1000;
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await client
+      .from('jobs')
+      .select('external_id, first_seen_at')
+      .eq('source_id', sourceId)
+      .eq('status', 'open')
+      .gte('last_seen_at', seenSince)
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.external_id && fromACrawl(row.first_seen_at as string)) ids.add(row.external_id as string);
+    }
+    if (!data || data.length < PAGE) break;
+  }
+  return ids;
 }
 
 export interface ReplayOutcome {
@@ -785,6 +864,40 @@ export async function replaySource(
     }
   };
 
+  type RawRow = { id: unknown; external_id: unknown; payload: unknown };
+
+  const replayRow = async (row: RawRow) => {
+    outcome.rawSeen += 1;
+    try {
+      const posting = { externalId: row.external_id as string, payload: row.payload as Record<string, unknown> };
+      const rows = normalize(adapter.parse(posting), context);
+      pending.push(...rows);
+      processedIds.push(row.id as number);
+    } catch (error) {
+      outcome.errors += 1;
+      log(`      ${label} — failed to replay raw_postings.id=${row.id}: ${describeError(error)}`);
+    }
+
+    // Flushed as it goes, not just at the end: a board with 30k raw rows would otherwise
+    // hold 30k NormalizedJob objects (each with a full description) in memory at once.
+    if (pending.length >= UPSERT_BATCH * 4) await flush();
+  };
+
+  const scope = options.scope ?? 'live';
+  let live: Set<string> | null = null;
+  const latest = new Map<string, RawRow>();
+  if (scope === 'live') {
+    live = await liveExternalIds(client, source.id);
+    if (live === null) {
+      log(`skip  ${label} — never crawled successfully, so nothing to call live`);
+      return outcome;
+    }
+    if (live.size === 0) {
+      log(`ok    ${label} — no live postings to replay`);
+      return outcome;
+    }
+  }
+
   for (;;) {
     const { data, error } = await client
       .from('raw_postings')
@@ -796,26 +909,21 @@ export async function replaySource(
     if (!data || data.length === 0) break;
 
     for (const row of data) {
-      outcome.rawSeen += 1;
-      try {
-        const posting = { externalId: row.external_id as string, payload: row.payload as Record<string, unknown> };
-        const rows = normalize(adapter.parse(posting), context);
-        pending.push(...rows);
-        processedIds.push(row.id as number);
-      } catch (error) {
-        outcome.errors += 1;
-        log(`      ${label} — failed to replay raw_postings.id=${row.id}: ${describeError(error)}`);
+      if (live) {
+        // Only the newest stored version of a live posting. Ordered by id, so a later row
+        // replaces an earlier one; an older version under a different title would otherwise
+        // land as a job of its own.
+        if (live.has(row.external_id as string)) latest.set(row.external_id as string, row);
+        continue;
       }
-
-      // Flushed inside the page, not just at the end: a board with 30k raw rows would
-      // otherwise hold 30k NormalizedJob objects (each with a full description) in
-      // memory at once.
-      if (pending.length >= UPSERT_BATCH * 4) await flush();
+      await replayRow(row);
     }
 
     offset += PAGE;
     if (data.length < PAGE) break;
   }
+
+  for (const row of latest.values()) await replayRow(row);
 
   await flush();
 

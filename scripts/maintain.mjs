@@ -84,6 +84,34 @@ async function run(label, fn) {
   }
 }
 
+/**
+ * Jobs to delete per call. A job delete cascades into comments, match scores and signals, and
+ * every call has to finish inside PostgREST's 8 s statement timeout — which the unbatched
+ * prune never did (20261032000000_batched_job_prune.sql).
+ */
+const PRUNE_BATCH = 250;
+/** A ceiling on calls per prune, so a function that keeps reporting rows cannot loop forever. */
+const PRUNE_MAX_CALLS = 200;
+
+/**
+ * Calls a batched prune until a call removes nothing; resolves to the total, like one rpc.
+ *
+ * `legacy` is the unbatched call, used only when the database does not have the batched
+ * signature yet (PGRST202: no function with these arguments) — so this script can ship before
+ * 20261032000000 is pushed without breaking the step any worse than it already was.
+ */
+async function inBatches(call, legacy) {
+  let total = 0;
+  for (let calls = 0; calls < PRUNE_MAX_CALLS; calls += 1) {
+    const { data, error } = await call(PRUNE_BATCH);
+    if (error && calls === 0 && error.code === 'PGRST202') return legacy();
+    if (error) return { data: total, error };
+    total += data ?? 0;
+    if (!data) break;
+  }
+  return { data: total, error: null };
+}
+
 await run('impression partitions created', () =>
   admin.rpc('ensure_impression_partitions', { p_months_ahead: MONTHS_AHEAD }),
 );
@@ -118,16 +146,22 @@ await run('auto apply runs closed and refunded', () =>
  * the raw-posting prune, which then only has superseded versions left to find.
  */
 await run('closed jobs removed', () =>
-  admin.rpc('prune_closed_jobs', { p_closed_days: CLOSED_JOB_KEEP_DAYS }),
+  inBatches(
+    (limit) => admin.rpc('prune_closed_jobs', { p_closed_days: CLOSED_JOB_KEEP_DAYS, p_limit: limit }),
+    () => admin.rpc('prune_closed_jobs', { p_closed_days: CLOSED_JOB_KEEP_DAYS }),
+  ),
 );
 
 /*
  * Postings first published over three months ago, open or not, unless somebody touched them
- * (20261030000000_old_job_retention.sql). The crawl no longer stores them, so this only ever
- * finds jobs that aged past the line since last night.
+ * (20261030000000_old_job_retention.sql). The crawl no longer stores them, so after the first
+ * night this only finds jobs that aged past the line since the night before.
  */
 await run('old jobs removed', () =>
-  admin.rpc('prune_old_jobs', { p_days: OLD_JOB_KEEP_DAYS }),
+  inBatches(
+    (limit) => admin.rpc('prune_old_jobs', { p_days: OLD_JOB_KEEP_DAYS, p_limit: limit }),
+    () => admin.rpc('prune_old_jobs', { p_days: OLD_JOB_KEEP_DAYS }),
+  ),
 );
 
 /*

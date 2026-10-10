@@ -47,11 +47,23 @@ const NAMED_ENTITIES: Record<string, string> = {
   deg: '°',
 };
 
-export function decodeEntities(value: string): string {
+function decodeOnce(value: string): string {
   return value
     .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => safeCodePoint(Number.parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec: string) => safeCodePoint(Number.parseInt(dec, 10)))
     .replace(/&([a-z][a-z0-9]*);/gi, (match, name: string) => NAMED_ENTITIES[name.toLowerCase()] ?? match);
+}
+
+/**
+ * Decodes character references, twice when the first pass uncovers more.
+ *
+ * Workday escapes its descriptions twice — NVIDIA's arrive as `&amp;#xa;` — so one pass leaves
+ * a literal `&#xa;` in the text, which the app printed after every pay sentence. A second pass
+ * only runs when the input had an escaped ampersand to begin with.
+ */
+export function decodeEntities(value: string): string {
+  const once = decodeOnce(value);
+  return /&amp;/i.test(value) && /&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/i.test(once) ? decodeOnce(once) : once;
 }
 
 function safeCodePoint(code: number): string {
@@ -77,9 +89,32 @@ function tidy(value: string): string {
     .replace(/[ \t ]+/g, ' ')
     .split('\n')
     .map((line) => line.trim())
+    // An empty <li> (Lever spaces lists with `<li style="list-style-type: none;">`) leaves a
+    // bullet with nothing after it.
+    .map((line) => (line === '•' ? '' : line))
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/** Markup a vendor's "plain" text should never contain. */
+const STRAY_MARKUP = /<\/?(li|ul|ol|p|div|br|span|strong|b|em|i|u|h[1-6]|a|table|tr|td)\b[^>]*>/i;
+
+/**
+ * A posting's description as clean text: the vendor's plain text when it supplies one, the
+ * HTML converted when it does not.
+ *
+ * "Plain" is not always plain. Lever's `lists` sections are HTML <li> runs, and Workday and
+ * ByteDance text arrives with `&#xa;` and `&nbsp;` still escaped — Equitable Bank's intern
+ * postings showed raw `<li style="…">` tags in the app. Text with real tags in it goes through
+ * the same pass as a description that only came as HTML; anything else just has its entities
+ * decoded, so a literal "<" in prose is left alone. The crawl and the Simplify feed both read
+ * descriptions through this, so the two cannot drift apart again.
+ */
+export function postingText(text: string | null | undefined, html: string | null | undefined): string {
+  const supplied = text?.trim();
+  if (!supplied) return htmlToText(html);
+  return STRAY_MARKUP.test(supplied) ? htmlToText(supplied) : decodeEntities(supplied).trim();
 }
 
 export function htmlToText(html: string | null | undefined): string {

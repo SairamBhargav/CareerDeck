@@ -301,7 +301,7 @@ export function chunk<T>(items: T[], size = IN_CHUNK): T[][] {
  * otherwise rewrite every row again for a timestamp nobody needs finer than the 48h sweep.
  * last_seen_at is deliberately unindexed so this update is HOT (20261002000000).
  */
-const TOUCH_EVERY_MS = 12 * 60 * 60 * 1000;
+export const TOUCH_EVERY_MS = 12 * 60 * 60 * 1000;
 
 export async function touchSeen(
   client: SupabaseClient,

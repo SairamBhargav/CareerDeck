@@ -30,7 +30,7 @@ const TITLE_RULES: { level: SeniorityLevel; pattern: RegExp }[] = [
    * `working student` / `werkstudent` covers the German-market equivalent, which several
    * European boards (Anduril's among them) use instead of "intern".
    */
-  { level: 'intern', pattern: /\b(intern|internship|co-?op|coop|summer\s+(analyst|associate|20\d\d)|industrial placement|placement (student|year)|apprentice(ship)?|trainee|student (worker|assistant)|working student|werkstudent\w*|práctic\w*)\b/i },
+  { level: 'intern', pattern: /\b(interns?|internships?|co-?ops?|coops?|summer\s+(analyst|associate|20\d\d)|industrial placement|placement (student|year)|apprentice(ship)?|trainee|student (worker|assistant)|working student|werkstudent\w*|práctic\w*)\b/i },
   /*
    * People managers of managers. "Engineering Manager" was missing — only "Manager,
    * Engineering" matched — and 2,234 unranked "Manager" titles reached students' decks on
@@ -120,7 +120,9 @@ export function extractSeniority(title: string, description: string): SeniorityL
 const CONTRACT = /\b(contract|contractor|consultant|freelance|temporary|temp|fixed[- ]term|seasonal|1099|c2c|corp[- ]to[- ]corp|w2 only)\b/i;
 const PART_TIME = /\b(part[- ]?time|pt\b|\d\d?\s*hours?\s*(per|a)\s*week)\b/i;
 const FULL_TIME = /\b(full[- ]?time|permanent|regular)\b/i;
-const INTERNSHIP = /\b(intern|internship|co-?op|coop|apprentice|placement)\b/i;
+// Plurals too: NVIDIA's program postings are titled "NVIDIA 2027 Internships: Software
+// Engineering", which the singular-only pattern filed as Full-time with no seniority.
+const INTERNSHIP = /\b(interns?|internships?|co-?ops?|coops?|apprentice|placement)\b/i;
 
 /**
  * §3.4's four-value enum, which `user_preferences.preferred_employment_types` already

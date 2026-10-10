@@ -10,7 +10,10 @@
  *   npm run ingest -- --no-aggregators  company boards only, skip Simplify
  *   npm run ingest -- --sweep           the staleness pass on its own
  *   npm run ingest -- --limit=10        the ten most overdue sources
- *   npm run ingest -- --replay          re-normalize every stored raw_postings row, no network
+ *   npm run ingest -- --replay          re-normalize the live postings' stored raw rows, no network
+ *   npm run ingest -- --replay --include-gone
+ *                                       every stored raw row, including postings that have left
+ *                                       their board — re-creates them as open jobs; rarely right
  *   npm run ingest -- --replay --source=stripe
  *                                       replay one source only
  *
@@ -46,6 +49,7 @@ interface Args {
   dryRun: boolean;
   sweepOnly: boolean;
   replayOnly: boolean;
+  replayIncludeGone: boolean;
   withSweep: boolean;
   withAggregators: boolean;
   ignoreEtag: boolean;
@@ -70,6 +74,7 @@ function parseArgs(argv: string[]): Args {
     dryRun: flag('dry-run'),
     sweepOnly: flag('sweep'),
     replayOnly: flag('replay'),
+    replayIncludeGone: flag('include-gone'),
     // The sweep runs after a full crawl by default: closing postings is only meaningful
     // once the evidence for them still being open has just been refreshed.
     withSweep: !flag('no-sweep'),
@@ -208,7 +213,11 @@ async function main(): Promise<void> {
 
     const started = Date.now();
     const outcomes = await pooled(sources, args.concurrency, (source) =>
-      replaySource(client, source, { dictionary, log: (message) => console.log(message) }),
+      replaySource(client, source, {
+        dictionary,
+        log: (message) => console.log(message),
+        scope: args.replayIncludeGone ? 'all' : 'live',
+      }),
     );
 
     const corrected = await refreshOpenJobCounts(client);
