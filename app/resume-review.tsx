@@ -47,17 +47,48 @@ import type { ResumeSeniority } from '@/types';
  *
  * ── How it is laid out, and why that changed ──────────────────────────────────
  *
- * This screen asks for corrections, so its whole job is to make "what was read" scannable and
- * "what is wrong" tappable. It used to be one flat column with a uniform gap between every
- * element, which meant a section heading, its hint, a row of chips and a text input all sat
- * the same distance apart — nothing grouped, so everything read as one undifferentiated form,
- * and education and experience were bare lines of text run together.
+ * Each question is a card: heading, one line of why it matters, and the control. The confirm
+ * action is pinned to the bottom rather than appended, so how far it is does not depend on how
+ * many skills the parser happened to find.
  *
- * Now each question is a card: heading, one line of why it matters, and the control. Cards
- * group, the gaps between them separate, and the confirm action is pinned to the bottom
- * instead of floating at the end of a scroll whose length depends on how many skills the
- * parser found.
+ * **The cards are in weight order, and each one says what it is worth.** That is the whole
+ * organising idea, and it came from the screen being wrong rather than merely untidy: the cards
+ * were in no particular order, and education and experience sat last under a heading that said
+ * "Kept on file, not used for matching yet". That stopped being true when the scorer reached v3
+ * (20261024000000_match_score_v3.sql) — work now carries the field, and the two of them are
+ * `experience` 0.25 plus `field` 0.20, so the screen was filing 45% of a reader's score under
+ * "not used" at the bottom of a scroll.
+ *
+ * So: skills, experience, education, level, by what each moves, with the number on the card.
+ * A reader who will fix one thing fixes the thing that pays. README §13.3 wants an automated
+ * score to be answerable; this answers it before the score exists rather than after.
+ *
+ * Location sits last and carries no percentage. v3 dropped it from the match — "experience
+ * replaces location" — but the feed ranker still reads it, so it is neither scored nor inert,
+ * and it says that instead of pretending to either.
+ *
+ * ── Gaps before fields ────────────────────────────────────────────────────────
+ *
+ * An empty control and a correctly-empty control look identical in a form. A blank location box
+ * does not say whether the parser missed it or the resume never had one, and a reader cannot
+ * act on that. The gap list at the top names only the blanks that cost score, with what they
+ * cost — a blank that costs nothing is left out, because listing it would teach people to skip
+ * the list.
  */
+
+/*
+ * What each part of the resume is worth, from 20261024000000_match_score_v3.sql's header:
+ *
+ *   skills 0.40 · experience 0.25 · field 0.20 · seniority 0.15
+ *
+ * On screen because this page asks for corrections, and the only honest answer to "which of
+ * these should I fix first" is how much each one moves. README §13.3 asks that an automated
+ * score be answerable; this is that answer, given before the score rather than after it.
+ *
+ * **Copied from SQL, so it drifts when the scorer moves.** The migration is the source of
+ * truth. A v4 that reweights anything has to change these four numbers in the same commit.
+ */
+const WEIGHT = { skills: 40, experience: 25, field: 20, seniority: 15 } as const;
 
 const SENIORITY_OPTIONS: { value: ResumeSeniority; label: string }[] = [
   { value: 'intern', label: 'Intern' },
@@ -100,6 +131,27 @@ export default function ResumeReviewScreen() {
   const experience = resume?.profile.experience ?? [];
 
   const canConfirm = resume?.parseStatus === 'parsed' && !isBusy;
+
+  /*
+   * The blanks that cost something, in weight order.
+   *
+   * Only the ones that change a score. A missing location is not here — it is not scored — and
+   * neither is a missing degree on its own, because a relevant role carries the field instead.
+   * Naming a blank that costs nothing would train people to ignore the ones that do.
+   */
+  const gaps: string[] = [];
+  if (shownSkills.length === 0) {
+    gaps.push(`No skills were read. They are ${WEIGHT.skills}% of every match score — the largest single piece.`);
+  }
+  if (experience.length === 0) {
+    gaps.push(`No roles were read. Past roles are ${WEIGHT.experience}%, and they carry your field when your degree does not.`);
+  }
+  if (education.length === 0 && experience.length === 0) {
+    gaps.push(`Neither a degree nor a role was read, so the ${WEIGHT.field}% for field has nothing to work from.`);
+  }
+  if (shownSeniority === null) {
+    gaps.push(`No level is set. It is ${WEIGHT.seniority}%, and it is the one thing here the document often does not say.`);
+  }
 
   const addSkill = () => {
     const slug = draftSkill
@@ -205,19 +257,40 @@ export default function ResumeReviewScreen() {
         {parsed ? (
           <>
             <Text style={styles.lede}>
-              Here is what we read. Fix anything that is wrong — this is what your match scores
-              are calculated from.
+              This is what we read, in the order it matters. Fixing the top of this list moves your
+              match scores more than fixing the bottom.
             </Text>
 
-            {/* ── Skills ─────────────────────────────────────────────────── */}
-            <View style={styles.card}>
-              <View style={styles.cardHead}>
-                <Text style={styles.cardTitle}>Skills</Text>
-                <Text style={styles.cardCount}>{shownSkills.length}</Text>
+            {/*
+              * What is missing, before what is there.
+              *
+              * An empty field and a correctly-empty field look identical in a form — a blank
+              * location box says nothing about whether the parser failed or the resume never said.
+              * These are the gaps that cost something, named with what they cost, so the reader
+              * knows whether the blank is worth their attention.
+              */}
+            {gaps.length > 0 ? (
+              <View style={styles.gaps}>
+                <View style={styles.gapsHead}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.text} />
+                  <Text style={styles.gapsTitle}>
+                    {gaps.length === 1 ? 'One thing is missing' : `${gaps.length} things are missing`}
+                  </Text>
+                </View>
+                {gaps.map((gap) => (
+                  <Text key={gap} style={styles.gapLine}>
+                    {gap}
+                  </Text>
+                ))}
               </View>
+            ) : null}
+
+            {/* ── Skills · 40% ───────────────────────────────────────────── */}
+            <View style={styles.card}>
+              <SectionHead title="Skills" weight={WEIGHT.skills} count={shownSkills.length} />
               <Text style={styles.hint}>
-                Matched against each posting&apos;s own skills. The more accurate these are, the
-                more the number on a card means.
+                Checked against each posting&apos;s own list. Required ones count double what
+                nice-to-haves do, and 60% coverage already scores full marks.
               </Text>
 
               {shownSkills.length > 0 ? (
@@ -265,9 +338,80 @@ export default function ResumeReviewScreen() {
               </View>
             </View>
 
-            {/* ── Level ──────────────────────────────────────────────────── */}
+            {/* ── Experience · 25% ───────────────────────────────────────── */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Level</Text>
+              <SectionHead title="Experience" weight={WEIGHT.experience} count={experience.length} />
+              <Text style={styles.hint}>
+                {experience.length > 0
+                  ? 'A role counts when its field is close to the posting’s, and a longer one counts for more. This is also what carries your field when your degree is in something else.'
+                  : 'Roles close to a posting’s field are a quarter of its score. None were read from this document.'}
+              </Text>
+
+              {experience.length > 0 ? (
+                <View style={styles.entries}>
+                  {experience.map((entry, index) => (
+                    <View key={`exp-${index}`} style={styles.entry}>
+                      <Ionicons name="briefcase-outline" size={17} color={colors.textTertiary} />
+                      <View style={styles.entryText}>
+                        <Text style={styles.entryTitle}>{entry.title ?? 'Role'}</Text>
+                        <Text style={styles.entryMeta}>
+                          {[entry.company, entry.isCurrent ? 'current' : null]
+                            .filter(Boolean)
+                            .join(' · ') || 'Company not read'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {years !== null ? (
+                <View style={styles.inlineFact}>
+                  <Ionicons name="time-outline" size={15} color={colors.textTertiary} />
+                  <Text style={styles.hint}>
+                    {years} {years === 1 ? 'year' : 'years'} in total, from the dates on the page.
+                  </Text>
+                </View>
+              ) : null}
+
+              <Text style={styles.readOnly}>Read from the document. Re-upload to change it.</Text>
+            </View>
+
+            {/* ── Education · 20% ────────────────────────────────────────── */}
+            <View style={styles.card}>
+              <SectionHead title="Education" weight={WEIGHT.field} count={education.length} />
+              <Text style={styles.hint}>
+                Your degree against the posting&apos;s field. A relevant past role can carry this
+                instead, so a maths major with software internships is not outside the field.
+              </Text>
+
+              {education.length > 0 ? (
+                <View style={styles.entries}>
+                  {education.map((entry, index) => (
+                    <View key={`edu-${index}`} style={styles.entry}>
+                      <Ionicons name="school-outline" size={17} color={colors.textTertiary} />
+                      <View style={styles.entryText}>
+                        <Text style={styles.entryTitle}>
+                          {[entry.degree, entry.field].filter(Boolean).join(', ') || 'Education'}
+                        </Text>
+                        <Text style={styles.entryMeta}>
+                          {[entry.school, entry.graduationYear].filter(Boolean).join(' · ') ||
+                            'School not read'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.empty}>Nothing found. Your field comes from your roles instead.</Text>
+              )}
+
+              <Text style={styles.readOnly}>Read from the document. Re-upload to change it.</Text>
+            </View>
+
+            {/* ── Level · 15% ────────────────────────────────────────────── */}
+            <View style={styles.card}>
+              <SectionHead title="Level" weight={WEIGHT.seniority} />
               <Text style={styles.hint}>
                 What you are applying as, not what you have done. This decides whether a senior
                 posting counts against you.
@@ -292,9 +436,23 @@ export default function ResumeReviewScreen() {
               </View>
             </View>
 
-            {/* ── Location and years ─────────────────────────────────────── */}
+            {/* ── Location · not scored ──────────────────────────────────── */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Location</Text>
+              <View style={styles.cardHead}>
+                <Text style={styles.cardTitle}>Location</Text>
+                {/*
+                  * Deliberately not a percentage.
+                  *
+                  * v3 of the scorer dropped location from the match entirely — "experience
+                  * replaces location" — but the feed ranker still reads it to decide what you are
+                  * shown. Leaving it in the list unlabelled would imply it scores; labelling it
+                  * 0% would imply it does nothing.
+                  */}
+                <Text style={styles.cardAside}>orders your feed</Text>
+              </View>
+              <Text style={styles.hint}>
+                Not part of a match score. It decides which postings reach you in the first place.
+              </Text>
               <TextInput
                 value={shownLocation}
                 onChangeText={setLocation}
@@ -302,56 +460,7 @@ export default function ResumeReviewScreen() {
                 placeholderTextColor={colors.textTertiary}
                 style={styles.input}
               />
-              {years !== null ? (
-                <View style={styles.inlineFact}>
-                  <Ionicons name="time-outline" size={15} color={colors.textTertiary} />
-                  <Text style={styles.hint}>
-                    {years} {years === 1 ? 'year' : 'years'} of experience, from the dates on the
-                    page.
-                  </Text>
-                </View>
-              ) : null}
             </View>
-
-            {/* ── Also read ──────────────────────────────────────────────── */}
-            {education.length > 0 || experience.length > 0 ? (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>Also read</Text>
-                <Text style={styles.hint}>
-                  Kept on file, not used for matching yet. Re-upload if any of it is wrong.
-                </Text>
-
-                <View style={styles.entries}>
-                  {education.map((entry, index) => (
-                    <View key={`edu-${index}`} style={styles.entry}>
-                      <Ionicons name="school-outline" size={17} color={colors.textTertiary} />
-                      <View style={styles.entryText}>
-                        <Text style={styles.entryTitle}>
-                          {[entry.degree, entry.field].filter(Boolean).join(', ') || 'Education'}
-                        </Text>
-                        <Text style={styles.entryMeta}>
-                          {[entry.school, entry.graduationYear].filter(Boolean).join(' · ')}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-
-                  {experience.map((entry, index) => (
-                    <View key={`exp-${index}`} style={styles.entry}>
-                      <Ionicons name="briefcase-outline" size={17} color={colors.textTertiary} />
-                      <View style={styles.entryText}>
-                        <Text style={styles.entryTitle}>{entry.title ?? 'Role'}</Text>
-                        <Text style={styles.entryMeta}>
-                          {[entry.company, entry.isCurrent ? 'current' : null]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ) : null}
 
             {/*
              * The contact fields, named and not shown. The user cannot otherwise tell whether
@@ -385,6 +494,29 @@ export default function ResumeReviewScreen() {
         </View>
       ) : null}
     </SafeAreaView>
+  );
+}
+
+/**
+ * A section's name, what it is worth, and how many of it were found.
+ *
+ * The weight is the point. Every card used to look equally important, so the reader had no way
+ * to tell that correcting one skill is worth more than correcting a job title — and the card
+ * carrying nearly half the score was at the bottom under "Also read".
+ */
+function SectionHead({ title, weight, count }: { title: string; weight: number; count?: number }) {
+  const styles = useStyles();
+
+  return (
+    <View style={styles.cardHead}>
+      <View style={styles.cardHeadLeft}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        {count === undefined ? null : <Text style={styles.cardCount}>{count}</Text>}
+      </View>
+      <View style={styles.weightPill}>
+        <Text style={styles.weightPillText}>{weight}% of your match</Text>
+      </View>
+    </View>
   );
 }
 
@@ -458,6 +590,57 @@ const useStyles = makeStyles((colors) => ({
   cardCount: {
     fontSize: fontSize.small,
     fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  cardHeadLeft: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+  },
+  // Quiet by design: it ranks the sections, it is not a thing to read on every one of them.
+  weightPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.backgroundMuted,
+  },
+  weightPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  // The one thing above the fold that is not a field: what the parse did not find.
+  gaps: {
+    gap: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundMuted,
+  },
+  gapsHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: 2,
+  },
+  gapsTitle: {
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  gapLine: {
+    fontSize: fontSize.caption,
+    lineHeight: 17,
+    color: colors.textSecondary,
+  },
+  // Says why there is no control here, so a section with nothing to tap does not read as broken.
+  readOnly: {
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
+  },
+  // Location's stand-in for a weight: it is not scored, but it is not inert either.
+  cardAside: {
+    fontSize: 10,
+    fontWeight: '700',
     color: colors.textTertiary,
   },
   hint: {
