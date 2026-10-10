@@ -538,26 +538,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
             {/* Why you cannot write, when you cannot. Above the composer rather than replacing
                 it, so the thread stays readable — reading is most of what this sheet is for, and
                 an unverified reader is still a reader. */}
-            {gateReason ? (
-              <View style={styles.gateBanner}>
-                <Ionicons name="lock-closed-outline" size={14} color={colors.textTertiary} />
-                <Text style={styles.gateText}>{gateReason.text}</Text>
-
-                {/* The one gate a reader can clear, with the way to clear it attached. It used
-                    to read "verify from your profile", which is an errand: three taps away, and
-                    only if they still remember why they went. */}
-                {gateReason.verify ? (
-                  <Pressable
-                    onPress={openVerification}
-                    accessibilityRole="button"
-                    accessibilityLabel="Verify your account"
-                    hitSlop={10}
-                    style={({ pressed }) => (pressed ? styles.gateActionPressed : undefined)}>
-                    <Text style={styles.gateAction}>Verify</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
+            {gateReason ? <GateBanner reason={gateReason} onVerify={openVerification} /> : null}
 
             {postError ? (
               <View style={styles.errorBanner}>
@@ -688,8 +669,9 @@ function reasonFor(gate: CommentGate): { text: string; verify: boolean } | null 
     return { text: `You cannot comment until ${until.toLocaleDateString()}.`, verify: false };
   }
   if (gate.tier !== 'edu' && gate.tier !== 'identity') {
-    // No longer "from your profile": it is from here now.
-    return { text: 'Verify your account to join the conversation.', verify: true };
+    // No longer "from your profile": it is from here now. No full stop either — this one
+    // is the label of a button, not a sentence about the state of things.
+    return { text: 'Verify your account to comment', verify: true };
   }
   if (gate.remainingHour <= 0) {
     return { text: 'You have posted a lot in the last hour. Try again later.', verify: false };
@@ -698,6 +680,52 @@ function reasonFor(gate: CommentGate): { text: string; verify: boolean } | null 
     return { text: 'You have posted a lot today. Try again tomorrow.', verify: false };
   }
   return null;
+}
+
+interface GateBannerProps {
+  reason: NonNullable<ReturnType<typeof reasonFor>>;
+  onVerify: () => void;
+}
+
+/**
+ * Why the composer is locked, as one row.
+ *
+ * This used to be a slab of text with the word "Verify" pinned to its right edge, which
+ * read as two unrelated things sharing a grey rectangle — and the text wraps, so the word
+ * ended up floating against the middle of two lines.
+ *
+ * So the whole row is the button now: lock, line, chevron. One target, one affordance, and
+ * the copy is short enough to stay on one line at default type. When the reason is not
+ * actionable the same row renders inert and loses the chevron, so nothing offers a tap that
+ * would go nowhere.
+ */
+function GateBanner({ reason, onVerify }: GateBannerProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
+  const body = (
+    <Fragment>
+      <Ionicons name="lock-closed" size={12} color={colors.textTertiary} />
+      <Text style={styles.gateText}>{reason.text}</Text>
+      {reason.verify ? (
+        <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+      ) : null}
+    </Fragment>
+  );
+
+  if (!reason.verify) {
+    return <View style={styles.gateBanner}>{body}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onVerify}
+      accessibilityRole="button"
+      accessibilityLabel={reason.text}
+      style={({ pressed }) => [styles.gateBanner, pressed ? styles.gateBannerPressed : null]}>
+      {body}
+    </Pressable>
+  );
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -715,15 +743,13 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    // A deliberate row rather than one that hugs its text, and the floor a tappable one
+    // needs anyway. Both variants take it, so the gate is the same height either way.
+    minHeight: minTapTarget,
     borderRadius: radius.md,
     backgroundColor: colors.backgroundMuted,
   },
-  gateAction: {
-    fontSize: fontSize.small,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  gateActionPressed: {
+  gateBannerPressed: {
     opacity: 0.6,
   },
   gateText: {
