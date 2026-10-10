@@ -2,7 +2,10 @@ import type { ImageSourcePropType } from 'react-native';
 
 export interface ReactionGif {
   id: string;
-  /** Read out by screen readers, and shown under the tile in the picker. */
+  /**
+   * Read out by screen readers, and used in the "Post the X GIF" label. Not drawn on screen: the
+   * picker shows the clips alone, the way every other GIF picker does.
+   */
   label: string;
   source: ImageSourcePropType;
 }

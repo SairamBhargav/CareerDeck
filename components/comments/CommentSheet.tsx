@@ -2,6 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
+  Image,
+  Keyboard,
   Modal,
   Pressable,
   StyleSheet,
@@ -23,6 +25,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentPolicySheet } from '@/components/comments/CommentPolicySheet';
+import { gifById } from '@/data/mockGifs';
+import { useKlipyGif } from '@/hooks/useGifs';
 import { authorLabel } from '@/types/comment';
 import { CommentRow } from '@/components/comments/CommentRow';
 import { GifPicker } from '@/components/comments/GifPicker';
@@ -37,7 +41,7 @@ import { useCareerDeck } from '@/context/CareerDeckContext';
 import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useCommentActions, useCommentGate, useJobComments } from '@/hooks/useComments';
-import { reportGifShared } from '@/lib/klipy';
+import { klipySlugOf, reportGifShared } from '@/lib/klipy';
 import { ServiceError, ServiceUnavailable } from '@/lib/service';
 import type { CommentGate, Job, ReportReason } from '@/types';
 
@@ -137,6 +141,14 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     });
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const [gifOpen, setGifOpen] = useState(false);
+  /*
+   * The GIF chosen but not yet sent.
+   *
+   * Picking one used to post it on the spot, which made the grid a send button: there was no way
+   * to say anything alongside it and no way to change your mind. It is an attachment now, so the
+   * flow is the one every other app has — pick, then write, then send.
+   */
+  const [pendingGif, setPendingGif] = useState<{ id: string; slug?: string } | null>(null);
   /** Set when the last attempt was refused. Cleared as soon as the draft changes. */
   const [postError, setPostError] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -164,6 +176,109 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     'worklet';
     scrollY.set(event.contentOffset.y);
   });
+
+  /*
+   * The GIF overlay drags down to go back, the same way the sheet itself drags down to close.
+   *
+   * Its own offset and its own scroll tracking, because the two gestures have to be able to
+   * disagree: dragging the overlay away should not also be dragging the sheet shut, and the grid
+   * underneath has a scroll position of its own that decides when the drag is allowed to start.
+   */
+  const gifTranslateY = useSharedValue(0);
+  const gifScrollY = useSharedValue(0);
+
+  const gifListGesture = Gesture.Native();
+
+  /*
+   * Whether the composer was focused when the picker opened, so leaving it can put things back.
+   *
+   * A ref and not state: nothing renders differently for it, and it is read inside the animation's
+   * completion callback, where a stale closure over a state value would answer for whenever that
+   * callback was built rather than for now.
+   */
+  const keyboardWasUp = useRef(false);
+
+  /** Tracks the open→closed edge, so the effect below does not fire on mount. */
+  const gifWasOpen = useRef(false);
+
+  /*
+   * Put the keyboard back the way it was, whichever way the picker was left.
+   *
+   * An effect on `gifOpen` rather than something `closeGif` does, because `closeGif` is reached
+   * from inside the dismiss gesture's worklet — and a worklet built during render that transitively
+   * reads a ref is what `react-hooks/refs` rejects, correctly. Closing is a state change; this is
+   * a consequence of it, so it belongs here and covers the drag, the tap and the pick at once.
+   */
+  useEffect(() => {
+    if (gifOpen) {
+      gifWasOpen.current = true;
+      return;
+    }
+    if (!gifWasOpen.current) return;
+    gifWasOpen.current = false;
+
+    if (keyboardWasUp.current) {
+      // They were mid-sentence when they went looking for a GIF. Put the keys back.
+      inputRef.current?.focus();
+    } else {
+      // They were not typing — but the picker's own search box may have raised the keyboard, and
+      // that one belongs to the screen they are leaving.
+      Keyboard.dismiss();
+    }
+  }, [gifOpen]);
+
+  const closeGif = () => {
+    gifTranslateY.set(withTiming(sheetHeight, CLOSE, (finished) => {
+      'worklet';
+      if (finished) runOnJS(setGifOpen)(false);
+    }));
+  };
+
+  const openGif = () => {
+    /*
+     * The keyboard goes first.
+     *
+     * Browsing is not typing, and the grid wants exactly the height the keys were using — on a
+     * normal phone that is most of the panel. The sheet is tied to `keyboard.height` (see
+     * `sheetStyle`), so dismissing here is also what lets it settle back to its own size instead
+     * of holding a keyboard-shaped gap behind a full-screen grid.
+     *
+     * Tapping a Pressable does not blur a focused TextInput on its own, so this has to be said.
+     * Noted first, because `finishCloseGif` restores whatever was true here.
+     */
+    keyboardWasUp.current = inputRef.current?.isFocused() ?? false;
+    Keyboard.dismiss();
+
+    // Parked off the bottom first, so it does not appear already dragged away. The rise starts a
+    // frame later, once the overlay is actually mounted — starting it here would animate through
+    // frames that are not on screen yet.
+    gifTranslateY.set(sheetHeight);
+    setGifOpen(true);
+    requestAnimationFrame(() => gifTranslateY.set(withTiming(0, OPEN)));
+  };
+
+  // Mirrors the sheet's pan: downward only, and only from the top of the grid, so dragging
+  // through a scrolled grid scrolls it instead of throwing the picker away.
+  const gifPan = Gesture.Pan()
+    .activeOffsetY(10)
+    .failOffsetY(-10)
+    .simultaneousWithExternalGesture(gifListGesture)
+    .onUpdate((event) => {
+      'worklet';
+      if (gifScrollY.value <= 0) gifTranslateY.set(Math.max(0, event.translationY));
+    })
+    .onEnd((event) => {
+      'worklet';
+      if (gifTranslateY.value > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY) {
+        runOnJS(closeGif)();
+      } else {
+        gifTranslateY.set(withTiming(0, OPEN));
+      }
+    });
+
+  const gifOverlayStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: gifTranslateY.value }],
+  }));
 
   // Stands in for the list's own native pan so the two recognise simultaneously rather
   // than cancelling each other out.
@@ -265,9 +380,12 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
     return 'That did not send. Your comment is still here — try again.';
   };
 
-  const submit = async (gifId?: string) => {
+  const submit = async () => {
     if (!job) return;
-    if (draft.trim().length === 0 && gifId === undefined) return;
+    if (draft.trim().length === 0 && pendingGif === null) return;
+
+    const gifId = pendingGif?.id;
+    const gifSlug = pendingGif?.slug;
 
     /*
      * The policy gate, checked here as well as by the database.
@@ -282,11 +400,13 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
     const body = draft;
     const parentId = replyTo?.id ?? null;
+    const attached = pendingGif;
 
     // Cleared before the attempt, not after it: the draft belongs in the composer only while it
     // has not been accepted, and putting it back on failure is what the catch below does.
     setDraft('');
     setReplyTo(null);
+    setPendingGif(null);
     setGifOpen(false);
     setPostError(null);
 
@@ -299,6 +419,13 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
     try {
       const { takenDown } = await post({ body, parentId, ...(gifId === undefined ? {} : { gifId }) });
+      /*
+       * KLIPY's share signal, moved here from the moment of picking.
+       *
+       * It tunes their trending, and "trending" should mean posted, not browsed — somebody who
+       * opens the grid, taps three GIFs looking at them and sends none has not shared anything.
+       */
+      if (gifSlug !== undefined) reportGifShared(gifSlug, userId);
       if (takenDown) {
         // The comment already vanished from the thread; this says why, and Updates keeps a copy.
         setPostError('Your comment was flagged and taken down. A moderator will review it.');
@@ -306,6 +433,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
       }
     } catch (error) {
       setDraft(body);
+      setPendingGif(attached);
       if (parentId !== null && replyTo) setReplyTo(replyTo);
       setPostError(explain(error));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -316,8 +444,15 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
 
   const handlePickGif = (gifId: string, slug?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    void submit(gifId);
-    if (slug !== undefined) reportGifShared(slug, userId);
+    setPendingGif(slug === undefined ? { id: gifId } : { id: gifId, slug });
+    /*
+     * Back to the thread, with the GIF waiting in the composer.
+     *
+     * Out through the same door a drag uses, which also means the same keyboard rule: it comes
+     * back for somebody who was typing before they went looking, and stays down for somebody who
+     * was not. Attaching a GIF is not by itself a request to type.
+     */
+    closeGif();
   };
 
   const handleDelete = (commentId: string) => {
@@ -387,7 +522,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
   };
   // Not blocked while an earlier comment is still in flight: it is already on screen, and each
   // comment carries its own idempotency key (useCommentActions), so two sends stay two comments.
-  const canPost = draft.trim().length > 0;
+  const canPost = draft.trim().length > 0 || pendingGif !== null;
 
   return (
     <Modal visible={visible} animationType="none" transparent onRequestClose={dismiss}>
@@ -565,7 +700,9 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
               </View>
             ) : null}
 
-            {gifOpen ? <GifPicker onPick={handlePickGif} /> : null}
+            {pendingGif ? (
+              <StagedGif gifId={pendingGif.id} onRemove={() => setPendingGif(null)} />
+            ) : null}
 
             <View style={styles.inputRow}>
               <TextInput
@@ -593,7 +730,7 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
               />
 
               <Pressable
-                onPress={() => setGifOpen((open) => !open)}
+                onPress={gifOpen ? closeGif : openGif}
                 disabled={gateReason !== null}
                 hitSlop={6}
                 accessibilityRole="button"
@@ -628,6 +765,56 @@ export function CommentSheet({ job, visible, onClose }: CommentSheetProps) {
               </Pressable>
             </View>
           </Animated.View>
+
+          {/*
+            * An overlay rather than a swap.
+            *
+            * The thread and the composer stay mounted underneath, so a reader who was forty
+            * comments deep is still forty comments deep when they come back — rendering the grid
+            * in their place would unmount the list and lose the scroll.
+            *
+            * It sits outside the drag gesture on purpose: the grid scrolls vertically, and a pan
+            * that also claims downward drags would be fighting it for every flick. Close is the
+            * button in the header.
+            */}
+          {gifOpen ? (
+            <GestureDetector gesture={gifPan}>
+              <Animated.View style={[styles.gifOverlay, gifOverlayStyle]}>
+                {/*
+                  * The grabber, and nothing else above the search box.
+                  *
+                  * There was a title and a close button here. The title said "Add a GIF" over a
+                  * grid of GIFs and a box that says Search KLIPY, which is a caption for something
+                  * already obvious, and the two of them cost a row of grid to say it.
+                  *
+                  * It is a Pressable as well as the drag handle, so the way out is not gesture-only
+                  * — a tap closes, and screen readers get a real control where otherwise there
+                  * would be none.
+                  */}
+                <Pressable
+                  onPress={closeGif}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close GIFs"
+                  style={styles.grabberZone}>
+                  <View style={styles.grabber} />
+                </Pressable>
+
+                {/*
+                  * Exactly `screenPadding` each side, because that is the inset the picker assumes
+                  * when it works out a tile width from the window. It lives here rather than on the
+                  * overlay so the grabber above still spans the full width.
+                  */}
+                <View style={[styles.gifBody, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+                  <GifPicker
+                    fill
+                    onPick={handlePickGif}
+                    scrollY={gifScrollY}
+                    listGesture={gifListGesture}
+                  />
+                </View>
+              </Animated.View>
+            </GestureDetector>
+          ) : null}
         </Animated.View>
       </View>
 
@@ -730,6 +917,56 @@ function GateBanner({ reason, onVerify }: GateBannerProps) {
   );
 }
 
+/** The height of the staged thumbnail. Small: it is a receipt, not the content. */
+const STAGED_HEIGHT = 40;
+
+/**
+ * The GIF waiting in the composer, with a way to take it back.
+ *
+ * Resolved the same way CommentRow resolves a posted one — `gifById` for the bundled set,
+ * `useKlipyGif` for a slug — so the thing shown here is the thing that will be sent, rather than
+ * a second guess at it.
+ */
+function StagedGif({ gifId, onRemove }: { gifId: string; onRemove: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+
+  const bundled = gifById(gifId);
+  const klipy = useKlipyGif(klipySlugOf(gifId)).data ?? null;
+
+  // 4:3 for the bundled set, which is what all eight are; its own shape for a KLIPY clip.
+  const ratio = bundled ? 4 / 3 : klipy ? klipy.preview.width / klipy.preview.height : 1;
+  const width = Math.min(80, Math.max(STAGED_HEIGHT, STAGED_HEIGHT * ratio));
+
+  return (
+    <View style={styles.staged}>
+      {bundled || klipy ? (
+        <Image
+          source={bundled ? bundled.source : { uri: klipy?.preview.url ?? '' }}
+          style={[styles.stagedThumb, { width }]}
+          resizeMode="cover"
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel={`${bundled?.label ?? klipy?.title ?? 'The'} GIF, attached`}
+        />
+      ) : (
+        // KLIPY has not answered yet, or this build has no key for it.
+        <View style={[styles.stagedThumb, styles.stagedPending, { width }]} />
+      )}
+
+      <Text style={styles.stagedLabel}>GIF attached</Text>
+
+      <Pressable
+        onPress={onRemove}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Remove the GIF">
+        <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+      </Pressable>
+    </View>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
   loading: {
     gap: spacing.md,
@@ -790,8 +1027,19 @@ const useStyles = makeStyles((colors) => ({
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    /*
+     * Tighter than the `radius.xl` the app's other sheets use.
+     *
+     * A rounded top over a 45%-black backdrop cuts a wedge out of the white and fills it with the
+     * dimmed screen, and at 26pt that wedge is big enough next to the bright sheet to read as a
+     * smudge of shading rather than as background. 18 keeps the sheet reading as a sheet and takes
+     * roughly a third off it.
+     *
+     * The other fifteen sheets still use 26 and have the same wedge; this is the one that was
+     * noticed, not the only one.
+     */
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     overflow: 'hidden',
   },
   dragArea: {
@@ -854,6 +1102,40 @@ const useStyles = makeStyles((colors) => ({
   },
   // No rule above this: the composer is the same surface as the thread, and a hairline
   // there reads as a grey seam between the sheet and the keyboard.
+  // Fills the sheet, inside its rounded corners — `sheet` already clips with overflow: hidden.
+  gifOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.surface,
+  },
+  gifBody: {
+    flex: 1,
+    paddingHorizontal: screenPadding,
+    paddingTop: spacing.sm,
+  },
+  staged: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingRight: spacing.sm,
+  },
+  stagedThumb: {
+    height: STAGED_HEIGHT,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundMuted,
+  },
+  stagedPending: {
+    opacity: 0.6,
+  },
+  stagedLabel: {
+    flex: 1,
+    fontSize: fontSize.caption,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
   composer: {
     paddingHorizontal: screenPadding,
     paddingTop: spacing.sm,
