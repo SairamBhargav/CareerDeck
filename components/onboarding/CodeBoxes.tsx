@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput } from 'react-native';
 import Animated, {
+  Easing,
   ZoomIn,
   useAnimatedStyle,
   useReducedMotion,
@@ -8,7 +9,6 @@ import Animated, {
   withDelay,
   withRepeat,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -88,8 +88,8 @@ function Box({ index, digit, current, verifying }: { index: number; digit: strin
   useEffect(() => {
     if (!verifying || reduceMotion) return;
     const pop = withSequence(
-      withSpring(1.1, { damping: 10, stiffness: 400 }),
-      withSpring(1, { damping: 12, stiffness: 300 }),
+      withTiming(1.06, { duration: 140, easing: Easing.out(Easing.quad) }),
+      withTiming(1, { duration: 180, easing: Easing.inOut(Easing.quad) }),
     );
     bounce.set(withDelay(index * 60, pop));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,7 +108,7 @@ function Box({ index, digit, current, verifying }: { index: number; digit: strin
       {digit ? (
         <Animated.Text
           key={digit}
-          entering={reduceMotion ? undefined : ZoomIn.springify().damping(14).stiffness(320)}
+          entering={reduceMotion ? undefined : ZoomIn.duration(160)}
           style={[styles.digit, verifying ? styles.digitDone : null]}>
           {digit}
         </Animated.Text>

@@ -1,6 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
@@ -10,13 +9,12 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useReducedMotion,
-  useSharedValue,
-  withRepeat,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Circle, Svg } from 'react-native-svg';
 
+import { AutoApplyMark } from '@/components/common/AutoApplyMark';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { AUTO_APPLY_ECONOMY, DEFAULT_WEEKLY_GOAL, WEEKLY_GOAL_OPTIONS } from '@/constants/goal';
 import { fontSize, radius, spacing } from '@/constants/theme';
@@ -32,7 +30,8 @@ const RING_SIZE_TALL = 208;
 const RING_SIZE_SHORT = 164;
 const SHORT_SCREEN = 760;
 const FILL_MS = 700;
-const SLIDE_SPRING = { damping: 17, stiffness: 210, mass: 0.7 };
+// Critically damped: it glides to the new option and stops, with no overshoot.
+const SLIDE_SPRING = { damping: 26, stiffness: 210, mass: 0.7 };
 
 /**
  * What each target is called under the number. The ring fills by position in the list,
@@ -89,19 +88,6 @@ export default function GoalStep() {
     transform: [{ translateX: slide.value }],
   }));
 
-  // A slow pulse behind the bolt, so the reward reads as something live.
-  const pulse = useSharedValue(0);
-  useEffect(() => {
-    if (reduceMotion) return;
-    pulse.set(withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }), -1, false));
-    // Writing the shared value is the effect's whole job.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion]);
-  const haloStyle = useAnimatedStyle(() => ({
-    opacity: 0.45 * (1 - pulse.value),
-    transform: [{ scale: 1 + pulse.value * 0.55 }],
-  }));
-
   const choose = (option: number) => {
     if (option === goal) return;
     Haptics.selectionAsync();
@@ -145,11 +131,12 @@ export default function GoalStep() {
           </Svg>
 
           {/* Keyed by the goal, so each change swaps the figure: the old one lifts out
-              and the new one springs up into its place. */}
+              and the new one rises into its place. Eased, not sprung: a number that
+              bounces reads as unsure of itself. */}
           <View style={styles.figure}>
             <Animated.Text
               key={goal}
-              entering={reduceMotion ? undefined : FadeInDown.springify().damping(14).stiffness(180)}
+              entering={reduceMotion ? undefined : FadeInDown.duration(220)}
               exiting={reduceMotion ? undefined : FadeOutUp.duration(160)}
               style={styles.number}>
               {goal}
@@ -181,12 +168,7 @@ export default function GoalStep() {
         </View>
 
         <View style={styles.reward}>
-          <View style={styles.boltWrap}>
-            <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
-            <View style={styles.bolt}>
-              <Ionicons name="flash" size={19} color={colors.autoApplyIcon} />
-            </View>
-          </View>
+          <AutoApplyMark size={44} />
           <View style={styles.rewardText}>
             <Text style={styles.rewardTitle}>+{AUTO_APPLY_ECONOMY.streakBonus} Auto Apply</Text>
             <Text style={styles.rewardBody}>
@@ -268,27 +250,6 @@ const useStyles = makeStyles((colors) => ({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-  },
-  boltWrap: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  halo: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.autoApply,
-  },
-  bolt: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.autoApply,
   },
   rewardText: {
     flex: 1,

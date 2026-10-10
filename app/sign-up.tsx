@@ -211,7 +211,7 @@ export default function SignUpScreen() {
                 trailing={
                   isSchoolAddress ? (
                     <Animated.View
-                      entering={ZoomIn.springify().damping(13)}
+                      entering={ZoomIn.duration(200)}
                       style={styles.schoolMark}
                       accessible
                       accessibilityLabel="School address">

@@ -37,6 +37,9 @@ const MAX_SUGGESTIONS = 60;
  */
 const MIN_SUGGESTIONS = 5;
 
+/** How many follows the step asks for before Continue unlocks. Kept below MIN_SUGGESTIONS. */
+const MIN_FOLLOWS = 3;
+
 /** Per-row stagger, capped so a long list's tail isn't left waiting. Matches the Following list. */
 const STAGGER_MS = 45;
 const MAX_STAGGER_INDEX = 7;
@@ -44,9 +47,10 @@ const MAX_STAGGER_INDEX = 7;
 /**
  * Step four: follow a few companies.
  *
- * The only genuinely skippable step, and the most valuable one that isn't required. A
- * user who follows nothing gets an empty Following tab on their first launch, which is
- * the tab most likely to be opened second.
+ * Three is the floor, and there is no skip. A user who follows nothing gets an empty
+ * Following tab on their first launch, which is the tab most likely to be opened second;
+ * three is enough for it to have something new most days. The list is never shorter
+ * than MIN_SUGGESTIONS, so the floor can always be met.
  *
  * Suggestions come from the sectors picked on step two, interleaved rather than
  * concatenated so a smaller pick is not buried under a larger one — see
@@ -116,11 +120,10 @@ export default function CompaniesStep() {
     <OnboardingStep
       step={4}
       title={'Follow a few\nto start.'}
-      subtitle="Their new roles land at the top of your Deck."
-      canContinue
-      continueLabel={count > 0 ? `Continue with ${count}` : 'Continue'}
+      subtitle={`Pick at least ${MIN_FOLLOWS}. Their new roles land at the top of your Deck.`}
+      canContinue={count >= MIN_FOLLOWS}
+      continueLabel={count >= MIN_FOLLOWS ? `Continue with ${count}` : `Follow ${MIN_FOLLOWS - count} more`}
       onContinue={() => router.push('/sign-up')}
-      onSkip={() => router.push('/sign-up')}
       fills>
       {directory.isLoading ? (
         <View style={styles.loading}>

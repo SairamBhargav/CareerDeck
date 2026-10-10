@@ -11,16 +11,16 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import { useGuardedRouter } from '@/hooks/useGuardedRouter';
 
 /**
- * Step two: what you are into, as a cloud of bubbles that drift in place.
+ * Step two: what you are into, as a cloud of bubbles that float up into place.
  *
  * It replaced a forty-chip grid. The corpus is software and tech, the engineering
  * disciplines, and finance and business, so the list is the twenty-one fields inside
  * those three, with nothing outside them that would promise jobs the feed cannot show.
  *
  * The bubbles are ordinary pills, not circles. A circle sized to hold "Software
- * Engineering" is a circle that owns a quarter of the screen. Their motion is what makes
- * them bubbles: each one bobs on its own slow loop, so the cloud never sits still and
- * never moves enough to make a tap miss.
+ * Engineering" is a circle that owns a quarter of the screen. They rise in one after
+ * another and then hold still: an earlier version kept them drifting, and a target that
+ * keeps moving is one the thumb has to chase.
  *
  * The answer is stored as sector keys in `preferred_industries`, the same column the old
  * grid wrote, so the server needs only new `sector_families` rows (20261038000000) and
@@ -65,8 +65,8 @@ export default function InterestsStep() {
 }
 
 const useStyles = makeStyles(() => ({
-  // Centred, and padded on every side, so the drift and the selected bubble's growth
-  // never get clipped against the pane's edge.
+  // Centred, and padded on every side, so the selected bubble's growth never gets
+  // clipped against the pane's edge.
   cloud: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -42,7 +42,7 @@ export function PicksRecap() {
           {logos.map((company, index) => (
             <Animated.View
               key={company.id}
-              entering={ZoomIn.delay(200 + index * 70).springify().damping(13)}
+              entering={ZoomIn.duration(240).delay(200 + index * 70)}
               style={[styles.logo, index > 0 ? styles.logoOverlap : null]}>
               <CompanyLogo logo={company.logo} name={company.name} color={company.logoColor} size="sm" />
             </Animated.View>
