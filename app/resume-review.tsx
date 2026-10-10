@@ -51,17 +51,22 @@ import type { ResumeSeniority } from '@/types';
  * action is pinned to the bottom rather than appended, so how far it is does not depend on how
  * many skills the parser happened to find.
  *
- * **The cards are in weight order, and each one says what it is worth.** That is the whole
- * organising idea, and it came from the screen being wrong rather than merely untidy: the cards
- * were in no particular order, and education and experience sat last under a heading that said
- * "Kept on file, not used for matching yet". That stopped being true when the scorer reached v3
- * (20261024000000_match_score_v3.sql) — work now carries the field, and the two of them are
- * `experience` 0.25 plus `field` 0.20, so the screen was filing 45% of a reader's score under
+ * **The cards are in the order the scorer cares about them.** That is the whole organising
+ * idea, and it came from the screen being wrong rather than merely untidy: the cards were in no
+ * particular order, and education and experience sat last under a heading that said "Kept on
+ * file, not used for matching yet". That stopped being true when the scorer reached v3
+ * (20261024000000_match_score_v3.sql) — work now carries the field, and between them experience
+ * and field are nearly half a match, so the screen was filing most of a reader's score under
  * "not used" at the bottom of a scroll.
  *
- * So: skills, experience, education, level, by what each moves, with the number on the card.
- * A reader who will fix one thing fixes the thing that pays. README §13.3 wants an automated
- * score to be answerable; this answers it before the score exists rather than after.
+ * So: skills, experience, education, level. A reader who will fix one thing fixes the thing
+ * that pays, without being told any arithmetic.
+ *
+ * The order is the only claim made, deliberately. An earlier pass put each card's weight on it
+ * as a percentage, read out of the migration — which is arithmetic nobody asked for, and worse,
+ * a copy of a number that lives somewhere else: a v4 reweighting would have left four confident
+ * wrong figures on screen with nothing to catch them. Ordering says the same thing and cannot
+ * rot the same way.
  *
  * Location sits last and carries no percentage. v3 dropped it from the match — "experience
  * replaces location" — but the feed ranker still reads it, so it is neither scored nor inert,
@@ -75,20 +80,6 @@ import type { ResumeSeniority } from '@/types';
  * cost — a blank that costs nothing is left out, because listing it would teach people to skip
  * the list.
  */
-
-/*
- * What each part of the resume is worth, from 20261024000000_match_score_v3.sql's header:
- *
- *   skills 0.40 · experience 0.25 · field 0.20 · seniority 0.15
- *
- * On screen because this page asks for corrections, and the only honest answer to "which of
- * these should I fix first" is how much each one moves. README §13.3 asks that an automated
- * score be answerable; this is that answer, given before the score rather than after it.
- *
- * **Copied from SQL, so it drifts when the scorer moves.** The migration is the source of
- * truth. A v4 that reweights anything has to change these four numbers in the same commit.
- */
-const WEIGHT = { skills: 40, experience: 25, field: 20, seniority: 15 } as const;
 
 const SENIORITY_OPTIONS: { value: ResumeSeniority; label: string }[] = [
   { value: 'intern', label: 'Intern' },
@@ -141,16 +132,16 @@ export default function ResumeReviewScreen() {
    */
   const gaps: string[] = [];
   if (shownSkills.length === 0) {
-    gaps.push(`No skills were read. They are ${WEIGHT.skills}% of every match score — the largest single piece.`);
+    gaps.push('No skills were read. They count for more than anything else here — add the ones that matter.');
   }
   if (experience.length === 0) {
-    gaps.push(`No roles were read. Past roles are ${WEIGHT.experience}%, and they carry your field when your degree does not.`);
+    gaps.push('No roles were read. Past roles carry your field when your degree is in something else.');
   }
   if (education.length === 0 && experience.length === 0) {
-    gaps.push(`Neither a degree nor a role was read, so the ${WEIGHT.field}% for field has nothing to work from.`);
+    gaps.push('Neither a degree nor a role was read, so there is nothing to judge your field by.');
   }
   if (shownSeniority === null) {
-    gaps.push(`No level is set. It is ${WEIGHT.seniority}%, and it is the one thing here the document often does not say.`);
+    gaps.push('No level is set. It is the one thing here that a document often does not say outright.');
   }
 
   const addSkill = () => {
@@ -257,8 +248,8 @@ export default function ResumeReviewScreen() {
         {parsed ? (
           <>
             <Text style={styles.lede}>
-              This is what we read, in the order it matters. Fixing the top of this list moves your
-              match scores more than fixing the bottom.
+              This is what we read, most important first. Correcting it changes what we match you
+              on — your file itself is never edited.
             </Text>
 
             {/*
@@ -287,10 +278,10 @@ export default function ResumeReviewScreen() {
 
             {/* ── Skills · 40% ───────────────────────────────────────────── */}
             <View style={styles.card}>
-              <SectionHead title="Skills" weight={WEIGHT.skills} count={shownSkills.length} />
+              <SectionHead title="Skills" count={shownSkills.length} />
               <Text style={styles.hint}>
-                Checked against each posting&apos;s own list. Required ones count double what
-                nice-to-haves do, and 60% coverage already scores full marks.
+                Checked against each posting&apos;s own list. Adding one here tells us you have it;
+                it does not write anything into your document.
               </Text>
 
               {shownSkills.length > 0 ? (
@@ -340,11 +331,11 @@ export default function ResumeReviewScreen() {
 
             {/* ── Experience · 25% ───────────────────────────────────────── */}
             <View style={styles.card}>
-              <SectionHead title="Experience" weight={WEIGHT.experience} count={experience.length} />
+              <SectionHead title="Experience" count={experience.length} />
               <Text style={styles.hint}>
                 {experience.length > 0
                   ? 'A role counts when its field is close to the posting’s, and a longer one counts for more. This is also what carries your field when your degree is in something else.'
-                  : 'Roles close to a posting’s field are a quarter of its score. None were read from this document.'}
+                  : 'Roles close to a posting’s field count for a lot. None were read from this document.'}
               </Text>
 
               {experience.length > 0 ? (
@@ -379,7 +370,7 @@ export default function ResumeReviewScreen() {
 
             {/* ── Education · 20% ────────────────────────────────────────── */}
             <View style={styles.card}>
-              <SectionHead title="Education" weight={WEIGHT.field} count={education.length} />
+              <SectionHead title="Education" count={education.length} />
               <Text style={styles.hint}>
                 Your degree against the posting&apos;s field. A relevant past role can carry this
                 instead, so a maths major with software internships is not outside the field.
@@ -411,7 +402,7 @@ export default function ResumeReviewScreen() {
 
             {/* ── Level · 15% ────────────────────────────────────────────── */}
             <View style={styles.card}>
-              <SectionHead title="Level" weight={WEIGHT.seniority} />
+              <SectionHead title="Level" />
               <Text style={styles.hint}>
                 What you are applying as, not what you have done. This decides whether a senior
                 posting counts against you.
@@ -498,24 +489,19 @@ export default function ResumeReviewScreen() {
 }
 
 /**
- * A section's name, what it is worth, and how many of it were found.
+ * A section's name, and how many of it were found.
  *
- * The weight is the point. Every card used to look equally important, so the reader had no way
- * to tell that correcting one skill is worth more than correcting a job title — and the card
- * carrying nearly half the score was at the bottom under "Also read".
+ * The order the cards come in carries the ranking now. It used to be spelled out as a
+ * percentage on each one, taken from the scorer's weights — which read as arithmetic nobody
+ * asked for, and quietly became wrong the moment the scorer was reweighted.
  */
-function SectionHead({ title, weight, count }: { title: string; weight: number; count?: number }) {
+function SectionHead({ title, count }: { title: string; count?: number }) {
   const styles = useStyles();
 
   return (
     <View style={styles.cardHead}>
-      <View style={styles.cardHeadLeft}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        {count === undefined ? null : <Text style={styles.cardCount}>{count}</Text>}
-      </View>
-      <View style={styles.weightPill}>
-        <Text style={styles.weightPillText}>{weight}% of your match</Text>
-      </View>
+      <Text style={styles.cardTitle}>{title}</Text>
+      {count === undefined ? null : <Text style={styles.cardCount}>{count}</Text>}
     </View>
   );
 }
@@ -591,23 +577,6 @@ const useStyles = makeStyles((colors) => ({
     fontSize: fontSize.small,
     fontWeight: '600',
     color: colors.textTertiary,
-  },
-  cardHeadLeft: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-  },
-  // Quiet by design: it ranks the sections, it is not a thing to read on every one of them.
-  weightPill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    backgroundColor: colors.backgroundMuted,
-  },
-  weightPillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
   },
   // The one thing above the fold that is not a field: what the parse did not find.
   gaps: {
