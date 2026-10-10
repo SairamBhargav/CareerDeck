@@ -51,6 +51,13 @@ const MAX_ASPECT = 2.2;
 interface GifPickerProps {
   /** `gifId` is what the comment stores; `slug` is set for a KLIPY GIF so the caller can report the share. */
   onPick: (gifId: string, slug?: string) => void;
+  /**
+   * Take all the height there is, instead of the panel's own 260.
+   *
+   * Set when the picker is the whole sheet rather than a tray above the composer. Browsing is the
+   * task at that point, so the grid gets the room and the thread waits underneath.
+   */
+  fill?: boolean;
 }
 
 /**
@@ -59,8 +66,12 @@ interface GifPickerProps {
  * With no KLIPY key on the build it is the eight bundled reactions, as it was before. The two are
  * never shown together, because KLIPY's terms keep their results in a grid of their own.
  */
-export function GifPicker({ onPick }: GifPickerProps) {
-  return isKlipyConfigured ? <KlipyPicker onPick={onPick} /> : <BundledPicker onPick={onPick} />;
+export function GifPicker({ onPick, fill = false }: GifPickerProps) {
+  return isKlipyConfigured ? (
+    <KlipyPicker onPick={onPick} fill={fill} />
+  ) : (
+    <BundledPicker onPick={onPick} fill={fill} />
+  );
 }
 
 /**
@@ -116,7 +127,7 @@ function toColumns(gifs: KlipyGif[], columns: number): KlipyGif[][] {
   return out;
 }
 
-function KlipyPicker({ onPick }: GifPickerProps) {
+function KlipyPicker({ onPick, fill = false }: GifPickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const queryClient = useQueryClient();
@@ -201,7 +212,7 @@ function KlipyPicker({ onPick }: GifPickerProps) {
   }
 
   return (
-    <View style={styles.panel}>
+    <View style={fill ? styles.panelFill : styles.panel}>
       <View style={styles.searchRow}>
         <Ionicons name="search" size={15} color={colors.textTertiary} />
         <TextInput
@@ -240,12 +251,12 @@ function KlipyPicker({ onPick }: GifPickerProps) {
  * on screen without scrolling. It gets the same panel height as the search grid so that opening the
  * picker moves the composer by the same amount either way.
  */
-function BundledPicker({ onPick }: GifPickerProps) {
+function BundledPicker({ onPick, fill = false }: GifPickerProps) {
   const styles = useStyles();
   const tileWidth = useTileWidth(BUNDLED_COLUMNS);
 
   return (
-    <View style={styles.panel}>
+    <View style={fill ? styles.panelFill : styles.panel}>
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.bundled}>
           {reactionGifs.map((gif) => (
@@ -272,6 +283,11 @@ function BundledPicker({ onPick }: GifPickerProps) {
 const useStyles = makeStyles((colors) => ({
   panel: {
     height: PANEL_HEIGHT,
+    gap: spacing.sm,
+  },
+  // The whole-sheet variant: the parent decides the height and the grid takes what is left.
+  panelFill: {
+    flex: 1,
     gap: spacing.sm,
   },
   searchRow: {
