@@ -122,7 +122,7 @@ export default function WelcomeScreen() {
               label="Get started"
               onPress={leave}
               disabled={leaving}
-              accessibilityHint="Sets up your feed in three quick steps."
+              accessibilityHint="Sets up your feed in four quick steps."
             />
             <Pressable
               onPress={() => router.push('/sign-in')}

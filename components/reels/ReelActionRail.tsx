@@ -1,9 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 import { fontSize, minTapTarget, spacing } from '@/constants/theme';
-import { usePaywallColors } from '@/components/paywall/palette';
+import { AutoApplyMark } from '@/components/common/AutoApplyMark';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { TourAnchor } from '@/context/TourAnchorContext';
 
@@ -36,8 +35,6 @@ export function ReelActionRail({
   autoApplyCredits,
 }: ReelActionRailProps) {
   const { colors } = useTheme();
-  // The palette Pro is sold under; the ring is the only place the rail uses colour.
-  const pro = usePaywallColors();
   const styles = useStyles();
 
   return (
@@ -98,29 +95,10 @@ export function ReelActionRail({
         style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}>
         <View style={styles.applyMark}>
           <TourAnchor id="rail-apply" style={StyleSheet.absoluteFill} />
-          <Svg width={APPLY_RING} height={APPLY_RING} style={StyleSheet.absoluteFill}>
-            <Defs>
-              <LinearGradient id="autoApplyRing" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0" stopColor={pro.violet} />
-                <Stop offset="0.55" stopColor={pro.magenta} />
-                <Stop offset="1" stopColor={pro.gold} />
-              </LinearGradient>
-            </Defs>
-            <Circle
-              cx={APPLY_RING / 2}
-              cy={APPLY_RING / 2}
-              r={(APPLY_RING - APPLY_RING_STROKE) / 2}
-              stroke="url(#autoApplyRing)"
-              strokeWidth={APPLY_RING_STROKE}
-              fill="none"
-              // Spent, not disabled: the button still opens the ordinary apply sheet, so
-              // the ring fades rather than the control greying out.
-              strokeOpacity={autoApplyCredits === 0 ? 0.32 : 1}
-            />
-          </Svg>
+          <AutoApplyMark size={APPLY_RING} spent={autoApplyCredits === 0} />
 
           {/*
-            * The page's own ink, like the three marks above it.
+            * The bolt inside AutoApplyMark: the page's own ink, like the three marks above it.
             *
             * Gold was the obvious choice and is unusable: it measures 1.53:1 against a
             * light page, against a floor of 3 for an icon — invisible in daylight and
@@ -139,11 +117,6 @@ export function ReelActionRail({
             * chatbubble and heart above it, so the whole column is one weight and only the
             * ring's colour sets this apart.
             */}
-          <Ionicons
-            name="flash-outline"
-            size={22}
-            color={autoApplyCredits === 0 ? colors.textTertiary : colors.text}
-          />
         </View>
 
         <Text style={styles.actionLabel}>{autoApplyCredits}</Text>
@@ -203,7 +176,6 @@ function RailAction({ icon, label, onPress, accessibilityLabel, active = false, 
 
 /** The ring's box, and the hairline it is drawn with. */
 const APPLY_RING = 48;
-const APPLY_RING_STROKE = 1.75;
 
 const useStyles = makeStyles((colors) => ({
   rail: {

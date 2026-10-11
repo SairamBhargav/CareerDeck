@@ -18,7 +18,7 @@ import { makeStyles } from '@/context/ThemeContext';
  * Making the whole screen scroll is the obvious answer and the wrong one here. The
  * onboarding steps are composed: a fixed headline, a body, a button pinned to the bottom.
  * Scroll the screen and the headline slides away, the page grows as long as its longest
- * step, and the three steps stop feeling like one sequence — which is the entire reason
+ * step, and the steps stop feeling like one sequence — which is the entire reason
  * OnboardingStep exists. A pane keeps every step exactly the same height and lets only
  * the part with more in it move.
  *
@@ -63,7 +63,7 @@ export interface ScrollPaneProps<Item> {
    * offset, layout and content-size callbacks drive it.
    */
   data?: readonly Item[];
-  renderItem?: (item: Item) => ReactNode;
+  renderItem?: (item: Item, index: number) => ReactNode;
   keyExtractor?: (item: Item) => string;
   /**
    * Extra room under the last row, so the final item does not sit flush against the
@@ -132,7 +132,7 @@ export function ScrollPane<Item>({
         <Animated.FlatList
           {...scrollProps}
           data={data}
-          renderItem={({ item }) => <>{renderItem(item as Item)}</>}
+          renderItem={({ item, index }) => <>{renderItem(item as Item, index)}</>}
           keyExtractor={(item, index) => keyExtractor?.(item as Item) ?? String(index)}
           // Enough to fill a tall phone before the first scroll, so the list never shows
           // blank space waiting for a render pass.

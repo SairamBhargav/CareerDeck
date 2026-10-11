@@ -1,5 +1,6 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,11 +11,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { SchoolField } from '@/components/common/SchoolField';
+import { CodeBoxes } from '@/components/onboarding/CodeBoxes';
+import { PicksRecap } from '@/components/onboarding/PicksRecap';
 import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
 import { SignInCancelled, useAuth } from '@/context/AuthContext';
 import { useOnboarding } from '@/context/OnboardingContext';
@@ -69,6 +72,9 @@ export default function SignUpScreen() {
   const asksSchool = onboarding.roleOption?.asksSchool ?? false;
   const emailLooksValid = /^\S+@\S+\.\S+$/.test(email.trim());
   const canSend = emailLooksValid && firstName.trim().length > 0;
+  // A hint, not a promise: the server decides what verifies (20261037000000). .edu is the
+  // case worth celebrating while somebody types, since it unlocks commenting on its own.
+  const isSchoolAddress = /@[^@\s]+\.edu$/i.test(email.trim());
 
   const handleSend = useCallback(async () => {
     setBusy(true);
@@ -138,6 +144,7 @@ export default function SignUpScreen() {
             employmentTypes: onboarding.roleOption?.employmentTypes ?? [],
             careerStage: onboarding.roleOption?.careerStage ?? null,
             followedCompanySlugs: onboarding.followedCompanySlugs,
+            weeklyGoal: onboarding.weeklyGoal,
           });
           onboarding.clear();
         }
@@ -181,6 +188,7 @@ export default function SignUpScreen() {
                 ? 'One code by email. No password to remember.'
                 : `We sent a six-digit code to ${email.trim()}.`}
             </Text>
+            {step === 'details' ? <PicksRecap /> : null}
           </View>
 
           {step === 'details' ? (
@@ -200,6 +208,17 @@ export default function SignUpScreen() {
                 placeholder="you@school.edu"
                 keyboardType="email-address"
                 autoComplete="email"
+                trailing={
+                  isSchoolAddress ? (
+                    <Animated.View
+                      entering={ZoomIn.duration(200)}
+                      style={styles.schoolMark}
+                      accessible
+                      accessibilityLabel="School address">
+                      <Ionicons name="school" size={13} color={colors.textOnBrand} />
+                    </Animated.View>
+                  ) : null
+                }
               />
 
               {asksSchool ? (
@@ -234,23 +253,16 @@ export default function SignUpScreen() {
           ) : (
             <View style={styles.form}>
               <Text style={styles.label}>Six-digit code</Text>
-              <TextInput
-                ref={codeInput}
+              <CodeBoxes
+                length={CODE_LENGTH}
                 value={code}
-                onChangeText={(value) => {
-                  const digits = value.replace(/\D/g, '').slice(0, CODE_LENGTH);
+                inputRef={codeInput}
+                editable={!busy}
+                verifying={busy && code.length === CODE_LENGTH}
+                onChangeText={(digits) => {
                   setCode(digits);
                   if (digits.length === CODE_LENGTH && !busy) void handleVerify(digits);
                 }}
-                placeholder="000000"
-                placeholderTextColor={colors.textTertiary}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                maxLength={CODE_LENGTH}
-                editable={!busy}
-                style={[styles.input, styles.codeInput]}
-                accessibilityLabel="Six-digit sign-up code"
               />
               <Pressable onPress={() => setStep('details')} hitSlop={8} accessibilityRole="button">
                 <Text style={styles.link}>Use a different email</Text>
@@ -305,9 +317,11 @@ interface FieldProps {
   keyboardType?: 'default' | 'email-address' | 'number-pad';
   autoComplete?: 'given-name' | 'family-name' | 'email';
   narrow?: boolean;
+  /** Drawn inside the field's right edge. */
+  trailing?: ReactNode;
 }
 
-function Field({ label, value, onChangeText, placeholder, keyboardType, autoComplete, narrow }: FieldProps) {
+function Field({ label, value, onChangeText, placeholder, keyboardType, autoComplete, narrow, trailing }: FieldProps) {
   const styles = useStyles();
   const { colors } = useTheme();
 
@@ -323,9 +337,10 @@ function Field({ label, value, onChangeText, placeholder, keyboardType, autoComp
         autoComplete={autoComplete}
         autoCapitalize={keyboardType === 'email-address' ? 'none' : 'words'}
         autoCorrect={false}
-        style={styles.input}
+        style={[styles.input, trailing ? styles.inputWithTrailing : null]}
         accessibilityLabel={label}
       />
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   );
 }
@@ -426,11 +441,22 @@ const useStyles = makeStyles((colors) => ({
     color: colors.text,
     fontSize: fontSize.body,
   },
-  codeInput: {
-    fontSize: fontSize.heading,
-    fontWeight: '700',
-    letterSpacing: 8,
-    textAlign: 'center',
+  inputWithTrailing: {
+    paddingRight: spacing.xxl + spacing.sm,
+  },
+  // Pinned to the input's row: the label above is a fixed height, so `bottom` lines it up.
+  trailing: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: (minTapTarget + 4 - 22) / 2,
+  },
+  schoolMark: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.goalMet,
   },
   footnote: {
     fontSize: fontSize.small,

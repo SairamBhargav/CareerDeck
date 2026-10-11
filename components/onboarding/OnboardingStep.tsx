@@ -12,16 +12,16 @@ import { makeStyles } from '@/context/ThemeContext';
  * The frame every onboarding step sits in: step count, headline, one line of subtext,
  * the content, and a button pinned to the bottom.
  *
- * It exists so the three steps cannot drift apart. They are the highest-stakes screens
+ * It exists so the steps cannot drift apart. They are the highest-stakes screens
  * in the app for conversion and they have to read as one sequence — a headline two points
  * larger on step two is the kind of thing nobody can name but everybody feels.
  *
  * The screen never scrolls. Steps with more content than fits pass `fills` and put a
  * ScrollPane inside, so the headline, the step counter and the button stay exactly where
- * they are on all three and only the part with more in it moves.
+ * they are on every step and only the part with more in it moves.
  */
 
-export const TOTAL_STEPS = 3;
+export const TOTAL_STEPS = 4;
 
 interface OnboardingStepProps {
   step: number;

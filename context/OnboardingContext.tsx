@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { DEFAULT_WEEKLY_GOAL } from '@/constants/goal';
 import { reportError } from '@/lib/observability';
 import type { EmploymentType, Seniority } from '@/types';
 
@@ -93,12 +94,15 @@ export interface OnboardingDraft {
   industries: string[];
   /** Company slugs, written to `company_follows` after sign-up. */
   followedCompanySlugs: string[];
+  /** Applications a week, written to `user_preferences.weekly_goal` after sign-up. */
+  weeklyGoal: number;
 }
 
 const EMPTY_DRAFT: OnboardingDraft = {
   role: null,
   industries: [],
   followedCompanySlugs: [],
+  weeklyGoal: DEFAULT_WEEKLY_GOAL,
 };
 
 interface OnboardingState extends OnboardingDraft {
@@ -109,6 +113,7 @@ interface OnboardingState extends OnboardingDraft {
   setRole: (role: RoleKey) => void;
   toggleIndustry: (key: string) => void;
   toggleCompany: (slug: string) => void;
+  setWeeklyGoal: (goal: number) => void;
   /** Wipes the draft. Called after a successful flush, and on sign-out. */
   clear: () => void;
 }
@@ -135,6 +140,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
             role: parsed.role ?? null,
             industries: parsed.industries ?? [],
             followedCompanySlugs: parsed.followedCompanySlugs ?? [],
+            weeklyGoal: parsed.weeklyGoal ?? DEFAULT_WEEKLY_GOAL,
           });
         }
         setIsResolved(true);
@@ -176,6 +182,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setWeeklyGoal = useCallback((weeklyGoal: number) => {
+    setDraft((current) => ({ ...current, weeklyGoal }));
+  }, []);
+
   const clear = useCallback(() => {
     setDraft(EMPTY_DRAFT);
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => {
@@ -191,9 +201,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       setRole,
       toggleIndustry,
       toggleCompany,
+      setWeeklyGoal,
       clear,
     }),
-    [draft, isResolved, setRole, toggleIndustry, toggleCompany, clear],
+    [draft, isResolved, setRole, toggleIndustry, toggleCompany, setWeeklyGoal, clear],
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

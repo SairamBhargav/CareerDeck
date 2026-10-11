@@ -173,8 +173,9 @@ function RootNavigator() {
               still reachable from it, for people who already have an account. */}
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding/role" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding/industries" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding/interests" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding/companies" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding/goal" options={{ headerShown: false }} />
           <Stack.Screen name="sign-up" options={{ headerShown: false }} />
           <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         </Stack.Protected>
