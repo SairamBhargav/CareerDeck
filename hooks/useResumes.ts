@@ -187,7 +187,7 @@ export function useResumes(userId: string | null): ResumeState {
  *
  * ── Why this shares the viewer's cache ────────────────────────────────────────
  *
- * The key is `['resume', 'url', id]` — byte-identical to the one `ResumeViewerModal` uses, and
+ * The key is `['resume', 'url', id]` — byte-identical to the one `ResumeViewer` uses, and
  * that is the whole trick. The shelf and the viewer are two views of one document, so they
  * should cost one signing between them: the shelf warms the URL, the viewer opens on a cache
  * hit instead of a spinner, and `pii_access_log` gets one row rather than two.
