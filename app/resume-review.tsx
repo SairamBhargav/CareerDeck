@@ -66,16 +66,20 @@ import type { ResumeSeniority } from '@/types';
  * WHERE sits last and says what it does. v3 dropped location from the match — "experience
  * replaces location" — but the feed ranker still reads it, so it is neither scored nor inert.
  *
- * ── Only removing, never adding ───────────────────────────────────────────────
+ * ── Adding a skill, and what it reaches ───────────────────────────────────────
  *
- * Skills can be taken off this list and not put on it. The resume is what goes to the employer,
- * so a profile claiming a skill the document does not show would rank the reader into postings
- * their own resume then fails to support — a worse outcome than a missed match, because it
- * wastes an application.
+ * Skills can be taken off this list and put back on it. The adding is what §3.9's ~15% is
+ * about: a parser reading a two-column PDF drops skills the page plainly shows, and without a
+ * way back the only remedy is editing the document and uploading it again.
  *
- * The cost is real and worth stating: §3.9's ~15% includes skills the parser *missed*, and
- * those can now only be recovered by fixing the document and uploading it again. That is the
- * right way round. The document is the claim; this screen only ever narrows it.
+ * Worth knowing where the list goes, because it is further than the match score.
+ * `server/src/autoapply.ts` selects it alongside education and experience, and the drafting
+ * prompt tells the model to write answers "only from the facts provided — their actual
+ * experience and skills". So a skill typed here can become a sentence in an application sent
+ * in the reader's name, against a resume that does not mention it.
+ *
+ * Hence the placeholder: "One we missed", not "Add a skill". The field is for recovering what
+ * the page already says, and the copy is the only thing standing between that and a wish list.
  *
  * ── Gaps where they can be filled ─────────────────────────────────────────────
  *
@@ -118,6 +122,7 @@ export default function ResumeReviewScreen() {
   const [skills, setSkills] = useState<string[] | undefined>();
   const [seniority, setSeniority] = useState<ResumeSeniority | null | undefined>();
   const [location, setLocation] = useState<string | undefined>();
+  const [draftSkill, setDraftSkill] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const shownSkills = skills ?? resume?.profile.skills ?? [];
@@ -128,6 +133,27 @@ export default function ResumeReviewScreen() {
 
   const education = resume?.profile.education ?? [];
   const experience = resume?.profile.experience ?? [];
+
+  /*
+   * Slugged the way the parser writes them, so an added skill and a read one are the same kind
+   * of string: lower case, spaces to hyphens, and the punctuation a language name actually uses
+   * (c++, c#, node.js) kept.
+   */
+  const addSkill = () => {
+    const slug = draftSkill
+      .toLowerCase()
+      .trim()
+      // The hyphen leads the class so it is a literal, not a range — and the characters kept
+      // are the ones language names actually use: c++, c#, node.js, rest-apis.
+      .replace(/[^-a-z0-9+#. ]/g, '')
+      .replace(/ +/g, '-');
+    if (slug.length < 2 || shownSkills.includes(slug)) {
+      setDraftSkill('');
+      return;
+    }
+    setSkills([...shownSkills, slug]);
+    setDraftSkill('');
+  };
 
   const canConfirm = resume?.parseStatus === 'parsed' && !isBusy;
 
@@ -231,9 +257,6 @@ export default function ResumeReviewScreen() {
 
         {parsed ? (
           <>
-            <Animated.Text entering={enter(60)} style={styles.title} accessibilityRole="header">
-              What we read
-            </Animated.Text>
             {/*
               Which document this is, on its own line rather than inside a sentence.
               It was set in the opening paragraph, where a file name is something you read past
@@ -246,7 +269,7 @@ export default function ResumeReviewScreen() {
               going back to. Middle truncation keeps the useful halves — "Resume_v2 (1).pdf"
               loses its centre rather than its tail, so two near-identical files still read apart.
             */}
-            <Animated.View entering={enter(120)} style={styles.fileRow}>
+            <Animated.View entering={enter(60)} style={styles.fileRow}>
               <Ionicons name="document-text-outline" size={16} color={colors.textSecondary} />
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="middle">
@@ -260,13 +283,13 @@ export default function ResumeReviewScreen() {
               </View>
             </Animated.View>
 
-            <Animated.Text entering={enter(170)} style={styles.lede}>
-              Remove anything wrong — the file itself is never edited.
+            <Animated.Text entering={enter(110)} style={styles.lede}>
+              Fix anything wrong — the file itself is never edited.
             </Animated.Text>
 
             <View style={styles.rows}>
               {/* ── Skills ─────────────────────────────────────────────── */}
-              <Animated.View entering={enter(230)} style={styles.row}>
+              <Animated.View entering={enter(170)} style={styles.row}>
                 <Text style={styles.rowLabel}>SKILLS</Text>
                 <View style={styles.rowBody}>
                   {shownSkills.length > 0 ? (
@@ -293,11 +316,36 @@ export default function ResumeReviewScreen() {
                   ) : (
                     <Text style={styles.prompt}>None were read from the page.</Text>
                   )}
+
+                  {/*
+                    Adding, for the ones the parser dropped.
+
+                    Worth knowing what this list feeds: it is matched against postings, and
+                    Auto Apply writes its answers from it (server/src/autoapply.ts) — so a skill
+                    typed here can end up in an application sent in the reader's name. The
+                    placeholder says "missed" rather than "add" for that reason: the useful case
+                    is a skill the document already shows and the parser did not catch.
+                  */}
+                  <View style={styles.addRow}>
+                    <Ionicons name="add" size={15} color={colors.textTertiary} />
+                    <TextInput
+                      value={draftSkill}
+                      onChangeText={setDraftSkill}
+                      onSubmitEditing={addSkill}
+                      placeholder="One we missed"
+                      placeholderTextColor={colors.textTertiary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      style={styles.addInput}
+                      accessibilityLabel="Add a skill the parser missed"
+                    />
+                  </View>
                 </View>
               </Animated.View>
 
               {/* ── Work ───────────────────────────────────────────────── */}
-              <Animated.View entering={enter(290)} style={styles.row}>
+              <Animated.View entering={enter(230)} style={styles.row}>
                 <Text style={styles.rowLabel}>WORK</Text>
                 <View style={styles.rowBody}>
                   {experience.length > 0 ? (
@@ -323,7 +371,7 @@ export default function ResumeReviewScreen() {
               </Animated.View>
 
               {/* ── School ─────────────────────────────────────────────── */}
-              <Animated.View entering={enter(350)} style={styles.row}>
+              <Animated.View entering={enter(290)} style={styles.row}>
                 <Text style={styles.rowLabel}>SCHOOL</Text>
                 <View style={styles.rowBody}>
                   {education.length > 0 ? (
@@ -345,7 +393,7 @@ export default function ResumeReviewScreen() {
               </Animated.View>
 
               {/* ── Level ──────────────────────────────────────────────── */}
-              <Animated.View entering={enter(410)} style={styles.row}>
+              <Animated.View entering={enter(350)} style={styles.row}>
                 <Text style={styles.rowLabel}>LEVEL</Text>
                 <View style={styles.rowBody}>
                   {/*
@@ -384,7 +432,7 @@ export default function ResumeReviewScreen() {
               </Animated.View>
 
               {/* ── Where ──────────────────────────────────────────────── */}
-              <Animated.View entering={enter(470)} style={[styles.row, styles.rowLast]}>
+              <Animated.View entering={enter(410)} style={[styles.row, styles.rowLast]}>
                 <Text style={styles.rowLabel}>WHERE</Text>
                 <View style={styles.rowBody}>
                   {/*
@@ -470,27 +518,22 @@ const useStyles = makeStyles((colors) => ({
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: -0.9,
-    lineHeight: 32,
-  },
   fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.md,
   },
   fileInfo: {
     flex: 1,
     minWidth: 0,
   },
+  // Larger than it was: with the heading gone this line is what the screen opens on, and it is
+  // also the answer to the first question anybody has here — which of my resumes is this.
   fileName: {
-    fontSize: fontSize.body,
+    fontSize: fontSize.title,
     fontWeight: '700',
     color: colors.text,
+    letterSpacing: -0.3,
   },
   fileMeta: {
     fontSize: fontSize.caption,
@@ -609,6 +652,21 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: '600',
   },
 
+  // Deliberately the quietest thing in the row: a line to type on, not a box demanding filling.
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  addInput: {
+    flex: 1,
+    minHeight: 32,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: 0,
+    fontSize: fontSize.caption,
+    color: colors.text,
+  },
   locationInput: {
     minHeight: 34,
     paddingVertical: spacing.xs,
