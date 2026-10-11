@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { type ComponentProps, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,10 +10,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
-import { MarqueeText } from '@/components/common/MarqueeText';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -94,6 +94,10 @@ const SENIORITY_OPTIONS: { value: ResumeSeniority; label: string }[] = [
   { value: 'staff_plus', label: 'Staff+' },
 ];
 
+// Named the way app/paywall.tsx does, and for the same reason: reanimated does not export the
+// type of its own `entering` prop.
+type EnteringAnimation = ComponentProps<typeof Animated.View>['entering'];
+
 export default function ResumeReviewScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -101,6 +105,7 @@ export default function ResumeReviewScreen() {
   const { userId } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
 
+  const reduced = useReducedMotion();
   const { resumes, isLoading, confirm, parse, isBusy } = useResumes(userId);
   const resume = resumes.find((entry) => entry.id === id);
 
@@ -126,6 +131,16 @@ export default function ResumeReviewScreen() {
   const experience = resume?.profile.experience ?? [];
 
   const canConfirm = resume?.parseStatus === 'parsed' && !isBusy;
+
+  /*
+   * The same entrance the paywall and the verification screen use: the heading lands, then the
+   * file, then the rows in reading order. On a screen that is mostly hairlines this is what
+   * stops it arriving as a wall of rules, and it tells the eye which way to travel down it.
+   */
+  const enter = (delay: number): EnteringAnimation =>
+    reduced
+      ? FadeIn.duration(180)
+      : FadeInDown.duration(440).delay(delay).springify().dampingRatio(0.88);
 
   const handleConfirm = async () => {
     if (!resume) return;
@@ -208,38 +223,42 @@ export default function ResumeReviewScreen() {
 
         {parsed ? (
           <>
-            <Text style={styles.title} accessibilityRole="header">
-              What we{'\n'}read
-            </Text>
+            <Animated.Text entering={enter(60)} style={styles.title} accessibilityRole="header">
+              What we read
+            </Animated.Text>
             {/*
               Which document this is, on its own line rather than inside a sentence.
               It was set in the opening paragraph, where a file name is something you read past
               — and on a shelf of three near-identical resumes the only question this screen has
               to answer before any other is which one you opened.
 
-              Travelling rather than truncating, the same as the shelf and the viewer: these
-              names come out of a file manager, and "v2 (1).pdf" is exactly the part an ellipsis
-              eats and exactly the part that tells two of them apart.
+              Still, and clipped in the middle when it is too long. The shelf and the viewer let
+              this name travel, which suits a tile you glance at; here it sits above everything
+              else you are reading, and a line that moves on its own is the thing the eye keeps
+              going back to. Middle truncation keeps the useful halves — "Resume_v2 (1).pdf"
+              loses its centre rather than its tail, so two near-identical files still read apart.
             */}
-            <View style={styles.fileRow}>
+            <Animated.View entering={enter(120)} style={styles.fileRow}>
               <Ionicons name="document-text-outline" size={16} color={colors.textSecondary} />
               <View style={styles.fileInfo}>
-                <MarqueeText style={styles.fileName}>{resume.name}</MarqueeText>
+                <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="middle">
+                  {resume.name}
+                </Text>
                 {pageCount !== null ? (
                   <Text style={styles.fileMeta}>
                     {pageCount} {pageCount === 1 ? 'page' : 'pages'} read
                   </Text>
                 ) : null}
               </View>
-            </View>
+            </Animated.View>
 
-            <Text style={styles.lede}>
+            <Animated.Text entering={enter(170)} style={styles.lede}>
               Remove anything wrong — the file itself is never edited.
-            </Text>
+            </Animated.Text>
 
             <View style={styles.rows}>
               {/* ── Skills ─────────────────────────────────────────────── */}
-              <View style={styles.row}>
+              <Animated.View entering={enter(230)} style={styles.row}>
                 <Text style={styles.rowLabel}>SKILLS</Text>
                 <View style={styles.rowBody}>
                   {shownSkills.length > 0 ? (
@@ -267,10 +286,10 @@ export default function ResumeReviewScreen() {
                     <Text style={styles.prompt}>None were read from the page.</Text>
                   )}
                 </View>
-              </View>
+              </Animated.View>
 
               {/* ── Work ───────────────────────────────────────────────── */}
-              <View style={styles.row}>
+              <Animated.View entering={enter(290)} style={styles.row}>
                 <Text style={styles.rowLabel}>WORK</Text>
                 <View style={styles.rowBody}>
                   {experience.length > 0 ? (
@@ -293,10 +312,10 @@ export default function ResumeReviewScreen() {
                     </Text>
                   ) : null}
                 </View>
-              </View>
+              </Animated.View>
 
               {/* ── School ─────────────────────────────────────────────── */}
-              <View style={styles.row}>
+              <Animated.View entering={enter(350)} style={styles.row}>
                 <Text style={styles.rowLabel}>SCHOOL</Text>
                 <View style={styles.rowBody}>
                   {education.length > 0 ? (
@@ -315,10 +334,10 @@ export default function ResumeReviewScreen() {
                     <Text style={styles.prompt}>Nothing was read from the page.</Text>
                   )}
                 </View>
-              </View>
+              </Animated.View>
 
               {/* ── Level ──────────────────────────────────────────────── */}
-              <View style={styles.row}>
+              <Animated.View entering={enter(410)} style={styles.row}>
                 <Text style={styles.rowLabel}>LEVEL</Text>
                 <View style={styles.rowBody}>
                   {/*
@@ -354,10 +373,10 @@ export default function ResumeReviewScreen() {
                     })}
                   </View>
                 </View>
-              </View>
+              </Animated.View>
 
               {/* ── Where ──────────────────────────────────────────────── */}
-              <View style={[styles.row, styles.rowLast]}>
+              <Animated.View entering={enter(470)} style={[styles.row, styles.rowLast]}>
                 <Text style={styles.rowLabel}>WHERE</Text>
                 <View style={styles.rowBody}>
                   {/*
@@ -377,7 +396,7 @@ export default function ResumeReviewScreen() {
                     Sets what reaches your feed, not your score.
                   </Text>
                 </View>
-              </View>
+              </Animated.View>
             </View>
 
             {/*
