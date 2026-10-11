@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/common/IconButton';
+import { MarqueeText } from '@/components/common/MarqueeText';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -210,10 +211,29 @@ export default function ResumeReviewScreen() {
             <Text style={styles.title} accessibilityRole="header">
               What we{'\n'}read
             </Text>
+            {/*
+              Which document this is, on its own line rather than inside a sentence.
+              It was set in the opening paragraph, where a file name is something you read past
+              — and on a shelf of three near-identical resumes the only question this screen has
+              to answer before any other is which one you opened.
+
+              Travelling rather than truncating, the same as the shelf and the viewer: these
+              names come out of a file manager, and "v2 (1).pdf" is exactly the part an ellipsis
+              eats and exactly the part that tells two of them apart.
+            */}
+            <View style={styles.fileRow}>
+              <Ionicons name="document-text-outline" size={16} color={colors.textSecondary} />
+              <View style={styles.fileInfo}>
+                <MarqueeText style={styles.fileName}>{resume.name}</MarqueeText>
+                {pageCount !== null ? (
+                  <Text style={styles.fileMeta}>
+                    {pageCount} {pageCount === 1 ? 'page' : 'pages'} read
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
             <Text style={styles.lede}>
-              {pageCount === null
-                ? `From ${resume.name}.`
-                : `${pageCount === 1 ? 'One page' : `${pageCount} pages`} of ${resume.name}.`}{' '}
               Remove anything wrong — the file itself is never edited.
             </Text>
 
@@ -423,8 +443,28 @@ const useStyles = makeStyles((colors) => ({
     letterSpacing: -0.9,
     lineHeight: 32,
   },
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  fileInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fileName: {
+    fontSize: fontSize.body,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  fileMeta: {
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
   lede: {
-    marginTop: 7,
+    marginTop: spacing.md,
     fontSize: fontSize.small,
     lineHeight: 19,
     color: colors.textSecondary,
