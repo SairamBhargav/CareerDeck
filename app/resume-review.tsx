@@ -89,6 +89,21 @@ import type { ResumeSeniority } from '@/types';
  * chips, one tap from the fix, where the same sentence in a banner at the top would be a hunt.
  */
 
+/**
+ * A typed skill, in the shape the parser writes them.
+ *
+ * Lower case, spaces to hyphens, and the punctuation a language name actually uses kept —
+ * c++, c#, node.js, rest-apis. The hyphen leads the character class so it is a literal rather
+ * than the start of a range.
+ */
+function skillSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^-a-z0-9+#. ]/g, '')
+    .replace(/ +/g, '-');
+}
+
 const SENIORITY_OPTIONS: { value: ResumeSeniority; label: string }[] = [
   { value: 'intern', label: 'Intern' },
   { value: 'new_grad', label: 'New grad' },
@@ -135,23 +150,21 @@ export default function ResumeReviewScreen() {
   const experience = resume?.profile.experience ?? [];
 
   /*
-   * Slugged the way the parser writes them, so an added skill and a read one are the same kind
-   * of string: lower case, spaces to hyphens, and the punctuation a language name actually uses
-   * (c++, c#, node.js) kept.
+   * One rule, read twice: it lights the button and it is what the button does.
+   *
+   * Written as a value rather than checked inside the handler because the button's enabled
+   * state has to be the same question — two separate tests drift, and the way they drift is a
+   * live-looking button that does nothing when you press it.
    */
+  const draftSlug = skillSlug(draftSkill);
+  const canAddSkill = draftSlug.length >= 2 && !shownSkills.includes(draftSlug);
+
   const addSkill = () => {
-    const slug = draftSkill
-      .toLowerCase()
-      .trim()
-      // The hyphen leads the class so it is a literal, not a range — and the characters kept
-      // are the ones language names actually use: c++, c#, node.js, rest-apis.
-      .replace(/[^-a-z0-9+#. ]/g, '')
-      .replace(/ +/g, '-');
-    if (slug.length < 2 || shownSkills.includes(slug)) {
+    if (!canAddSkill) {
       setDraftSkill('');
       return;
     }
-    setSkills([...shownSkills, slug]);
+    setSkills([...shownSkills, draftSlug]);
     setDraftSkill('');
   };
 
@@ -327,7 +340,6 @@ export default function ResumeReviewScreen() {
                     is a skill the document already shows and the parser did not catch.
                   */}
                   <View style={styles.addRow}>
-                    <Ionicons name="add" size={15} color={colors.textTertiary} />
                     <TextInput
                       value={draftSkill}
                       onChangeText={setDraftSkill}
@@ -340,6 +352,26 @@ export default function ResumeReviewScreen() {
                       style={styles.addInput}
                       accessibilityLabel="Add a skill the parser missed"
                     />
+                    <Pressable
+                      onPress={addSkill}
+                      disabled={!canAddSkill}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add this skill"
+                      accessibilityState={{ disabled: !canAddSkill }}
+                      hitSlop={6}
+                      style={({ pressed }) => [
+                        styles.addButton,
+                        canAddSkill ? styles.addButtonReady : null,
+                        pressed && canAddSkill ? styles.chipPressed : null,
+                      ]}>
+                      <Text
+                        style={[
+                          styles.addButtonLabel,
+                          canAddSkill ? styles.addButtonLabelReady : null,
+                        ]}>
+                        Add
+                      </Text>
+                    </Pressable>
                   </View>
                 </View>
               </Animated.View>
@@ -656,16 +688,48 @@ const useStyles = makeStyles((colors) => ({
   addRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    gap: 6,
+    marginTop: spacing.sm,
   },
+  /*
+   * A slot you can see, rather than a line you have to discover.
+   *
+   * It takes the chips' fill and corner, so the place you type a skill looks like the skills
+   * already there — the row reads as one set of things with a gap at the end of it.
+   *
+   * 40 rather than the app's 44 floor: beside 28pt chips a full-height field is a slab, and
+   * the button next to it carries hitSlop to make up the difference on the target that is
+   * small enough to miss.
+   */
   addInput: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 40,
     paddingVertical: spacing.xs,
-    paddingHorizontal: 0,
+    paddingHorizontal: 10,
+    borderRadius: radius.md - 6,
+    backgroundColor: colors.backgroundMuted,
     fontSize: fontSize.caption,
     color: colors.text,
+  },
+  addButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: radius.md - 6,
+    backgroundColor: colors.backgroundMuted,
+  },
+  // Ink only once there is something to add, so the button is dark exactly when it will do
+  // something — no disabled-looking dark button, and no live-looking grey one.
+  addButtonReady: {
+    backgroundColor: colors.accent,
+  },
+  addButtonLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textTertiary,
+  },
+  addButtonLabelReady: {
+    color: colors.accentText,
   },
   locationInput: {
     minHeight: 34,
