@@ -126,6 +126,11 @@ function RootNavigator() {
             * it and is where they came from.
             */}
           <Stack.Screen
+            /*
+              Over the document, not instead of it. The viewer below is a route for this
+              reason — see components/activity/ResumeViewer.tsx — so this presents on top of
+              it and swiping it away reveals the PDF it was describing.
+            */
             name="resume-review"
             options={{ presentation: 'modal', headerShown: false }}
           />
@@ -146,6 +151,11 @@ function RootNavigator() {
           <Stack.Screen
             name="paywall"
             options={{ presentation: 'fullScreenModal', headerShown: false, contentStyle: { backgroundColor: scheme === 'dark' ? '#07060D' : '#F7F5FF' } }}
+          />
+          {/* The PDF itself. A route rather than a modal so the parse review can sit over it. */}
+          <Stack.Screen
+            name="resume/[id]"
+            options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom' }}
           />
           <Stack.Screen name="job/[id]" options={{ presentation: 'modal', title: 'Job details' }} />
           {/* Chevron only: iOS labels the back button with the previous screen's title, and the

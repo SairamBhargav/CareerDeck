@@ -21,7 +21,6 @@ import { ApplicationCard } from '@/components/activity/ApplicationCard';
 import { CheckInStack } from '@/components/activity/CheckInStack';
 import { ProCard } from '@/components/activity/ProCard';
 import { ResumeShelf } from '@/components/activity/ResumeShelf';
-import { ResumeViewerModal } from '@/components/activity/ResumeViewerModal';
 import { StageTiles } from '@/components/activity/StageTiles';
 import { STATUS_LABEL } from '@/components/activity/StatusChip';
 import { StatusPickerSheet } from '@/components/activity/StatusPickerSheet';
@@ -85,8 +84,7 @@ export default function ActivityScreen() {
     canParse,
     upload,
     parse,
-    setDefault,
-    openUrl,
+    // `setDefault` and `openUrl` belong to the viewer, which is its own route now.
   } = useResumes(user?.id ?? null);
 
   const applications = useTrackedApplications();
@@ -97,11 +95,9 @@ export default function ActivityScreen() {
   const scrollHandler = useHideTabBarOnScroll(tabBarHeight);
 
   const [stage, setStage] = useState<ApplicationStatus | null>(null);
-  const [viewingResumeId, setViewingResumeId] = useState<string | null>(null);
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
 
-  const viewingResume = resumes.find((resume) => resume.id === viewingResumeId) ?? null;
 
   /*
    * Pick a PDF, upload it, parse it, and land on the review screen.
@@ -249,7 +245,7 @@ export default function ActivityScreen() {
         <ResumeShelf
           resumes={resumes}
           loading={isInitialLoading || resumesLoading}
-          onView={setViewingResumeId}
+          onView={(id) => router.push({ pathname: '/resume/[id]', params: { id } })}
           onAdd={handleAddResume}
           busy={resumesBusy}
         />
@@ -359,24 +355,6 @@ export default function ActivityScreen() {
         onClose={() => setEditingGoal(false)}
       />
 
-      <ResumeViewerModal
-        resume={viewingResume}
-        isDefault={viewingResume?.isDefault ?? false}
-        visible={viewingResume !== null}
-        onClose={() => setViewingResumeId(null)}
-        onSetDefault={() => {
-          if (viewingResume) void setDefault(viewingResume.id);
-        }}
-        onReviewParse={() => {
-          if (!viewingResume) return;
-          // Closed first: the review screen is a route, and leaving a full-screen modal over
-          // it would put the PDF on top of the thing the user just asked to see.
-          const id = viewingResume.id;
-          setViewingResumeId(null);
-          router.push({ pathname: '/resume-review', params: { id } });
-        }}
-        onRequestUrl={openUrl}
-      />
     </SafeAreaView>
   );
 }
