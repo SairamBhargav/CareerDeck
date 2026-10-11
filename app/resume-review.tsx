@@ -13,7 +13,6 @@ import {
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { IconButton } from '@/components/common/IconButton';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -184,14 +183,23 @@ export default function ResumeReviewScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       {/*
-        Just the way out. The file's name and its page count moved into the opening line below,
-        where they read as a sentence about what was done rather than as a title bar — and the
-        page count is the one piece of evidence that the model read the document the user
-        actually sent, rather than a blank or a cover letter.
+        A grabber instead of a close button.
+
+        This route is `presentation: 'modal'` (app/_layout.tsx), so on iOS the sheet already
+        drags down to dismiss — the × was a second control for something the gesture did, taking
+        the top-left corner to say it. The grabber is the affordance that gesture never had.
+
+        It is also a Pressable, so it is not an affordance for a gesture that does not exist
+        everywhere: Android's modal presentation has no drag, and a tap closes on both. The
+        same two-jobs-one-mark the GIF sheet's grabber does.
       */}
-      <View style={styles.header}>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
-      </View>
+      <Pressable
+        onPress={() => router.back()}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        style={styles.grabberZone}>
+        <View style={styles.grabber} />
+      </Pressable>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -445,10 +453,17 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.md,
     padding: screenPadding,
   },
-  header: {
-    flexDirection: 'row',
+  // The same measurements as the comment sheet's, so the two read as one gesture.
+  grabberZone: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
+  },
+  grabber: {
+    width: 40,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.borderStrong,
   },
   content: {
     paddingHorizontal: spacing.xl,
