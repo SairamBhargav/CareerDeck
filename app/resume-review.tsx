@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { type ComponentProps, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,12 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { IconButton } from '@/components/common/IconButton';
-import { MarqueeText } from '@/components/common/MarqueeText';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
-import { fontSize, minTapTarget, radius, screenPadding, spacing } from '@/constants/theme';
+import { fontSize, radius, screenPadding, spacing } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { makeStyles, useTheme } from '@/context/ThemeContext';
 import { useResumes } from '@/hooks/useResumes';
@@ -45,19 +44,65 @@ import type { ResumeSeniority } from '@/types';
  * in exchange for confirming a fact they already know. The screen says the three were *found*,
  * which is the part the user cannot otherwise tell. PHASE4.md §4.4.
  *
- * ── How it is laid out, and why that changed ──────────────────────────────────
+ * ── How it is laid out ───────────────────────────────────────────────────────
  *
- * This screen asks for corrections, so its whole job is to make "what was read" scannable and
- * "what is wrong" tappable. It used to be one flat column with a uniform gap between every
- * element, which meant a section heading, its hint, a row of chips and a text input all sat
- * the same distance apart — nothing grouped, so everything read as one undifferentiated form,
- * and education and experience were bare lines of text run together.
+ * A label column and a content column, divided by hairlines. No cards, no fills, no section
+ * headings at body size — one title, then six rows. The label column is what makes it scan: a
+ * reader looking for what it made of their degree runs down a narrow column of single words,
+ * rather than reading four card headings to rule them out.
  *
- * Now each question is a card: heading, one line of why it matters, and the control. Cards
- * group, the gaps between them separate, and the confirm action is pinned to the bottom
- * instead of floating at the end of a scroll whose length depends on how many skills the
- * parser found.
+ * **The rows are in the order the scorer cares about them**, and that came from the screen
+ * being wrong rather than merely untidy. Education and experience used to sit last under a
+ * heading reading "Kept on file, not used for matching yet". That stopped being true at scorer
+ * v3 (20261024000000_match_score_v3.sql) — work now carries the field, and between them
+ * experience and field are nearly half a match — so the screen was filing most of a reader's
+ * score under "not used" at the bottom of a scroll.
+ *
+ * So: skills, work, school, level. No weights are printed. An earlier pass put each one's
+ * percentage on it, read out of the migration, which is arithmetic nobody asked for and a copy
+ * of a number that lives somewhere else: a v4 reweighting would have left confident wrong
+ * figures here with nothing to catch them. The order says the same thing and cannot rot.
+ *
+ * WHERE sits last and says what it does. v3 dropped location from the match — "experience
+ * replaces location" — but the feed ranker still reads it, so it is neither scored nor inert.
+ *
+ * ── Adding a skill, and what it reaches ───────────────────────────────────────
+ *
+ * Skills can be taken off this list and put back on it. The adding is what §3.9's ~15% is
+ * about: a parser reading a two-column PDF drops skills the page plainly shows, and without a
+ * way back the only remedy is editing the document and uploading it again.
+ *
+ * Worth knowing where the list goes, because it is further than the match score.
+ * `server/src/autoapply.ts` selects it alongside education and experience, and the drafting
+ * prompt tells the model to write answers "only from the facts provided — their actual
+ * experience and skills". So a skill typed here can become a sentence in an application sent
+ * in the reader's name, against a resume that does not mention it.
+ *
+ * Hence the placeholder: "One we missed", not "Add a skill". The field is for recovering what
+ * the page already says, and the copy is the only thing standing between that and a wish list.
+ *
+ * ── Gaps where they can be filled ─────────────────────────────────────────────
+ *
+ * An empty control and a correctly-empty control look identical in a form, so a blank says
+ * nothing about whether the parser missed something or the page never had it. Each row that is
+ * empty says so in its own body — "Not stated on the page — pick one" sits above the level
+ * chips, one tap from the fix, where the same sentence in a banner at the top would be a hunt.
  */
+
+/**
+ * A typed skill, in the shape the parser writes them.
+ *
+ * Lower case, spaces to hyphens, and the punctuation a language name actually uses kept —
+ * c++, c#, node.js, rest-apis. The hyphen leads the character class so it is a literal rather
+ * than the start of a range.
+ */
+function skillSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^-a-z0-9+#. ]/g, '')
+    .replace(/ +/g, '-');
+}
 
 const SENIORITY_OPTIONS: { value: ResumeSeniority; label: string }[] = [
   { value: 'intern', label: 'Intern' },
@@ -67,6 +112,10 @@ const SENIORITY_OPTIONS: { value: ResumeSeniority; label: string }[] = [
   { value: 'staff_plus', label: 'Staff+' },
 ];
 
+// Named the way app/paywall.tsx does, and for the same reason: reanimated does not export the
+// type of its own `entering` prop.
+type EnteringAnimation = ComponentProps<typeof Animated.View>['entering'];
+
 export default function ResumeReviewScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -74,6 +123,7 @@ export default function ResumeReviewScreen() {
   const { userId } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
 
+  const reduced = useReducedMotion();
   const { resumes, isLoading, confirm, parse, isBusy } = useResumes(userId);
   const resume = resumes.find((entry) => entry.id === id);
 
@@ -99,21 +149,36 @@ export default function ResumeReviewScreen() {
   const education = resume?.profile.education ?? [];
   const experience = resume?.profile.experience ?? [];
 
-  const canConfirm = resume?.parseStatus === 'parsed' && !isBusy;
+  /*
+   * One rule, read twice: it lights the button and it is what the button does.
+   *
+   * Written as a value rather than checked inside the handler because the button's enabled
+   * state has to be the same question — two separate tests drift, and the way they drift is a
+   * live-looking button that does nothing when you press it.
+   */
+  const draftSlug = skillSlug(draftSkill);
+  const canAddSkill = draftSlug.length >= 2 && !shownSkills.includes(draftSlug);
 
   const addSkill = () => {
-    const slug = draftSkill
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9+#.\- ]/g, '')
-      .replace(/\s+/g, '-');
-    if (slug.length < 2 || shownSkills.includes(slug)) {
+    if (!canAddSkill) {
       setDraftSkill('');
       return;
     }
-    setSkills([...shownSkills, slug]);
+    setSkills([...shownSkills, draftSlug]);
     setDraftSkill('');
   };
+
+  const canConfirm = resume?.parseStatus === 'parsed' && !isBusy;
+
+  /*
+   * The same entrance the paywall and the verification screen use: the heading lands, then the
+   * file, then the rows in reading order. On a screen that is mostly hairlines this is what
+   * stops it arriving as a wall of rules, and it tells the eye which way to travel down it.
+   */
+  const enter = (delay: number): EnteringAnimation =>
+    reduced
+      ? FadeIn.duration(180)
+      : FadeInDown.duration(440).delay(delay).springify().dampingRatio(0.88);
 
   const handleConfirm = async () => {
     if (!resume) return;
@@ -156,23 +221,24 @@ export default function ResumeReviewScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <View style={styles.header}>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} surface />
-        <View style={styles.headerText}>
-          {/* Same travelling line as the shelf and the viewer — one name, one treatment. */}
-          <MarqueeText style={styles.title}>{resume.name}</MarqueeText>
-          {/*
-            The page count is the one piece of evidence that the model read the document the
-            user actually sent, rather than a blank or a cover letter.
-          */}
-          {parsed && pageCount !== null ? (
-            <Text style={styles.subtitle}>
-              {pageCount} {pageCount === 1 ? 'page' : 'pages'} read
-            </Text>
-          ) : null}
-        </View>
-      </View>
+      {/*
+        A grabber instead of a close button.
 
+        This route is `presentation: 'modal'` (app/_layout.tsx), so on iOS the sheet already
+        drags down to dismiss — the × was a second control for something the gesture did, taking
+        the top-left corner to say it. The grabber is the affordance that gesture never had.
+
+        It is also a Pressable, so it is not an affordance for a gesture that does not exist
+        everywhere: Android's modal presentation has no drag, and a tap closes on both. The
+        same two-jobs-one-mark the GIF sheet's grabber does.
+      */}
+      <Pressable
+        onPress={() => router.back()}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        style={styles.grabberZone}>
+        <View style={styles.grabber} />
+      </Pressable>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -204,154 +270,222 @@ export default function ResumeReviewScreen() {
 
         {parsed ? (
           <>
-            <Text style={styles.lede}>
-              Here is what we read. Fix anything that is wrong — this is what your match scores
-              are calculated from.
-            </Text>
+            {/*
+              Which document this is, on its own line rather than inside a sentence.
+              It was set in the opening paragraph, where a file name is something you read past
+              — and on a shelf of three near-identical resumes the only question this screen has
+              to answer before any other is which one you opened.
 
-            {/* ── Skills ─────────────────────────────────────────────────── */}
-            <View style={styles.card}>
-              <View style={styles.cardHead}>
-                <Text style={styles.cardTitle}>Skills</Text>
-                <Text style={styles.cardCount}>{shownSkills.length}</Text>
+              Still, and clipped in the middle when it is too long. The shelf and the viewer let
+              this name travel, which suits a tile you glance at; here it sits above everything
+              else you are reading, and a line that moves on its own is the thing the eye keeps
+              going back to. Middle truncation keeps the useful halves — "Resume_v2 (1).pdf"
+              loses its centre rather than its tail, so two near-identical files still read apart.
+            */}
+            <Animated.View entering={enter(60)} style={styles.fileRow}>
+              <Ionicons name="document-text-outline" size={16} color={colors.textSecondary} />
+              <View style={styles.fileInfo}>
+                <Text style={styles.fileName} numberOfLines={1} ellipsizeMode="middle">
+                  {resume.name}
+                </Text>
+                {pageCount !== null ? (
+                  <Text style={styles.fileMeta}>
+                    {pageCount} {pageCount === 1 ? 'page' : 'pages'} read
+                  </Text>
+                ) : null}
               </View>
-              <Text style={styles.hint}>
-                Matched against each posting&apos;s own skills. The more accurate these are, the
-                more the number on a card means.
-              </Text>
+            </Animated.View>
 
-              {shownSkills.length > 0 ? (
-                <View style={styles.chips}>
-                  {shownSkills.map((skill) => (
+            <Animated.Text entering={enter(110)} style={styles.lede}>
+              Fix anything wrong — the file itself is never edited.
+            </Animated.Text>
+
+            <View style={styles.rows}>
+              {/* ── Skills ─────────────────────────────────────────────── */}
+              <Animated.View entering={enter(170)} style={styles.row}>
+                <Text style={styles.rowLabel}>SKILLS</Text>
+                <View style={styles.rowBody}>
+                  {shownSkills.length > 0 ? (
+                    <View style={styles.chips}>
+                      {shownSkills.map((skill) => (
+                        <Pressable
+                          key={skill}
+                          onPress={() => setSkills(shownSkills.filter((entry) => entry !== skill))}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${skill}`}
+                          // Drawn at 28, hit at 44: the row stays quiet, the target does not shrink.
+                          hitSlop={8}
+                          style={({ pressed }) => [styles.chip, pressed ? styles.chipPressed : null]}>
+                          <Text style={styles.chipLabel}>{skill}</Text>
+                          {/*
+                            An explicit ×. Tapping a chip to delete it is the interaction either
+                            way, but without the glyph nothing on screen says so, and a chip that
+                            silently vanishes when touched reads as a bug.
+                          */}
+                          <Ionicons name="close" size={11} color={colors.textTertiary} />
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.prompt}>None were read from the page.</Text>
+                  )}
+
+                  {/*
+                    Adding, for the ones the parser dropped.
+
+                    Worth knowing what this list feeds: it is matched against postings, and
+                    Auto Apply writes its answers from it (server/src/autoapply.ts) — so a skill
+                    typed here can end up in an application sent in the reader's name. The
+                    placeholder says "missed" rather than "add" for that reason: the useful case
+                    is a skill the document already shows and the parser did not catch.
+                  */}
+                  <View style={styles.addRow}>
+                    <TextInput
+                      value={draftSkill}
+                      onChangeText={setDraftSkill}
+                      onSubmitEditing={addSkill}
+                      placeholder="One we missed"
+                      placeholderTextColor={colors.textTertiary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      style={styles.addInput}
+                      accessibilityLabel="Add a skill the parser missed"
+                    />
                     <Pressable
-                      key={skill}
-                      onPress={() => setSkills(shownSkills.filter((entry) => entry !== skill))}
+                      onPress={addSkill}
+                      disabled={!canAddSkill}
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove ${skill}`}
-                      hitSlop={4}
-                      style={({ pressed }) => [styles.chip, pressed ? styles.chipPressed : null]}>
-                      <Text style={styles.chipLabel}>{skill}</Text>
-                      {/*
-                        An explicit ×. Tapping a chip to delete it is the interaction either
-                        way, but without the glyph nothing on screen says so, and a chip that
-                        silently vanishes when touched reads as a bug.
-                      */}
-                      <Ionicons name="close" size={13} color={colors.textTertiary} />
-                    </Pressable>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.empty}>Nothing found. Add the ones that matter most.</Text>
-              )}
-
-              <View style={styles.addRow}>
-                <TextInput
-                  value={draftSkill}
-                  onChangeText={setDraftSkill}
-                  onSubmitEditing={addSkill}
-                  placeholder="Add a skill"
-                  placeholderTextColor={colors.textTertiary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  style={styles.input}
-                />
-                <PrimaryButton
-                  label="Add"
-                  variant="secondary"
-                  onPress={addSkill}
-                  style={styles.addButton}
-                />
-              </View>
-            </View>
-
-            {/* ── Level ──────────────────────────────────────────────────── */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Level</Text>
-              <Text style={styles.hint}>
-                What you are applying as, not what you have done. This decides whether a senior
-                posting counts against you.
-              </Text>
-              <View style={styles.chips}>
-                {SENIORITY_OPTIONS.map((option) => {
-                  const selected = shownSeniority === option.value;
-                  return (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => setSeniority(selected ? null : option.value)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      style={[styles.option, selected ? styles.optionSelected : null]}>
+                      accessibilityLabel="Add this skill"
+                      accessibilityState={{ disabled: !canAddSkill }}
+                      hitSlop={6}
+                      style={({ pressed }) => [
+                        styles.addButton,
+                        canAddSkill ? styles.addButtonReady : null,
+                        pressed && canAddSkill ? styles.chipPressed : null,
+                      ]}>
                       <Text
-                        style={[styles.optionLabel, selected ? styles.optionLabelSelected : null]}>
-                        {option.label}
+                        style={[
+                          styles.addButtonLabel,
+                          canAddSkill ? styles.addButtonLabelReady : null,
+                        ]}>
+                        Add
                       </Text>
                     </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* ── Location and years ─────────────────────────────────────── */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Location</Text>
-              <TextInput
-                value={shownLocation}
-                onChangeText={setLocation}
-                placeholder="City, state"
-                placeholderTextColor={colors.textTertiary}
-                style={styles.input}
-              />
-              {years !== null ? (
-                <View style={styles.inlineFact}>
-                  <Ionicons name="time-outline" size={15} color={colors.textTertiary} />
-                  <Text style={styles.hint}>
-                    {years} {years === 1 ? 'year' : 'years'} of experience, from the dates on the
-                    page.
-                  </Text>
+                  </View>
                 </View>
-              ) : null}
-            </View>
+              </Animated.View>
 
-            {/* ── Also read ──────────────────────────────────────────────── */}
-            {education.length > 0 || experience.length > 0 ? (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>Also read</Text>
-                <Text style={styles.hint}>
-                  Kept on file, not used for matching yet. Re-upload if any of it is wrong.
-                </Text>
-
-                <View style={styles.entries}>
-                  {education.map((entry, index) => (
-                    <View key={`edu-${index}`} style={styles.entry}>
-                      <Ionicons name="school-outline" size={17} color={colors.textTertiary} />
-                      <View style={styles.entryText}>
-                        <Text style={styles.entryTitle}>
-                          {[entry.degree, entry.field].filter(Boolean).join(', ') || 'Education'}
-                        </Text>
-                        <Text style={styles.entryMeta}>
-                          {[entry.school, entry.graduationYear].filter(Boolean).join(' · ')}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-
-                  {experience.map((entry, index) => (
-                    <View key={`exp-${index}`} style={styles.entry}>
-                      <Ionicons name="briefcase-outline" size={17} color={colors.textTertiary} />
-                      <View style={styles.entryText}>
+              {/* ── Work ───────────────────────────────────────────────── */}
+              <Animated.View entering={enter(230)} style={styles.row}>
+                <Text style={styles.rowLabel}>WORK</Text>
+                <View style={styles.rowBody}>
+                  {experience.length > 0 ? (
+                    experience.map((entry, index) => (
+                      <View key={`exp-${index}`} style={index > 0 ? styles.entryNext : undefined}>
                         <Text style={styles.entryTitle}>{entry.title ?? 'Role'}</Text>
                         <Text style={styles.entryMeta}>
                           {[entry.company, entry.isCurrent ? 'current' : null]
                             .filter(Boolean)
-                            .join(' · ')}
+                            .join(' · ') || 'Company not read'}
                         </Text>
                       </View>
-                    </View>
-                  ))}
+                    ))
+                  ) : (
+                    <Text style={styles.prompt}>No roles were read from the page.</Text>
+                  )}
+                  {years !== null ? (
+                    <Text style={styles.entryMeta}>
+                      {years} {years === 1 ? 'year' : 'years'} in total, from the dates on the page.
+                    </Text>
+                  ) : null}
                 </View>
-              </View>
-            ) : null}
+              </Animated.View>
+
+              {/* ── School ─────────────────────────────────────────────── */}
+              <Animated.View entering={enter(290)} style={styles.row}>
+                <Text style={styles.rowLabel}>SCHOOL</Text>
+                <View style={styles.rowBody}>
+                  {education.length > 0 ? (
+                    education.map((entry, index) => (
+                      <View key={`edu-${index}`} style={index > 0 ? styles.entryNext : undefined}>
+                        <Text style={styles.entryTitle}>
+                          {[entry.degree, entry.field].filter(Boolean).join(', ') || 'Education'}
+                        </Text>
+                        <Text style={styles.entryMeta}>
+                          {[entry.school, entry.graduationYear].filter(Boolean).join(' · ') ||
+                            'School not read'}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.prompt}>Nothing was read from the page.</Text>
+                  )}
+                </View>
+              </Animated.View>
+
+              {/* ── Level ──────────────────────────────────────────────── */}
+              <Animated.View entering={enter(350)} style={styles.row}>
+                <Text style={styles.rowLabel}>LEVEL</Text>
+                <View style={styles.rowBody}>
+                  {/*
+                    The prompt sits in the row rather than in a banner at the top of the screen.
+                    A resume rarely states a level outright, so this is the blank that is almost
+                    always there — and a gap named where it can be filled is one tap, where the
+                    same gap named in a summary above is a hunt.
+                  */}
+                  {shownSeniority === null ? (
+                    <Text style={styles.prompt}>Not stated on the page — pick one.</Text>
+                  ) : null}
+                  <View style={styles.chips}>
+                    {SENIORITY_OPTIONS.map((option) => {
+                      const selected = shownSeniority === option.value;
+                      return (
+                        <Pressable
+                          key={option.value}
+                          onPress={() => setSeniority(selected ? null : option.value)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          // 30 drawn + 7 each side = the 44pt floor, same trick as the skills.
+                          hitSlop={7}
+                          style={[styles.option, selected ? styles.optionSelected : null]}>
+                          <Text
+                            style={[
+                              styles.optionLabel,
+                              selected ? styles.optionLabelSelected : null,
+                            ]}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </Animated.View>
+
+              {/* ── Where ──────────────────────────────────────────────── */}
+              <Animated.View entering={enter(410)} style={[styles.row, styles.rowLast]}>
+                <Text style={styles.rowLabel}>WHERE</Text>
+                <View style={styles.rowBody}>
+                  {/*
+                    Borderless on purpose: everything else in this column is text, and a boxed
+                    field here would be the only control on the screen shouting that it is one.
+                    It still behaves as an input — tapping the line puts a caret in it.
+                  */}
+                  <TextInput
+                    value={shownLocation}
+                    onChangeText={setLocation}
+                    placeholder="Add a city"
+                    placeholderTextColor={colors.textTertiary}
+                    style={styles.locationInput}
+                    accessibilityLabel="Your location"
+                  />
+                  <Text style={styles.entryMeta}>
+                    Sets what reaches your feed, not your score.
+                  </Text>
+                </View>
+              </Animated.View>
+            </View>
 
             {/*
              * The contact fields, named and not shown. The user cannot otherwise tell whether
@@ -359,10 +493,9 @@ export default function ResumeReviewScreen() {
              * because the value itself is already theirs. PHASE4.md §4.4.
              */}
             <View style={styles.sealed}>
-              <Ionicons name="lock-closed" size={15} color={colors.textTertiary} />
-              <Text style={styles.hint}>
-                Your name, email and phone were read and encrypted. They are never shown back in
-                the app, and are only used to fill in an application you ask us to.
+              <Ionicons name="lock-closed" size={13} color={colors.textTertiary} />
+              <Text style={styles.sealedText}>
+                Name, email and phone were read and encrypted. Never shown back in the app.
               </Text>
             </View>
           </>
@@ -400,95 +533,239 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.md,
     padding: screenPadding,
   },
-  header: {
+  // The same measurements as the comment sheet's, so the two read as one gesture.
+  grabberZone: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    alignItems: 'center',
+  },
+  grabber: {
+    width: 40,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.borderStrong,
+  },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: screenPadding,
-    paddingBottom: spacing.md,
+    gap: spacing.sm,
   },
-  headerText: {
+  fileInfo: {
     flex: 1,
     minWidth: 0,
   },
-  title: {
+  // Larger than it was: with the heading gone this line is what the screen opens on, and it is
+  // also the answer to the first question anybody has here — which of my resumes is this.
+  fileName: {
     fontSize: fontSize.title,
     fontWeight: '700',
     color: colors.text,
     letterSpacing: -0.3,
   },
-  subtitle: {
+  fileMeta: {
     fontSize: fontSize.caption,
     color: colors.textTertiary,
     marginTop: 1,
   },
-  content: {
-    padding: screenPadding,
-    paddingTop: 0,
-    paddingBottom: spacing.xl,
-    // The separation between cards. Inside a card the gap is tighter, which is what makes
-    // each one read as a single question.
-    gap: spacing.md,
-  },
   lede: {
-    fontSize: fontSize.body,
+    marginTop: spacing.md,
+    fontSize: fontSize.small,
+    lineHeight: 19,
     color: colors.textSecondary,
-    lineHeight: 21,
   },
 
-  /* ── cards ──────────────────────────────────────────────────────────────── */
-  card: {
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+  /*
+   * The rows.
+   *
+   * A label column and a content column, divided by hairlines and nothing else — no cards, no
+   * fills, no headings competing with the page's one title. The label is what makes it scan:
+   * the eye runs down a single narrow column of six words to find the thing it came for,
+   * instead of reading four card headings at body size to rule them out.
+   */
+  rows: {
+    marginTop: spacing.xl,
   },
-  cardHead: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.lg,
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  cardTitle: {
-    fontSize: fontSize.body,
+  rowLast: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  rowLabel: {
+    width: 68,
+    paddingTop: 2,
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.text,
+    letterSpacing: 0.5,
+    // textSecondary, not tertiary: at 11px the lighter grey is 3.2:1, and this column is the
+    // one thing on the screen that has to be readable at a glance.
+    color: colors.textSecondary,
   },
-  cardCount: {
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+
+  entryTitle: {
     fontSize: fontSize.small,
     fontWeight: '600',
-    color: colors.textTertiary,
+    color: colors.text,
+    lineHeight: 19,
   },
-  hint: {
-    flex: 1,
+  entryMeta: {
     fontSize: fontSize.caption,
     color: colors.textTertiary,
     lineHeight: 17,
   },
-  body: {
-    fontSize: fontSize.body,
-    color: colors.text,
+  entryNext: {
+    marginTop: spacing.sm,
   },
-  empty: {
+  /** A blank the reader can do something about, said where they can do it. */
+  prompt: {
     fontSize: fontSize.caption,
-    color: colors.textTertiary,
-    fontStyle: 'italic',
-    paddingVertical: spacing.xs,
+    fontWeight: '600',
+    color: colors.text,
+    lineHeight: 17,
   },
 
-  /* ── notices ────────────────────────────────────────────────────────────── */
-  notice: {
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 28,
+    paddingLeft: 9,
+    paddingRight: 7,
+    borderRadius: radius.md - 6,
+    backgroundColor: colors.backgroundMuted,
+  },
+  chipPressed: {
+    opacity: 0.6,
+  },
+  chipLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+
+  option: {
+    minHeight: 30,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: radius.md - 6,
+    backgroundColor: colors.backgroundMuted,
+  },
+  // Fill alone marks the choice — no border appears or thickens, so nothing shifts by a pixel.
+  optionSelected: {
+    backgroundColor: colors.accent,
+  },
+  optionLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  optionLabelSelected: {
+    color: colors.accentText,
+    fontWeight: '600',
+  },
+
+  // Deliberately the quietest thing in the row: a line to type on, not a box demanding filling.
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+  },
+  /*
+   * A slot you can see, rather than a line you have to discover.
+   *
+   * It takes the chips' fill and corner, so the place you type a skill looks like the skills
+   * already there — the row reads as one set of things with a gap at the end of it.
+   *
+   * 40 rather than the app's 44 floor: beside 28pt chips a full-height field is a slab, and
+   * the button next to it carries hitSlop to make up the difference on the target that is
+   * small enough to miss.
+   */
+  addInput: {
+    flex: 1,
+    minHeight: 40,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: 10,
+    borderRadius: radius.md - 6,
+    backgroundColor: colors.backgroundMuted,
+    fontSize: fontSize.caption,
+    color: colors.text,
+  },
+  addButton: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: radius.md - 6,
+    backgroundColor: colors.backgroundMuted,
+  },
+  // Ink only once there is something to add, so the button is dark exactly when it will do
+  // something — no disabled-looking dark button, and no live-looking grey one.
+  addButtonReady: {
+    backgroundColor: colors.accent,
+  },
+  addButtonLabel: {
+    fontSize: fontSize.caption,
+    fontWeight: '700',
+    color: colors.textTertiary,
+  },
+  addButtonLabelReady: {
+    color: colors.accentText,
+  },
+  locationInput: {
+    minHeight: 34,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: 0,
+    fontSize: fontSize.small,
+    lineHeight: 19,
+    color: colors.text,
+  },
+
+  sealed: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  sealedText: {
+    flex: 1,
+    fontSize: fontSize.caption,
+    lineHeight: 17,
+    color: colors.textTertiary,
+  },
+
+  // ── states around the parse ────────────────────────────────────────────────
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radius.lg,
     backgroundColor: colors.backgroundMuted,
-    alignItems: 'flex-start',
   },
   noticeBad: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.danger,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: spacing.md,
   },
   noticeHead: {
     flexDirection: 'row',
@@ -500,130 +777,26 @@ const useStyles = makeStyles((colors) => ({
     fontWeight: '700',
     color: colors.text,
   },
-
-  /* ── skill chips ────────────────────────────────────────────────────────── */
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: colors.backgroundMuted,
-    borderColor: colors.border,
-  },
-  chipPressed: {
-    opacity: 0.55,
-  },
-  chipLabel: {
-    fontSize: fontSize.caption + 1,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-
-  /* ── inputs ─────────────────────────────────────────────────────────────── */
-  addRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    minHeight: minTapTarget,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    color: colors.text,
-    fontSize: fontSize.body,
-  },
-  addButton: {
-    paddingHorizontal: spacing.lg,
-    minHeight: minTapTarget,
-  },
-  inlineFact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-
-  /* ── level pills ────────────────────────────────────────────────────────── */
-  option: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  optionSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  optionLabel: {
-    fontSize: fontSize.caption + 1,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  optionLabelSelected: {
-    color: colors.accentText,
-  },
-
-  /* ── education / experience rows ────────────────────────────────────────── */
-  entries: {
-    gap: spacing.md,
-    paddingTop: spacing.xs,
-  },
-  entry: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  entryText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  entryTitle: {
+  body: {
     fontSize: fontSize.small,
-    fontWeight: '600',
-    color: colors.text,
+    color: colors.textSecondary,
   },
-  entryMeta: {
+  hint: {
+    flex: 1,
     fontSize: fontSize.caption,
     color: colors.textTertiary,
-    marginTop: 1,
+    lineHeight: 17,
   },
 
-  /* ── sealed contact notice ──────────────────────────────────────────────── */
-  sealed: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    alignItems: 'flex-start',
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.backgroundMuted,
-  },
-
-  /* ── pinned footer ──────────────────────────────────────────────────────── */
   footer: {
     gap: spacing.sm,
-    paddingHorizontal: screenPadding,
+    paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
+    paddingBottom: spacing.xl,
   },
   error: {
     fontSize: fontSize.caption,
+    fontWeight: '600',
     color: colors.danger,
   },
 }));

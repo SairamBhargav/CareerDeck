@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
@@ -12,10 +12,9 @@ import { makeStyles, useTheme } from '@/context/ThemeContext';
 import type { Resume } from '@/types';
 import { formatPostedAt } from '@/utils/format';
 
-interface ResumeViewerModalProps {
+interface ResumeViewerProps {
   resume: Resume | null;
   isDefault: boolean;
-  visible: boolean;
   onClose: () => void;
   onSetDefault: () => void;
   /**
@@ -35,6 +34,17 @@ interface ResumeViewerModalProps {
  * bar with the resume's name/last-edited date and a Set as Default action sit above it,
  * pinned so they don't scroll away with the document.
  *
+ * ── A route's body, not a Modal ───────────────────────────────────────────────
+ *
+ * This used to wrap itself in a React Native `Modal`, which draws in its own window above the
+ * navigator — so nothing pushed could appear over it, and the parse review had to close the
+ * viewer before opening. Dismissing the review then landed on Activity rather than back on the
+ * document it was about.
+ *
+ * It is a plain view now, rendered by `app/resume/[id].tsx`, so the review is an ordinary push
+ * on top of it and swiping that away reveals the PDF underneath. Same fix, and for the same
+ * reason, as the story viewer in `app/story.tsx`.
+ *
  * ── The URL is fetched, not resolved ──────────────────────────────────────────
  *
  * Through phase 3 the two resumes were bundled assets and `Asset.fromModule().uri` answered
@@ -46,15 +56,14 @@ interface ResumeViewerModalProps {
  * It is a real cost and it is the point: the alternative is an owner-readable bucket and an
  * audit log with a hole in it exactly where the app's own reads should be. PHASE4.md §4.2.
  */
-export function ResumeViewerModal({
+export function ResumeViewer({
   resume,
   isDefault,
-  visible,
   onClose,
   onSetDefault,
   onReviewParse,
   onRequestUrl,
-}: ResumeViewerModalProps) {
+}: ResumeViewerProps) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useStyles();
@@ -74,7 +83,9 @@ export function ResumeViewerModal({
   const urlQuery = useQuery({
     queryKey: ['resume', 'url', resumeId],
     queryFn: () => onRequestUrl(resumeId as string),
-    enabled: visible && resumeId !== null,
+    // No `visible` to gate on any more: this component only exists while its route does, so
+    // being mounted is what "open" means now.
+    enabled: resumeId !== null,
     staleTime: 4 * 60_000,
     gcTime: 4 * 60_000,
     // A failed signing is shown, not retried behind the user's back — each attempt is another
@@ -92,98 +103,89 @@ export function ResumeViewerModal({
   /*
    * Nothing renders unless this is actually open.
    *
-   * `Modal visible={false}` is supposed to be enough, and for ordinary views it is — but a
-   * WebView is a native view with its own window, and one left mounted behind a dismissed
-   * modal can keep drawing over whatever is on screen. The symptom is a PDF visible from
+   * A WebView is a native view with its own window, and one left mounted after its screen has
+   * gone can keep drawing over whatever is in front of it. The symptom is a PDF visible from
    * places that are not the resume viewer, which is a privacy problem and not just a glitch:
    * the document on screen is somebody's resume, with their phone number on it.
    *
-   * So visibility gates the tree, not just the Modal. Unmounting also tears the WebView down
-   * on close, which means a reopen re-reads the signed URL instead of resurrecting a page
+   * Being a route now carries that for free: popping unmounts the whole tree, which tears the
+   * WebView down and means a reopen re-reads the signed URL rather than resurrecting a page
    * whose five-minute URL may since have expired.
    */
-  if (!resume || !visible) return null;
+  if (!resume) return null;
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose}>
-      {/*
-        No backdrop. The sheet below is `position: absolute` on all four edges, so it covers
-        the screen completely and the backdrop that used to sit under it was unreachable —
-        there is no "outside" to tap. An opaque modal says that honestly; a transparent one
-        with a dead Pressable behind it only looked like a sheet.
-      */}
-      <View style={[styles.sheet, { paddingTop: insets.top + spacing.sm }]}>
-        <View style={styles.topBar}>
-          <View style={styles.grabber} />
-          <IconButton
-            name="close"
-            accessibilityLabel="Close resume"
-            onPress={onClose}
-            surface
-            style={styles.closeButton}
-          />
-        </View>
-
-        <View style={styles.fileBar}>
-          <View style={styles.fileInfo}>
-            {/*
-              Travels rather than truncates. This is the full file name, and the version marker
-              that distinguishes two near-identical resumes is usually the part an ellipsis ate.
-            */}
-            <MarqueeText style={styles.fileName}>{resume.name}</MarqueeText>
-            <Text style={styles.fileMeta}>Edited {formatPostedAt(resume.updatedAt).toLowerCase()}</Text>
-          </View>
-
-          <PrimaryButton
-            label={isDefault ? 'Default' : 'Set as Default'}
-            variant={isDefault ? 'secondary' : 'primary'}
-            disabled={isDefault}
-            onPress={onSetDefault}
-            style={styles.defaultButton}
-          />
-        </View>
-
-        {/*
-          The way to the parse. Only for a resume that has one — there is nothing to review on
-          a document that failed or has not been read, and the shelf already says which.
-        */}
-        {resume.parseStatus === 'parsed' ? (
-          <Pressable
-            onPress={onReviewParse}
-            accessibilityRole="button"
-            accessibilityLabel="Review what we read from this resume"
-            style={({ pressed }) => [styles.reviewRow, pressed ? styles.reviewPressed : null]}>
-            <Ionicons name="sparkles-outline" size={16} color={colors.textSecondary} />
-            <Text style={styles.reviewLabel}>
-              {resume.profile.confirmedAt ? 'What we read from this' : 'Check what we read'}
-            </Text>
-            <Text style={styles.reviewAction}>Review</Text>
-            <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
-          </Pressable>
-        ) : null}
-
-        <View style={[styles.pdfWrap, { paddingBottom: insets.bottom }]}>
-          {error !== null ? (
-            <View style={styles.pdfState}>
-              <Text style={styles.pdfError}>{error}</Text>
-            </View>
-          ) : pdfUri ? (
-            <WebView
-              source={{ uri: pdfUri }}
-              style={styles.pdf}
-              originWhitelist={['*']}
-              // The document itself is a white page in both schemes; this only stops a
-              // white flash against a dark sheet while it loads.
-              backgroundColor={colors.backgroundMuted}
-            />
-          ) : (
-            <View style={styles.pdfState}>
-              <ActivityIndicator color={colors.textTertiary} />
-            </View>
-          )}
-        </View>
+    <View style={[styles.sheet, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={styles.topBar}>
+        <View style={styles.grabber} />
+        <IconButton
+          name="close"
+          accessibilityLabel="Close resume"
+          onPress={onClose}
+          surface
+          style={styles.closeButton}
+        />
       </View>
-    </Modal>
+
+      <View style={styles.fileBar}>
+        <View style={styles.fileInfo}>
+          {/*
+            Travels rather than truncates. This is the full file name, and the version marker
+            that distinguishes two near-identical resumes is usually the part an ellipsis ate.
+          */}
+          <MarqueeText style={styles.fileName}>{resume.name}</MarqueeText>
+          <Text style={styles.fileMeta}>Edited {formatPostedAt(resume.updatedAt).toLowerCase()}</Text>
+        </View>
+
+        <PrimaryButton
+          label={isDefault ? 'Default' : 'Set as Default'}
+          variant={isDefault ? 'secondary' : 'primary'}
+          disabled={isDefault}
+          onPress={onSetDefault}
+          style={styles.defaultButton}
+        />
+      </View>
+
+      {/*
+        The way to the parse. Only for a resume that has one — there is nothing to review on
+        a document that failed or has not been read, and the shelf already says which.
+      */}
+      {resume.parseStatus === 'parsed' ? (
+        <Pressable
+          onPress={onReviewParse}
+          accessibilityRole="button"
+          accessibilityLabel="Review what we read from this resume"
+          style={({ pressed }) => [styles.reviewRow, pressed ? styles.reviewPressed : null]}>
+          <Ionicons name="sparkles-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.reviewLabel}>
+            {resume.profile.confirmedAt ? 'What we read from this' : 'Check what we read'}
+          </Text>
+          <Text style={styles.reviewAction}>Review</Text>
+          <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+        </Pressable>
+      ) : null}
+
+      <View style={[styles.pdfWrap, { paddingBottom: insets.bottom }]}>
+        {error !== null ? (
+          <View style={styles.pdfState}>
+            <Text style={styles.pdfError}>{error}</Text>
+          </View>
+        ) : pdfUri ? (
+          <WebView
+            source={{ uri: pdfUri }}
+            style={styles.pdf}
+            originWhitelist={['*']}
+            // The document itself is a white page in both schemes; this only stops a
+            // white flash against a dark sheet while it loads.
+            backgroundColor={colors.backgroundMuted}
+          />
+        ) : (
+          <View style={styles.pdfState}>
+            <ActivityIndicator color={colors.textTertiary} />
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
